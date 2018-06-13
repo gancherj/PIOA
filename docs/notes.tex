@@ -1,0 +1,483 @@
+\documentclass[10pt]{article}
+
+\usepackage{times}
+\usepackage[numbers,sort]{natbib}
+\usepackage{amsmath,latexsym,amsthm,amssymb,amscd,url,enumerate,mathtools}
+\usepackage[show]{ed}
+\usepackage[all]{xy}
+\usepackage{tikz,float}
+\usepackage{multirow}
+\usepackage{relsize}
+\usepackage{caption}
+\usepackage{graphicx}
+\usepackage{graphics}
+\usepackage{leftidx}
+
+\begin{document} 
+\author{Greg Morrisett, Joshua Gancher, Kristina Sojakova}
+\title{{\bf Notes on Task-Based Probabilistic Input-Output Automata}}
+\date{June 2018}
+
+\maketitle
+
+\newcommand{\C}{\mathcal{C}}
+\newcommand{\X}{\mathcal{X}}
+\newcommand{\Y}{\mathcal{Y}}
+\newcommand{\Z}{\mathcal{Z}}
+\newcommand{\F}{\mathcal{F}}
+\newcommand{\G}{\mathcal{G}}
+\newcommand{\E}{\mathcal{E}}
+\newcommand{\D}{\mathcal{D}}
+\newcommand{\U}{\mathbb{U}}
+\newcommand{\M}{\mathcal{M}}
+\newcommand{\I}{\mathcal{I}}
+\newcommand{\rat}{\mathbb{R}^{\geq 0}}
+\newcommand{\supp}{\mathsf{supp}}
+\newcommand{\trace}{\mathsf{trace}}
+\newcommand{\state}{\mathsf{state}}
+\newcommand{\apply}{\mathsf{apply}}
+\newcommand{\pair}{\mathsf{pair}}
+\newcommand{\Rand}{\mathsf{Rand}}
+\newcommand{\Trap}{\mathsf{Trap}}
+\newcommand{\report}{\mathsf{report}}
+\newcommand{\chse}{\mathsf{choose}}
+\newcommand{\compute}{\mathsf{compute}}
+\newcommand{\Report}{\mathsf{Report}}
+\newcommand{\Chse}{\mathsf{Choose}}
+\newcommand{\Compute}{\mathsf{Compute}}
+\newcommand{\RPSIdeal}{\mathsf{Ideal}_\mathsf{RPS}}
+\newcommand{\RPSReal}{\mathsf{Real}_\mathsf{RPS}}
+\newcommand{\rock}{\mathsf{r}}
+\newcommand{\paper}{\mathsf{p}}
+\newcommand{\scissors}{\mathsf{s}}
+\newcommand{\Committed}{\mathsf{Committed}}
+\newcommand{\Reveal}{\mathsf{Reveal}}
+\newcommand{\committed}{\mathsf{committed}}
+\newcommand{\reveal}{\mathsf{reveal}}
+\newcommand{\Commit}{\mathsf{Commit}}
+\newcommand{\Open}{\mathsf{Open}}
+\newcommand{\Winner}{\mathsf{Winner}}
+\newcommand{\commit}{\mathsf{commit}}
+\newcommand{\open}{\mathsf{open}}
+\newcommand{\winner}{\mathsf{winner}}
+
+\newtheorem{theorem}{Theorem}						
+\newtheorem{definition}[theorem]{Definition}
+\newtheorem{proposition}[theorem]{Proposition}
+\newtheorem{lemma}[theorem]{Lemma}
+\newtheorem{remark}[theorem]{Remark}
+\newtheorem{example}[theorem]{Example}
+\newtheorem{notation}[theorem]{Notation}
+\newtheorem{corollary}[theorem]{Corollary}
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{abstract}
+We simplify the development presented by Canetti, Cheung, Kaynard, Liskov, Lynch, Pereirag, and Segala in their paper Task-Structured Probabilistc I/O Automata, to only focus on finitely-supported measures. We give an alternate proof for their main example (Trapdoor vs. Rand).  
+\end{abstract}
+
+\section{Measures and Distributions}
+
+A \textbf{\emph{measure}} on a set $X$ is a function $\mu : X \to \rat$ from $X$ to the nonnegative real numbers with finite support $\supp(\mu)$. Let $\mu(A)$ denote the measure of a subset $A \subseteq X$ under $\mu$; a \textbf{\emph{distribution}} on a set $X$ is a measure $\mu$ on $X$ such that $\mu(X) = 1$. We denote the set of all measures on $X$ by $\M(X)$ and all distributions on $X$ by $\D(X)$. 
+
+For any $\mu, \nu \in \M(X)$ and $p \geq 0$, the measures $\mu + \nu$ and $p \mu$ on $X$ are defined pointwise in the obvious way, and $\M(X)$ is closed under linear combinations $\sum\limits_{i < n} p_i \mu_i$. Clearly, we have $\supp(\mu) \cup \supp(\nu) \subseteq \supp(\mu + \nu)$ and $\supp(p \mu) = \supp(\mu)$ provided $p > 0$; in particular, $\supp(\mu_i) \subseteq \supp\big(\sum\limits_{i < n} p_i \mu_i\big)$ provided $p_i > 0$.
+
+The \textbf{\emph{Dirac measure}} $\delta(x)$ on $x \in X$ is the distribution mapping $x$ to 1 and all other elements to 0. The Dirac measures form a basis for $\M(\X)$, \emph{i.e.}, any $\mu \in \M(X)$ can be expressed uniquely as a positive linear combination $\sum\limits_{i < n} p_i \delta(x_i)$ of Dirac measures, with $p_i > 0$ and $x_i \neq x_j$ for $i \neq j$. Any function $f : X \to Y$ between sets extends to a function $f : \M(X) \to \M(Y)$ between measures, where $f(\mu)$ is the measure given by $y \mapsto \mu(f^{-1}(y))$. The support of $f(\mu)$ is $f(\supp(\mu))$, $f$ carries distributions to distributions, Dirac measures to Dirac measures, and is linear, \emph{i.e.}, $f \big(\sum\limits_{i < n} p_i \mu_i \big) = \sum\limits_{i < n} p_i f(\mu_i)$. \medskip
+
+{\small \em Difference from section 2.2 of the paper: Our development is simpler since we are only interested in finitely-supported measures; even though, the paper proves a number of technical lemmas that do not appear to be strictly necessary for later development.}  
+
+\paragraph{Relations on Measures and Distributions}
+Given a relation $R \subseteq \D(X) \times \D(Y)$ on distributions on the respective sets $X$ and $Y$, the \textit{\emph{expansion}} $\E(R)$ of $R$ is the closure of $R$ under linear combinations. That is, $\E(R) \subseteq \M(X) \times \M(Y)$ relates $\mu$ and $\nu$ iff $\mu = \sum\limits_{i < n} p_i \mu_i$, $\nu = \sum\limits_{i < n} p_i \nu_i$, and $\mu_i \, R \, \nu_i$ for all $i < n$. Then $R \subseteq \E(R)$ and $\E(R)$ is closed under linear combinations, \emph{i.e.}, for any $\mu_1,\mu_2$, $\nu_1,\nu_2$ and $p \in \rat$, if $\mu_1 \, \E(R) \, \mu_2$ and $\nu_1 \, \E(R) \, \nu_2$, then $(\mu_1 + \mu_2)\, \E(R) \, (\nu_1 + \nu_2)$ and $p \mu_1 \, \E(R) \, p \nu_1$.  
+
+\medskip
+
+{\small \em Difference from section 2.3 of the paper: A presentation difference is that they first define the expansion operator in a different way, and then prove (proposition 2.6) that the definition is equivalent to the more useful form. A technical difference is that we work with general linear combinations, not necessarily convex; this is because a) the main soundness lemma holds just as well for linear combinations, and b) linear combinations are easier to work with using induction. This makes our analogue of, \emph{e.g.}, lemma 2.7, straightforward.}
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\section{Task-based Probabilistic I/O Automata}
+\begin{definition}
+A \textbf{\emph{probabilistic I/O automaton (PIOA)}} $\mathcal{P}$ is a tuple $(Q,\bar{q},I,O,H,D)$, where $Q$ is a finite set of \textbf{\emph{states}}, $\bar{q} \in Q$ is the \emph{\textbf{start state}}, $I,O,H$ are finite and mutually disjoint sets of \emph{\textbf{input, output}}, and \textbf{\emph{hidden actions}}, and $D : Q \times (I \cup O \cup H) \rightharpoonup \D(Q)$ is a partial \textbf{\emph{transition function}}. An action $a$ is \textbf{\emph{enabled}} in a state $q$ if $(q,a)$ is in the domain of $D$. If $I = \emptyset$, the PIOA $\mathcal{P}$ is \emph{\textbf{closed}}. We furthermore assume that all input actions $a \in I$ are enabled in all states $q$.
+\end{definition}
+
+The last assumption, also made in the paper, ensures that inputs to $\mathcal{P}$ are received as scheduled regardless of the state of $\mathcal{P}$ (after all, $\mathcal{P}$ can always choose to ignore any particular input action if it is of no interest). 
+ 
+\begin{definition}
+Two PIOAs $\mathcal{P}_i = (Q_i, \bar{q}_i, I_i,O_i,H_i,D_i)$, $i \in \{1,2\}$ are \emph{\textbf{compatible}} if $O_i \cap O_j = \emptyset = (I_i,O_i,H_i) \cap H_j$ whenever $i \neq j$. In that case, the \emph{\textbf{composition}} $\mathcal{P}_1 \parallel \mathcal{P}_2$ is the PIOA $\big((Q_1 \times Q_2), (\bar{q}_1,\bar{q}_2), (I_1 \cup I_2) \backslash (O_1 \cup O_2), O_1 \cup O_2, H_1 \cup H_2, D\big)$, where $D((q_1,q_2),a) \coloneqq \mu_1 \times \mu_2$ iff for each $i \in \{0,1\}$, either 
+\begin{itemize}
+\item $a \notin I_i \cup O_i \cup H_i$ and $\mu_i = \delta(q_i)$, or
+\item $\mu_i = D_i(q_i,a)$.  
+\end{itemize}
+\end{definition}
+
+{\small \em Difference from section 2.4 of the paper: At present it appears we do not need to reason about execution fragments. In the infinite case, considering distributions on execution fragments rather than on states and traces avoids having to deal with large summations, but this is not a concern if we deal with finitely-supported distributions. It is also unclear what purpose the schedulers as introduced in section 2.4 serve in the paper since most of the analysis is task-based.}
+
+\begin{definition}
+A \textbf{\emph{task-PIOA (TPIOA)}} is a pair $(\mathcal{P},R)$, where $\mathcal{P} \coloneqq (Q,\bar{q},I,O,H,D)$ is a PIOA and $R$ is a partition of $O \cup H$ such that 
+\begin{itemize}
+\item for every \emph{\textbf{task}} $T \in R$, either $T \subseteq O$ or $T \subseteq H$, and
+\item for every state $q \in Q$ and task $T \in R$, at most one action $a \in T$ is enabled in $q$.
+\end{itemize}
+\end{definition}
+
+We think of a task as an action parametrized by a message, for instance $\mathsf{Report} \coloneqq \{\mathsf{report(0)},\mathsf{report(1)}, \ldots\}$. The grouping of the actions into a task also serves to hide any particular message that an action carries, as that information is not available when viewing or constructing a protocol (formally, a \emph{schedule}, as defined later). Input actions are not included in the tasks; this is because whenever we reason about a TPIOA $\mathcal{P}$ that is not closed, we quantify over all possible \emph{environments} $\E$ that provide the inputs $\mathcal{P}$ requires, and study the behavior of the \emph{closed} TPIOA $\mathcal{P} \parallel \E$. \medskip
+
+{\small \em Difference from section 3.1 of the paper: The paper allows a single task to contain a mix of output and hidden actions. It is unclear what purpose this serves. Also, the second condition in the definition of a task-PIOA is dropped in the last section of the paper but no examples are given there.}
+
+\begin{definition}
+Two TPIOAs $(\mathcal{P}_i,R_i)$, $i \in \{1,2\}$ are \emph{\textbf{compatible}} if $\mathcal{P}_1$ and $\mathcal{P}_2$ are compatible as PIOAs. In this case, the \textbf{\emph{composition}} $(\mathcal{P}_1,R_1) \parallel (\mathcal{P}_2,R_2)$ is the TPIOA $(\mathcal{P}_1 \parallel \mathcal{P}_2, R_1 \cup R_2)$.
+\end{definition}
+
+\begin{definition}
+Fix a TPIOA $\big((Q,\bar{q},I,O,H,D),R\big)$ and a task $T \in R$. The \textbf{\emph{hiding}} of the task $T$ is the new TPIOA $\big((Q,\bar{q},I,O \, \backslash \, T, H \cup T, D),R\big)$.
+\end{definition}
+
+
+
+A \emph{\textbf{schedule}} for a task-PIOA $(\mathcal{P},R)$ is a finite (possibly empty) sequence of tasks in $R$. A schedule $\gamma$ induces a distribution on the set of states of $\mathcal{P}$, representing the probability that we end up at state $q$ after executing the tasks in the order specified by $\gamma$. But we also want to keep track of the output actions performed during an execution. Thus, a schedule $\gamma$ induces a distribution on the set of finite sequences of output actions of $\mathcal{P}$. So what we have is a distribution on the set $\mathbb{T}_\mathcal{\mathcal{P}} \coloneqq Q \times O^*$, consisting of pairs of states and finite sequences of output actions. Let $\state : Q \times O^* \to O^*$ denote the first projection, $\trace : Q \times O^* \to O^*$ denote the second projection and $\pair_\tau : Q \to Q \times O^*$ for $\tau \in Q^*$ be the function which pairs up a state with the given sequence $\tau$. Given a task $T \in R$, we define the induced function $\apply_\mathcal{P}(T) : \M(\mathbb{T}_\mathcal{P}) \to \M(\mathbb{T}_\mathcal{P})$ on measures as follows:
+\begin{enumerate}
+\item $\apply_\mathcal{P}(T) \; \delta((q,\tau)) \coloneqq \delta((q,\tau))$ if there is no action $a \in T$ enabled in $q$
+\item $\apply_\mathcal{P}(T) \; \delta((q,\tau)) \coloneqq \pair_{\tau'}(\mu)$ if there is a (necessarily unique) action $a \in T$ enabled in $q$; in this case, $\mu \coloneqq D(q,a)$, $\tau' \coloneqq \tau$ if $a$ is a hidden action and $\tau' \coloneqq \tau a$ if $a$ is an output action.
+\end{enumerate}
+Since we defined $\apply_\mathcal{P}(T)$ on all Dirac measures, and these form a basis for $\M(\mathbb{T}_\mathcal{P})$, we are done. The definition of $\apply_\mathcal{P}(\gamma) : \M(\mathbb{T}_\mathcal{P}) \to \M(\mathbb{T}_\mathcal{P})$ is as expected:
+\begin{enumerate}
+\item $\apply_\mathcal{P}(\cdot) \, \mu \coloneqq \mu$
+\item $\apply_\mathcal{P}(\gamma T) \coloneqq \apply_\mathcal{P}(\gamma) \circ \apply_\mathcal{P}(T)$
+\end{enumerate}.
+ It is not hard to check that 
+\[ \apply_\mathcal{P}(T) \, \sum\limits_{i < n} p_i \mu_i  = \sum\limits_{i < n} p_i \, \apply_\mathcal{P}(T,\mu_i)\]
+ and similarly for $\apply_\mathcal{P}(\gamma)$. We also clearly have
+ \[\apply_\mathcal{P}(\gamma_1 \gamma_2) = \apply_\mathcal{P}(\gamma_2) \circ \apply_\mathcal{P}(\gamma_1) \]
+
+ The set $\mathbb{D}_\mathcal{P}$ of \emph{trace distributions} for a task-PIOA $(\mathcal{P},R)$ is the set $\{ \apply_\mathcal{P}(\gamma) \; \delta((\bar{q},\cdot)) \, | \, \gamma$ is a schedule for $\mathcal{P}\}$ (we recall that $\bar{q}$ is the start state of $\mathcal{P}$). 
+
+\medskip
+{\small \em Difference from section 3.1 of the paper: The paper allows a single task to contain a mix of output and hidden actions. It is unclear what purpose this serves. Presumably, one wants to see a task as an action parametrized by a message, for instance $\mathsf{Report} \coloneqq \{\mathsf{report(0)},\mathsf{report(1)}, \ldots\}$ and under this semantics it makes more sense to disallow mixing hidden and output actions. Furthermore, the second condition in the definition of a task-PIOA is dropped in the last section of the paper but no examples are given there. Additionally, we only consider finite schedules and define traces to consist of output actions only. The paper formally allows input actions inside traces but since we reason about trace distributions for \emph{closed} PIOAs only, it is unclear why that would be a sensible choice.}
+
+\paragraph{Implementation and Simulation Relations}
+These are as defined in the paper, sections 3.7 and 4.1.
+%If $\mathcal{T}$ and $\mathcal{S}$ are two compatible task-PIOAs such that the composition $\mathcal{T} \parallel \mathcal{S}$ is closed, we say that $\mathcal{S}$ is \textbf{\emph{an environment}} for $\mathcal{T}$ (and conversely).
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\section{Example: Trapdoor and Rand}
+The TPIOAs $\Trap$ and $\Rand$ are as given in the paper:
+
+\begin{example}[$\Rand$]
+The TPIOA $\Rand$ is defined as follows:
+\begin{itemize}
+\item States: $z \in \{k \, | \, k < n\} \cup \{\bot\}$, initially $\bot$
+\item Input actions: none
+\item Output tasks: $\Report \coloneqq \{\report(k) \, | \, k < n\}$
+\item Hidden tasks: $\Chse \coloneqq \{\chse\}$
+\item Transitions:
+\begin{itemize}
+\item $\chse$ \\
+Precondition: $z = \bot$, Effect: $z \coloneqq k$ for $k < n$ with probability $\frac{1}{n}$
+\item $\report(k)$ \\
+Precondition: $z = k$, Effect: none
+\end{itemize}
+\end{itemize}
+\end{example}
+
+\begin{example}[$\Trap$]
+The TPIOA $\Trap$ is defined as follows:
+\begin{itemize}
+\item States: $y,z \in \{k \, | \, k < n\} \cup \{\bot\}$, both initially $\bot$
+\item Input actions: none
+\item Output tasks: $\Report \coloneqq \{\report(k) \, | \, k < n\}$
+\item Hidden tasks: $\Chse \coloneqq \{\chse\}$, $\Compute \coloneqq \{\compute\}$ 
+\item Transitions:
+\begin{itemize}
+\item $\chse$ \\
+Precondition: $y = \bot$, Effect: $y \coloneqq k$ for $k < n$ with probability $\frac{1}{n}$
+\item $\compute$ \\
+Precondition: $y \neq \bot \wedge z = \bot$, Effect: $z \coloneqq f(y)$
+\item $\report(k)$ \\
+Precondition: $z = k$, Effect: none
+\end{itemize}
+\end{itemize}
+\end{example}
+
+
+We define a simulation relation on distributions, $R \subseteq \D(\mathbb{T}_\mathit{Trap}) \times \D(\mathbb{T}_\mathit{Rand})$, by relating $\mu$ and $\nu$ iff:
+\begin{itemize}
+\item $\mu = \delta((q,\tau))$ and $\nu = \delta((r,\tau))$ such that one of the following conditions holds:
+\begin{enumerate}
+\item $q.yval = q.zval = r.zval = \bot$
+\item $q.yval = i, q.zval = \bot, r.zval = f(i)$ for some $i < n$
+\item $q.yval = i, q.zval = r.zval = f(i)$ for some $i < n$
+\end{enumerate}
+\end{itemize}  
+We define the task correspondence mapping $\mathsf{c}$ as follows:
+\begin{itemize}
+\item $\mathsf{c}(\gamma, \mathsf{Choose}) \coloneqq \mathsf{Choose}$
+\item $\mathsf{c}(\gamma, \mathsf{Compute}) \coloneqq \cdot$
+\item $\mathsf{c}(, \mathsf{Report}) \coloneqq \mathsf{Report}$
+\item otherwise $\mathsf{c}(\gamma, \mathsf{Report}) \coloneqq \cdot$
+\end{itemize}
+We observe the following easy lemmas:
+
+\begin{lemma}
+Suppose $\gamma$ is a finite schedule for $\mathit{Trap}$. Then for any $q$ in the support of $\state(\apply_\mathit{Trap}(\gamma,\delta(\bar{q}_\mathit{Trap},\cdot)))$, we have $q.yval \neq \bot$ if $\mathit{Choose} \in \gamma$ and $q.yval = \bot$ otherwise.
+\end{lemma}
+
+\begin{lemma}
+Suppose $\gamma$ is a finite schedule for $\mathit{Trap}$. Then for any $q$ in the support of $\state(\apply_\mathit{Trap}(\gamma,\delta(\bar{q}_\mathit{Trap},\cdot)))$, we have $q.zval \neq \bot$ if $\gamma \coloneqq \gamma_1 \mathsf{Choose} \gamma_2 \mathsf{Compute} \gamma_3$ and $q.zval = \bot$ otherwise.
+\end{lemma}
+
+To show that $R$ is a simulation relation, we need to show that the start and step conditions are satisfied. The start condition asserts that $\delta((\bar{q}_\mathit{Trap},\cdot)) \, R \, \delta((\bar{q}_\mathit{Rand},\cdot))$, where $\bar{q}_\mathit{Trap}$ and $\bar{q}_\mathit{Rand}$ are the respective start states. But since in the start states all values are $\bot$, this is clearly the case.
+
+For the step condition, fix a schedule $\gamma$, task $T$ of $\mathit{Trap}$, and two distributions $\mu$ and $\nu$ such that $\mu R \nu$ and $\mu$ is consistent with $\gamma$. We want to show that 
+\[ \apply_\mathit{Trap}(T,\mu) \, \E(R) \, \apply_\mathit{Rand}(\mathsf{c}(\gamma,T),\nu) \]
+We case-analyze the task $T$:
+\begin{itemize}
+\item $T = \mathit{Choose}$. By assumption, $\mu$ and $\nu$ are the Dirac measures on $(q,\tau)$ and $(r,\tau)$ respectively. If condition 2 or 3 in the definition of $R$ holds, then the task $\mathit{Choose}$ is not enabled either in $q$ (for $\mathit{Trap})$ or $r$ (for $\mathit{Rand})$. In this case, $\apply_\mathit{Trap}(\mathit{Choose},\mu) = \mu$, $\apply_\mathit{Rand}(\mathit{Choose},\nu) = \nu$ and, since $R \subseteq \E(R)$, we are done. If condition 1 holds, then the task $\mathit{Choose}$ is enabled both in $q$ (for $\mathit{Trap})$ and $r$ (for $\mathit{Rand})$. By definition, we have
+\[ \apply_\mathit{Trap}(\mathit{Choose},\mu) = \sum\limits_{i<n} \frac{1}{n} \delta((q_i,\tau)) \]
+where $q_i.yval \coloneqq i$ and $q.zval \coloneqq \bot$. Similarly,
+\[ \apply_\mathit{Rand}(\mathit{Choose},\nu) = \sum\limits_{i<n} \frac{1}{n} \delta((r_i,\tau)) \]
+where $r_i.zval \coloneqq i$. But
+\[ \sum\limits_{i<n} \frac{1}{n} \delta((r_i,\tau)) = \sum\limits_{i<n} \frac{1}{n} \delta((r_{f(i)},\tau)) \]
+so it suffices to show that $\delta((q_i,\tau)) \, R \, \delta((r_{f(i)},\tau))$. But this is immediate from condition 2.
+\item $T = \mathit{Compute}$. Again, $\mu$ and $\nu$ are the Dirac measures on $(q,\tau)$ and $(r,\tau)$. If condition 1 or 3 in the definition of $R$ holds, then the task $\mathit{Compute}$ is not enabled in $q$. In this case, $\apply_\mathit{Trap}(\mathit{Compute},\mu) = \mu$, $\apply_\mathit{Rand}(\cdot,\nu) = \nu$ and we are done. If condition 1 holds, then $q.yval = r.zval = i$ for some $i < n$ and the task $\mathit{Compute}$ is enabled in $q$. By definition, $\apply_\mathit{Trap}(\mathit{Compute},\mu) = \delta(q',\tau)$, where $q'.yval = i, q'.zval = f(i)$. But then $\delta(q',\tau) \, R \, \nu$ by condition 3. 
+\item $T = \mathit{Report}$. Again, $\mu$ and $\nu$ are the Dirac measures on $(q,\tau)$ and $(r,\tau)$. Since $\mu$ is consistent with $\gamma$, $(q,\tau)$ is in the support of $\apply_\mathit{Trap}(\gamma,\delta(\bar{q}_\mathit{Trap},\cdot))$, and $q$ is in the support of $\state(\apply_\mathit{Trap}(\gamma,\delta(\bar{q}_\mathit{Trap},\cdot)))$.
+
+We now distinguish two cases:
+\begin{itemize}
+\item Assume $\gamma$ does not have the form $\gamma_1 \mathsf{Choose} \gamma_2 \mathsf{Compute} \gamma_3$. By the second lemma above, $q.zval = \bot$. This means the task $\mathsf{Report}$ is not enabled in $q$. Thus, $\apply_\mathit{Trap}(\mathit{Report},\mu) = \mu$, $\apply_\mathit{Rand}(\cdot,\nu) = \nu$ and we are done.
+
+\item Assume $\gamma \coloneqq \gamma_1 \mathsf{Choose} \gamma_2 \mathsf{Compute} \gamma_3$. Again by the lemma, $q.zval \neq \bot$. This means we are in condition 3 of the definition of $R$. Let $i \coloneqq q.zval$ (or $r.zval$). Then the unique action from $\mathsf{Report}$ enabled in $q$ is $\mathsf{report}(i)$, and similarly for $r$. So
+\[ \apply_\mathit{Trap}(\mathit{Report},\mu) = \delta((q,\tau \mathsf{report}(i))) \]
+and
+\[ \apply_\mathit{Rand}(\mathit{Report},\nu) = \delta((r,\tau \mathsf{report}(i))) \]
+and we are again in condition 3 of the definition of $R$.
+\end{itemize}
+\end{itemize}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\section{Example: Rock-Paper-Scissors}
+The ideal-world and real-world formulations of the Rock-Paper-Scissors game are as given in Elaine's slides:
+
+\begin{example}[$\RPSIdeal$]
+Consider the following three TPIOAs:
+\begin{enumerate}
+
+\item $\mathcal{A}$:
+\begin{itemize}
+\item States: $val_A, val_B \in \{\rock,\paper,\scissors,\bot\}$ and $com_A, com_B \in \{\top,\bot\}$, all initially $\bot$
+\item Input actions: $\chse_A(x)$ for $x \in \{\rock,\paper,\scissors\}$, $\reveal_B(x)$ for $x \in \{\rock,\paper,\scissors\}$, $\committed_B$
+\item Output tasks: $\Commit_A \coloneqq \{\commit_A(x) \, | \, x \in \{\rock,\paper,\scissors\}\}$, and $\Open_A \coloneqq \{\open_A\}$, and $\Winner_A \coloneqq \{\winner_A(y) \, | \, y \in \{A,B,N\}\}$ 
+\item Hidden tasks: none
+\item Transitions:
+\begin{itemize}
+\item $\chse_A(x)$ \\
+Precondition: none, Effect: if $val_A = \bot$ then $val_A \coloneqq x$
+\item $\commit_A(x)$ \\
+Precondition: $val_A = x$, Effect: $com_A \coloneqq \top$
+\item $\committed_B$ \\
+Precondition: none, Effect: $com_B \coloneqq \top$
+\item $\open_A$\\
+Precondition: $com_A = \top \wedge com_B = \top$, Effect: none
+\item $\reveal_B(x)$\\
+Precondition: none, Effect: if $val_B = \bot$ then $val_B \coloneqq x$
+\item $\winner_A(A)$ \\
+Precondition: $(val_A = \rock \wedge val_B = \scissors) \vee (val_A = \paper \wedge val_B = \rock) \vee (val_A = \scissors \wedge val_B = \paper)$, Effect: none
+\item $\winner_A(B)$ \\
+Precondition: $(val_A = \rock \wedge val_B = \paper) \vee (val_A = \paper \wedge val_B = \scissors) \vee (val_A = \scissors \wedge val_B = \rock)$, Effect: none
+\item $\winner_A(N)$ \\
+Precondition: $(val_A = \rock = val_B) \vee (val_A = \paper = val_B) \vee (val_A = \scissors = val_B)$, Effect: none
+\end{itemize}
+\end{itemize}
+
+\item $\mathcal{B}$:
+\begin{itemize}
+\item States: $val_A, val_B \in \{\rock,\paper,\scissors,\bot\}$ and $com_A, com_B \in \{\top,\bot\}$, all initially $\bot$
+\item Input actions: $\chse_B(x)$ for $x \in \{\rock,\paper,\scissors\}$, $\reveal_A(x)$ for $x \in \{\rock,\paper,\scissors\}$, $\committed_A$, 
+\item Output tasks: $\Commit_B \coloneqq \{\commit_B(x) \, | \, x \in \{\rock,\paper,\scissors\}\}$, and $\Open_B \coloneqq \{\open_B\}$, and $\Winner_B \coloneqq \{\winner_B(y) \, | \, y \in \{A,B,N\}\}$ 
+\item Hidden tasks: none
+\item Transitions:
+\begin{itemize}
+\item $\chse_B(x)$ \\
+Precondition: none, Effect: if $val_B = \bot$ then $val_B \coloneqq x$
+\item $\commit_B(x)$ \\
+Precondition: $val_B = x$, Effect: $com_B \coloneqq \top$
+\item $\committed_A$ \\
+Precondition: none, Effect: $com_A \coloneqq \top$
+\item $\open_B$\\
+Precondition: $com_A = \top \wedge com_B = \top$, Effect: none
+\item $\reveal_A(x)$\\
+Precondition: none, Effect: if $val_A = \bot$ then $val_A \coloneqq x$
+\item $\winner_B(A)$ \\
+Precondition: $(val_A = \rock \wedge val_B = \scissors) \vee (val_A = \paper \wedge val_B = \rock) \vee (val_A = \scissors \wedge val_B = \paper)$, Effect: none
+\item $\winner_B(B)$ \\
+Precondition: $(val_A = \rock \wedge val_B = \paper) \vee (val_A = \paper \wedge val_B = \scissors) \vee (val_A = \scissors \wedge val_B = \rock)$, Effect: none
+\item $\winner_B(N)$ \\
+Precondition: $(val_A = \rock = val_B) \vee (val_A = \paper = val_B) \vee (val_A = \scissors = val_B)$, Effect: none
+\end{itemize}
+\end{itemize}
+
+\item $\mathcal{F}$:
+\begin{itemize}
+\item States: $val_A, val_B \in \{\rock,\paper,\scissors,\bot\}$ and $op_A, op_B \in \{\top,\bot\}$, all initially $\bot$
+\item Input actions: $\commit_A(x)$ for $x \in \{\rock,\paper,\scissors\}$, $\commit_B(x)$ for $x \in \{\rock,\paper,\scissors\}$, $\open_A$, $\open_B$
+\item Output tasks: $\Reveal_A \coloneqq \{\reveal_A(x) \, | \, x \in \{\rock,\paper,\scissors\}\}$, and $\Reveal_B \coloneqq \{\reveal_B(x) \, | \, x \in \{\rock,\paper,\scissors\}\}$, and $\Committed_A \coloneqq \{\committed_A\}$, and $\Committed_B \coloneqq \{\committed_B\}$ 
+\item Hidden tasks: none
+\item Transitions:
+\begin{itemize}
+\item $\commit_A(x)$ \\
+Precondition: none, Effect: if $val_A = \bot$ then $val_A \coloneqq x$
+\item $\commit_B(x)$ \\
+Precondition: none, Effect: if $val_B = \bot$ then $val_B \coloneqq x$
+\item $\committed_A$ \\
+Precondition: $val_A \neq \bot$, Effect: none
+\item $\committed_B$ \\
+Precondition: $val_B \neq \bot$, Effect: none
+\item $\open_A$\\
+Precondition: none, Effect: $op_A \coloneqq \top$
+\item $\open_B$\\
+Precondition: none, Effect: $op_B \coloneqq \top$
+\item $\reveal_A(x)$\\
+Precondition: $(op_A = \top \wedge val_A = x)$, Effect: none
+\item $\reveal_B(x)$\\
+Precondition: $(op_B = \top \wedge val_B = x)$, Effect: none
+\end{itemize}
+\end{itemize}
+\end{enumerate}
+The composition $\mathcal{A} \parallel \mathcal{B} \parallel \mathcal{F}$ has input actions $\chse_A(x)$, $\chse_B(x)$ for $x \in \{\rock,\paper,\scissors\}$. It has no hidden tasks and has output tasks: 
+\begin{enumerate}
+\item $\Commit_A \coloneqq \{\commit_A(x) \, | \, x \in \{\rock,\paper,\scissors\}\}$
+\item $\Commit_B \coloneqq \{\commit_B(x) \, | \, x \in \{\rock,\paper,\scissors\}\}$
+\item $\Committed_A \coloneqq \{\committed_A\}$
+\item $\Committed_B \coloneqq \{\committed_B\}$
+\item $\Open_A \coloneqq \{\open_A\}$
+\item $\Open_B \coloneqq \{\open_B\}$
+\item $\Reveal_A \coloneqq \{\reveal_A(x) \, | \, x \in \{\rock,\paper,\scissors\}\}$
+\item $\Reveal_B \coloneqq \{\reveal_B(x) \, | \, x \in \{\rock,\paper,\scissors\}\}$
+\item $\Winner_A \coloneqq \{\winner_A(y) \, | \, y \in \{A,B,N\}\}$
+\item $\Winner_B \coloneqq \{\winner_B(y) \, | \, y \in \{A,B,N\}\}$
+\end{enumerate}
+The tasks 1-8 are only used to communicate between the three component TPIOAs. Thus, we define $\RPSIdeal$ as the composition $\mathcal{A} \parallel \mathcal{B} \parallel \mathcal{F}$ followed by the hiding of tasks 1-8 above.
+\end{example}
+
+\begin{example}[$\RPSReal$]
+Consider the following four TPIOAs:
+\begin{enumerate}
+
+\item $\mathcal{A}$:
+\begin{itemize}
+\item States: $val_A, val_B \in \{\rock,\paper,\scissors,\bot\}$ and $com_A, com_B \in \{\top,\bot\}$, all initially $\bot$
+\item Input actions: $\chse_A(x)$ for $x \in \{\rock,\paper,\scissors\}$, $\reveal_B(x)$ for $x \in \{\rock,\paper,\scissors\}$, $\committed_B$
+\item Output tasks: $\Commit_A \coloneqq \{\commit_A(x) \, | \, x \in \{\rock,\paper,\scissors\}\}$, and $\Open_A \coloneqq \{\open_A\}$, and $\Winner_A \coloneqq \{\winner_A(y) \, | \, y \in \{A,B,N\}\}$ 
+\item Hidden tasks: none
+\item Transitions:
+\begin{itemize}
+\item $\chse_A(x)$ \\
+Precondition: none, Effect: if $val_A = \bot$ then $val_A \coloneqq x$
+\item $\commit_A(x)$ \\
+Precondition: $val_A = x$, Effect: $com_A \coloneqq \top$
+\item $\committed_B$ \\
+Precondition: none, Effect: $com_B \coloneqq \top$
+\item $\open_A$\\
+Precondition: $com_A = \top \wedge com_B = \top$, Effect: none
+\item $\reveal_B(x)$\\
+Precondition: none, Effect: if $val_B = \bot$ then $val_B \coloneqq x$
+\item $\winner_A(A)$ \\
+Precondition: $(val_A = \rock \wedge val_B = \scissors) \vee (val_A = \paper \wedge val_B = \rock) \vee (val_A = \scissors \wedge val_B = \paper)$, Effect: none
+\item $\winner_A(B)$ \\
+Precondition: $(val_A = \rock \wedge val_B = \paper) \vee (val_A = \paper \wedge val_B = \scissors) \vee (val_A = \scissors \wedge val_B = \rock)$, Effect: none
+\item $\winner_A(N)$ \\
+Precondition: $(val_A = \rock = val_B) \vee (val_A = \paper = val_B) \vee (val_A = \scissors = val_B)$, Effect: none
+\end{itemize}
+\end{itemize}
+
+\item $\mathcal{B}$:
+\begin{itemize}
+\item States: $val_A, val_B \in \{\rock,\paper,\scissors,\bot\}$ and $com_A, com_B \in \{\top,\bot\}$, all initially $\bot$
+\item Input actions: $\chse_B(x)$ for $x \in \{\rock,\paper,\scissors\}$, $\reveal_A(x)$ for $x \in \{\rock,\paper,\scissors\}$, $\committed_A$, 
+\item Output tasks: $\Commit_B \coloneqq \{\commit_B(x) \, | \, x \in \{\rock,\paper,\scissors\}\}$, and $\Open_B \coloneqq \{\open_B\}$, and $\Winner_B \coloneqq \{\winner_B(y) \, | \, y \in \{A,B,N\}\}$ 
+\item Hidden tasks: none
+\item Transitions:
+\begin{itemize}
+\item $\chse_B(x)$ \\
+Precondition: none, Effect: if $val_B = \bot$ then $val_B \coloneqq x$
+\item $\commit_B(x)$ \\
+Precondition: $val_B = x$, Effect: $com_B \coloneqq \top$
+\item $\committed_A$ \\
+Precondition: none, Effect: $com_A \coloneqq \top$
+\item $\open_B$\\
+Precondition: $com_A = \top \wedge com_B = \top$, Effect: none
+\item $\reveal_A(x)$\\
+Precondition: none, Effect: if $val_A = \bot$ then $val_A \coloneqq x$
+\item $\winner_B(A)$ \\
+Precondition: $(val_A = \rock \wedge val_B = \scissors) \vee (val_A = \paper \wedge val_B = \rock) \vee (val_A = \scissors \wedge val_B = \paper)$, Effect: none
+\item $\winner_B(B)$ \\
+Precondition: $(val_A = \rock \wedge val_B = \paper) \vee (val_A = \paper \wedge val_B = \scissors) \vee (val_A = \scissors \wedge val_B = \rock)$, Effect: none
+\item $\winner_B(N)$ \\
+Precondition: $(val_A = \rock = val_B) \vee (val_A = \paper = val_B) \vee (val_A = \scissors = val_B)$, Effect: none
+\end{itemize}
+\end{itemize}
+
+\item $\mathcal{FA}$:
+\begin{itemize}
+\item States: $val_A \in \{\rock,\paper,\scissors,\bot\}$ and $op_A \in \{\top,\bot\}$, both initially $\bot$
+\item Input actions: $\commit_A(x)$ for $x \in \{\rock,\paper,\scissors\}$, $\open_A$
+\item Output tasks: $\Reveal_A \coloneqq \{\reveal_A(x) \, | \, x \in \{\rock,\paper,\scissors\}\}$, $\Committed_A \coloneqq \{\committed_A\}$
+\item Hidden tasks: none
+\item Transitions:
+\begin{itemize}
+\item $\commit_A(x)$ \\
+Precondition: none, Effect: if $val_A = \bot$ then $val_A \coloneqq x$
+\item $\committed_A$ \\
+Precondition: $val_A \neq \bot$, Effect: none
+\item $\open_A$\\
+Precondition: none, Effect: $op_A \coloneqq \top$
+\item $\reveal_A(x)$\\
+Precondition: $(op_A = \top \wedge val_A = x)$, Effect: none
+\end{itemize}
+\end{itemize}
+
+\item $\mathcal{FB}$:
+\begin{itemize}
+\item States: $val_B \in \{\rock,\paper,\scissors,\bot\}$ and $op_B \in \{\top,\bot\}$, both initially $\bot$
+\item Input actions: $\commit_B(x)$ for $x \in \{\rock,\paper,\scissors\}$, $\open_B$
+\item Output tasks: $\Reveal_B \coloneqq \{\reveal_B(x) \, | \, x \in \{\rock,\paper,\scissors\}\}$, $\Committed_B \coloneqq \{\committed_B\}$
+\item Hidden tasks: none
+\item Transitions:
+\begin{itemize}
+\item $\commit_B(x)$ \\
+Precondition: none, Effect: if $val_B = \bot$ then $val_B \coloneqq x$
+\item $\committed_B$ \\
+Precondition: $val_B \neq \bot$, Effect: none
+\item $\open_B$\\
+Precondition: none, Effect: $op_B \coloneqq \top$
+\item $\reveal_B(x)$\\
+Precondition: $(op_B = \top \wedge val_B = x)$, Effect: none
+\end{itemize}
+\end{itemize}
+\end{enumerate}
+The composition $\mathcal{A} \parallel \mathcal{B} \parallel \mathcal{FA} \parallel \mathcal{FB}$ has input actions $\chse_A(x)$, $\chse_B(x)$ for $x \in \{\rock,\paper,\scissors\}$. It has no hidden tasks and has output tasks: 
+\begin{enumerate}
+\item $\Commit_A \coloneqq \{\commit_A(x) \, | \, x \in \{\rock,\paper,\scissors\}\}$
+\item $\Commit_B \coloneqq \{\commit_B(x) \, | \, x \in \{\rock,\paper,\scissors\}\}$
+\item $\Committed_A \coloneqq \{\committed_A\}$
+\item $\Committed_B \coloneqq \{\committed_B\}$
+\item $\Open_A \coloneqq \{\open_A\}$
+\item $\Open_B \coloneqq \{\open_B\}$
+\item $\Reveal_A \coloneqq \{\reveal_A(x) \, | \, x \in \{\rock,\paper,\scissors\}\}$
+\item $\Reveal_B \coloneqq \{\reveal_B(x) \, | \, x \in \{\rock,\paper,\scissors\}\}$
+\item $\Winner_A \coloneqq \{\winner_A(y) \, | \, y \in \{A,B,N\}\}$
+\item $\Winner_B \coloneqq \{\winner_B(y) \, | \, y \in \{A,B,N\}\}$
+\end{enumerate}
+The tasks 1-8 are only used to communicate between the four component TPIOAs. Thus, we define $\RPSReal$ as the composition $\mathcal{A} \parallel \mathcal{B} \parallel \mathcal{FA} \parallel \mathcal{FB}$ followed by the hiding of tasks 1-8 above.
+\end{example}
+
+\bibliographystyle{plain}
+%\bibliography{references}
+
+\end{document}
+
