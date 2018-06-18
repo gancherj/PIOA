@@ -130,14 +130,19 @@ Definition refinement {act T T' : Set} (P1 : @PIOA act T) (P2 : @PIOA act T') `{
   forall ts, exists ts',
       traceOf (runPIOA P1 ts (startTr P1)) ~~ traceOf (runPIOA P2 ts' (startTr P2)).
 
+Definition consistentWith {act T : Set} {P1 : @PIOA act T} (ts : list T) (d : Meas (pQ P1 * list act)) :=
+  forall p, In p (measSupport d) -> In p (measSupport (runPIOA P1 ts (startTr P1))).
+
+Definition strongEquiv {A : Set} (d1 d2 : Meas A) :=
+  d1 ~~ d2 /\ (forall p, In p (measSupport d1) <-> In p (measSupport d2)).
+
 Record SimR {act task task' : Set} (P1 : @PIOA act task) (P2 : @PIOA act task')
        (R : Meas (pQ P1 * list act) -> Meas (pQ P2 * list act) -> Prop) :=
   {
     simStart : R (ret (start P1, nil)) (ret (start P2, nil));
     simTr : forall d1 d2, R d1 d2 -> traceOf d1 ~~ traceOf d2;
-    (* no history yet *)
-    simStep : forall T, exists ts, forall d1 d2, R d1 d2 ->
-          (expansion R) (appTask P1 T d1) (runPIOA P2 ts d2)}.
+    simStep : forall ts T, exists ts', forall d1 d2, consistentWith ts d1 -> R d1 d2 ->
+          (expansion R) (appTask P1 T d1) (runPIOA P2 ts' d2)}.
 
 
 Lemma expansion_trace : forall {Q Q' act : Set} (R : Meas (Q * list act) -> Meas (Q' * list act) -> Prop) d1 d2, (forall d1 d2, R d1 d2 -> traceOf d1 ~~ traceOf d2) -> expansion R d1 d2 -> traceOf d1 ~~ traceOf d2.
@@ -155,7 +160,7 @@ Lemma expansion_trace : forall {Q Q' act : Set} (R : Meas (Q * list act) -> Meas
   crush.
 Qed.
   
-Lemma simSound {act task task' : Set} (P1 : @PIOA act task) (P2 : @PIOA act task') R `{H: inputClosed P1} `{H2 : inputClosed P2} :
+Lemma simSound {act task task' : Set} (P1 : @PIOA act task) (P2 : @PIOA act task') R `{H: inputClosed P1} `{H2 : inputClosed P2} {Heqact : forall x y : act, {x = y} + {x <> y}} {HeqQ1 : forall x y : pQ P1, {x = y} + {x <> y}} :
   SimR P1 P2 R -> @refinement _ _ _ P1 P2 H H2.
   intro.
   destruct H0.
@@ -184,7 +189,7 @@ Lemma simSound {act task task' : Set} (P1 : @PIOA act task) (P2 : @PIOA act task
 
   destruct IHts.
   destruct H0.
-  destruct (simStep0 a).
+  destruct (simStep0 ts a).
   exists (x1 ++ x).
   rewrite runPIOA_app.
   rewrite runPIOA_cons.
@@ -197,13 +202,29 @@ Lemma simSound {act task task' : Set} (P1 : @PIOA act task) (P2 : @PIOA act task
   apply H0.
   destruct H0.
   rewrite leftEquiv.
-  unfold fmap.
+  unfold fmap;
   rewrite bindAssoc; apply measBind_cong_r; intros; rewrite bindRet; unfold measEquiv; crush.
   destruct H0.
   rewrite rightEquiv; unfold fmap;
   rewrite bindAssoc; apply measBind_cong_r; intros; rewrite bindRet; unfold measEquiv; crush.
+
   intros; apply H1.
+  destruct H0.
+  unfold consistentWith.
+  intros.
+  assert (In p0 (measSupport (p <- x0; fst p))).
+  apply measBind_in.
+  exists p.
+  crush.
+
+  eapply measSupport_measEquiv.
+
+  decide equality.
+  apply list_eq_dec; crush.
+  symmetry; apply leftEquiv.
+  crush.
+
   destruct H0.
   apply RValid.
   crush.
-Qed.  
+Qed.

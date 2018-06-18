@@ -48,9 +48,34 @@ Lemma expansion_bind {A B C : Set} (R : Meas B -> Meas C -> Prop) (mu : Meas A) 
   apply measEquiv_refl.
   crush.
   assert (forall p, In p (measSupport mu) -> expansion R (f p) (g p)).
-  intros; apply (H _ (or_intror H0)).
+  intros; apply H.
+  unfold measSupport in *.
+  apply in_map_iff in H0; repeat destruct H0.
+  apply in_map_iff; exists x.
+  crush.
+  destruct (negb (beqRat (fst a) 0)).
+  crush.
+  crush.
+
   destruct (IHmu H0) as [IHm IHmExp]; clear IHmu H0.
-  destruct (H (snd a) (or_introl eq_refl)) as [muA muAExp]; clear H.
+  remember (beqRat (fst a) 0) as b; destruct b.
+  assert ((fst a) == 0). unfold eqRat; crush.
+  clear Heqb.
+  eapply expansion_cong.
+  eapply measBind_cong_l.
+  apply measEquiv_zero_cons.
+  crush.
+  eapply measBind_cong_l.
+  apply measEquiv_zero_cons; crush.
+  exists IHm; crush.
+
+  assert (In (snd a) (measSupport (a :: mu))).
+  unfold measSupport.
+  apply in_map_iff; exists a; crush.
+  rewrite <- Heqb.
+  crush.
+  
+  destruct (H (snd a) H0) as [muA muAExp]; clear H.
   exists (IHm ++ (measScale (fst a) muA)).
   
   destruct IHmExp, muAExp; constructor.
@@ -83,17 +108,19 @@ Lemma expansion_bind {A B C : Set} (R : Meas B -> Meas C -> Prop) (mu : Meas A) 
   simpl; ring.
 
   intros.
-  unfold measScale in H.
-  unfold measSupport in H.
-  rewrite map_app in H.
-  rewrite in_app_iff in H; destruct H.
-  apply RValid0; crush.
-  apply RValid1.
-  rewrite map_map in H.
-  simpl in H.
-  crush.
-Qed.  
+  rewrite measSupport_app in H.
 
+  apply in_app_iff in H; crush.
+  cut (In p (measSupport muA)).
+  crush.
+
+  remember (beqRat (fst a) 0) as b; destruct b.
+  crush.
+  assert (~ (fst a == 0)).
+  crush.
+  rewrite <- (measSupport_measScale _ _ H) in H1.
+  crush.
+Qed.
 
 Lemma joinDistrib_expansion_compat {A B : Set} (R : Meas A -> Meas B -> Prop) mu1 mu2 mu f g :
   measCong f ->
