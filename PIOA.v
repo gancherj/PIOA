@@ -42,7 +42,7 @@ Lemma appTask_distrib {act task : Set} {P : @PIOA act task} {T : task} :
   apply measEquiv_refl.
 Qed.
 
-Lemma appTask_cong {act task : Set} {P : @PIOA act task} {T : task} :
+Lemma appTask_cong {act task : Set} (P : @PIOA act task) {T : task} :
   measCong (appTask P T).
   unfold measCong, appTask; intros.
     rewrite (measBind_cong_l H).
@@ -73,7 +73,7 @@ Lemma runPIOA_cong {act task : Set} (P : @PIOA act task) ts :
   simpl.
   crush.
   simpl.
-  rewrite (appTask_cong _ _ IHts).
+  rewrite (appTask_cong _ _ _ IHts).
   apply measEquiv_refl.
 Qed.
       
@@ -91,7 +91,7 @@ Lemma runPIOA_distrib {act task : Set} {P : @PIOA act task} ts :
   rewrite bindRet.
   unfold measEquiv; crush.
   rewrite runPIOA_cons.
-  rewrite (appTask_cong _ _ IHts).
+  rewrite (appTask_cong _ _ _ IHts).
   unfold fmap.
   unfold appTask.
   repeat rewrite bindAssoc.

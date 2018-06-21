@@ -8,6 +8,8 @@ Require Import Ring.
 Require Import List.
 Require Import Coq.Classes.Equivalence.
 Require Import Relation_Definitions.
+Require Import Program.
+Require Import FCF.StdNat.
 Open Scope rat_scope.
 
 
@@ -177,6 +179,27 @@ Qed.
     ring.
   Qed.
 
+  Lemma bindRet_r {A : Set} (c : Meas A) :
+    (x <- c; ret x) ~~ c.
+    unfold measBind.
+    unfold measJoin.
+    unfold measSum.
+    simpl.
+    rewrite map_map.
+    simpl.
+    induction c.
+    crush.
+    unfold measEquiv; crush.
+    simpl.
+    unfold measEquiv; intros.
+    unfold integ.
+    unfold measEquiv, integ in IHc.
+    repeat rewrite sumList_cons.
+    symmetry in IHc.
+    rewrite (IHc _).
+    simpl.
+    ring.
+  Qed.
 
 Ltac in_sumList_l := eapply eqRat_trans; [ apply sumList_body_eq; intros; simpl | idtac] .
 
@@ -626,7 +649,6 @@ Qed.
 
 (* TODO: tactics for simplifying distributions. *)
 
-
 Definition unif {A : Set} (xs : list A) `{StdNat.nz (length xs)} : Meas A :=
   map (fun x => (1 / (length xs), x)) xs.
 
@@ -770,4 +792,162 @@ Lemma measSupport_measEquiv {A : Set} (H : forall x y : A, {x = y} + {x <> y}) (
   rewrite (H0 (fun x => if H x p then 1 else 0)) in H1.
   crush.
 Qed.  
- 
+
+
+Lemma sumList_zip {A : Set} (l l' : list A) (f f' : A -> Rat) :
+  length l = length l' ->
+  (forall p, In p (zip l l') -> f (fst p) == f' (snd p)) ->
+  sumList l f == sumList l' f'.
+  revert l'.
+  induction l.
+  induction l'.
+  crush.
+  unfold sumList; crush.
+  crush.
+  intros.
+  induction l'.
+  crush.
+  assert (sumList l f == sumList l' f').
+  apply IHl.
+  crush.
+  intros.
+  simpl in H0.
+  apply H0; crush.
+  repeat rewrite sumList_cons.
+  rewrite H1.
+  pose proof (H0 _ (or_introl (eq_refl (a, a0)))); simpl in *.
+  rewrite H2.
+  crush.
+Qed.
+
+Lemma measEquiv_app_symm {A : Set} (d1 d2 : Meas A) :
+  (d1 ++ d2) ~~ (d2 ++ d1).
+  unfold measEquiv, integ; intros.
+  repeat rewrite sumList_app.
+  ring.
+Qed.
+
+Lemma measEquiv_rev {A : Set} (d : Meas A) :
+  d ~~ (rev d).
+  induction d.
+  unfold measEquiv; crush.
+  simpl.
+  assert (a :: d = [a] ++ d).
+  crush.
+  rewrite H.
+  rewrite measEquiv_app_symm.
+  apply measEquiv_app_cong.
+  crush.
+  unfold measEquiv; crush.
+Qed.
+
+Lemma measBind_zip {A B : Set} {d d' : Meas A} {c c' : A -> Meas B} :
+  length d = length d' ->
+  (forall p, In p (zip d d') -> fst (fst p) == fst (snd p) /\ c (snd (fst p)) ~~ c' (snd (snd p))) ->
+  measBind d c ~~ measBind d' c'.
+
+  intros.
+  unfold measBind, measJoin, measEquiv, measSum, integ; intros.
+  repeat rewrite sumList_concat.
+  repeat rewrite sumList_map.
+  eapply sumList_zip.
+  crush.
+  intros.
+  simpl.
+  destruct (H0 _ H1).
+  unfold measScale.
+  repeat rewrite sumList_map.
+  simpl.
+  etransitivity.
+  apply sumList_body_eq; intros; apply ratMult_assoc.
+  symmetry; etransitivity.
+  apply sumList_body_eq; intros; apply ratMult_assoc.
+  repeat rewrite sumList_factor_constant_l.
+  apply ratMult_eqRat_compat.
+  crush.
+  symmetry; apply (H3 f).
+Qed.
+
+Lemma unif_cons {A : Set} (l : list A) (a : A) `{H : StdNat.nz (length l)} p :
+  In p (unif (a :: l)) ->
+  (fst p = 1 / length (a :: l)) /\
+  ((snd p = a) \/ In (snd p) (measSupport (unif l))).
+  unfold unif.
+  simpl.
+  intros.
+  destruct H0.
+  split.
+  crush.
+  left; crush.
+  destruct p; apply in_map_iff in H0.
+  destruct H0.
+  destruct H0.
+  subst; simpl.
+  split.
+  crush.
+  right.
+  unfold measSupport.
+  unfold measRed.
+  apply in_map_iff.
+  exists ((1 / length l), a0).
+  crush.
+  apply filter_In.
+  crush.
+  apply in_map_iff.
+  exists a0.
+  crush.
+Qed.
+
+Global Instance nz_length_app {A} (l1 l2 : list A) {H1 : nz (length l1)} {H2 : nz (length l2)} : nz (length (l1 ++ l2)).
+destruct H1.
+destruct H2.
+constructor.
+rewrite app_length.
+crush.
+Defined.
+
+Lemma unif_app {A : Set} (l1 l2 : list A) `{H1 : StdNat.nz (length l1)} `{H2 : StdNat.nz (length l2)} :
+  forall p, In p (unif (l1 ++ l2)) ->
+            (fst p = 1 / length (l1 ++ l2)) /\
+            (In (snd p) (measSupport (unif l1)) \/ In (snd p) (measSupport (unif l2))).
+  intros.
+  unfold unif in H.
+  apply in_map_iff in H; destruct H.
+  crush.
+  apply in_app_iff in H3; destruct H3.
+  left.
+  unfold measSupport, unif, measRed.
+  apply in_map_iff.
+  eexists (_, x).
+  crush.
+  apply filter_In.
+  split.
+  apply in_map_iff.
+  exists x.
+  crush.
+  crush.
+  right.
+  unfold measSupport, unif, measRed.
+  apply in_map_iff.
+  eexists (_, x).
+  crush.
+  apply filter_In.
+  split.
+  apply in_map_iff.
+  exists x.
+  crush.
+  crush.
+Qed.
+
+  Ltac dsimp := repeat (simpl; 
+    match goal with
+    | [ |- context[_ <- ret _; _] ] => rewrite bindRet
+    | [ |- context[_ <- (_ <- _; _); _] ] => rewrite bindAssoc
+    | [ |- context[_ <- _; ret _] ] => rewrite bindRet_r
+    | [ |- (_ <- ?H; _) ~~ (_ <- ?H; _) ] => apply measBind_cong_r; intros
+    | [ |- ?H ~~ ?H ] => apply measEquiv_refl
+                                            end; simpl).
+
+  Ltac dsimp_in_l := etransitivity; eapply measBind_cong_r; intros; dsimp; apply measEquiv_refl.
+  Ltac dsimp_in_r := symmetry; etransitivity; eapply measBind_cong_r; intros; dsimp; apply measEquiv_refl; symmetry.
+

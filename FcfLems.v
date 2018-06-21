@@ -105,3 +105,18 @@ Lemma sumList_concat {A : Set} (d : list (list A)) (f : A -> Rat) :
   rewrite IHd.
   crush.
 Qed.
+
+Lemma zip_In {A : Set} (l l' : list A) :
+  forall p, In p (Fold.zip l l') -> In (fst p) l /\ In (snd p) l'.
+  revert l l'.
+  induction l.
+  crush.
+  induction l'.
+  crush.
+  intros.
+  simpl in H.
+  destruct H.
+  subst; crush.
+  destruct (IHl _ _ H).
+  crush.
+Qed.

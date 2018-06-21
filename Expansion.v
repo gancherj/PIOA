@@ -156,4 +156,8 @@ intros.
 crush.
 Qed.
 
-  
+Ltac expansion_simp :=
+  eapply expansion_cong; [ dsimp; apply measEquiv_refl | dsimp; apply measEquiv_refl | idtac ].
+
+Ltac in_expansion t1 t2 :=
+  expansion_simp; eapply expansion_cong; [ t1; apply measEquiv_refl | t2; apply measEquiv_refl | idtac]; expansion_simp.
