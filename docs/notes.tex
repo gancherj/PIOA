@@ -97,43 +97,49 @@ Given a relation $R \subseteq \D(X) \times \D(Y)$ on distributions on the respec
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-\section{Task-based Probabilistic I/O Automata}
+\section{Probabilistic I/O Automata}
 \begin{definition}
-A \textbf{\emph{probabilistic I/O automaton (PIOA)}} $\mathcal{P}$ is a tuple $(Q,\bar{q},I,O,H,D)$, where $Q$ is a finite set of \textbf{\emph{states}}, $\bar{q} \in Q$ is the \emph{\textbf{start state}}, $I,O,H$ are finite and mutually disjoint sets of \emph{\textbf{input, output}}, and \textbf{\emph{hidden actions}}, and $D : Q \times (I \cup O \cup H) \rightharpoonup \D(Q)$ is a partial \textbf{\emph{transition function}}. An action $a$ is \textbf{\emph{enabled}} in a state $q$ if $(q,a)$ is in the domain of $D$. If $I = \emptyset$, the PIOA $\mathcal{P}$ is \emph{\textbf{closed}}. We furthermore assume that all input actions $a \in I$ are enabled in all states $q$.
-\end{definition}
-
-The last assumption, also made in the paper, ensures that inputs to $\mathcal{P}$ are received as scheduled regardless of the state of $\mathcal{P}$ (after all, $\mathcal{P}$ can always choose to ignore any particular input action if it is of no interest). 
- 
-\begin{definition}
-Two PIOAs $\mathcal{P}_i = (Q_i, \bar{q}_i, I_i,O_i,H_i,D_i)$, $i \in \{1,2\}$ are \emph{\textbf{compatible}} if $O_i \cap O_j = \emptyset = (I_i,O_i,H_i) \cap H_j$ whenever $i \neq j$. In that case, the \emph{\textbf{composition}} $\mathcal{P}_1 \parallel \mathcal{P}_2$ is the PIOA $\big((Q_1 \times Q_2), (\bar{q}_1,\bar{q}_2), (I_1 \cup I_2) \backslash (O_1 \cup O_2), O_1 \cup O_2, H_1 \cup H_2, D\big)$, where $D((q_1,q_2),a) \coloneqq \mu_1 \times \mu_2$ iff for each $i \in \{0,1\}$, either 
+A \textbf{\emph{probabilistic I/O automaton (PIOA)}} $\mathcal{P}$ is a tuple $(Q,\bar{q},A,X,Y,D)$, where $Q$ is a finite set of \textbf{\emph{states}}, $\bar{q} \in Q$ is the \emph{\textbf{start state}}, $A$ is a finite set of \emph{\textbf{actions}}, $X$ and $Y$ (the sets of \emph{\textbf{output}} and \emph{\textbf{hidden tasks}}, respectively) are subpartitions of $A$ such that for any $T \in X$ and $S \in Y$ we have $T \cap S = \emptyset$, and $D : Q \times A \rightharpoonup \D(Q)$ is a partial \textbf{\emph{transition function}}. We call $O \coloneqq \bigcup X$ the set of \textbf{\emph{output actions}}, $H \coloneqq \bigcup Y$ the set of \textbf{\emph{hidden actions}}, $I \coloneqq A \,\backslash \, (O \cup H)$ the set of \emph{\textbf{input actions}}, and $\mathcal{T} \coloneqq X \cup Y$ the set of \textbf{\emph{tasks}}. If $I = \emptyset$, the PIOA $\mathcal{P}$ is \emph{\textbf{closed}}. An action $a$ \textbf{\emph{enabled}} in a state $q$ if $(q,a)$ is in the domain of $D$. We furthermore require the following:
 \begin{itemize}
-\item $a \notin I_i \cup O_i \cup H_i$ and $\mu_i = \delta(q_i)$, or
+\item all input actions $a \in I$ are enabled in all states $q$ (input enabling), and
+\item for every state $q \in Q$ and task $T \in \mathcal{T}$, at most one action $a \in T$ is enabled in $q$ (action determinism).
+\end{itemize}
+\end{definition}
+Input enabling ensures that inputs to $\mathcal{P}$ are received as scheduled by the protocol regardless of the state of $\mathcal{P}$ (after all, $\mathcal{P}$ can always choose to ignore any particular input action if it is of no interest). We think of a task as an action parametrized by a message, for instance $\Report \coloneqq \{\report(0),\report(1), \ldots\}$; action determinism then guarantees that in any given state at most one message applies. The grouping of multiple actions into a single task serves to hide the particular message that an action carries, as that information is not available when viewing or constructing a protocol. Input actions are not included in the tasks: this is because whenever we reason about a PIOA $\mathcal{P}$ that is not closed, we quantify over all suitable PIOAs $\E$ that provide the inputs $\mathcal{P}$ requires, and study the behavior of the now-closed PIOA $\mathcal{P} \parallel \E$, defined below:
+
+\begin{definition}
+Two PIOAs $\mathcal{P}_i$, $i \in \{1,2\}$, are \emph{\textbf{compatible}} if $O_i \cap O_j = \emptyset = A_i \cap H_j$ whenever $i \neq j$. In that case, the \emph{\textbf{composition}} $\mathcal{P}_1 \parallel \mathcal{P}_2$ is the PIOA $\big(Q_1 \times Q_2, (\bar{q}_1,\bar{q}_2), A_1 \cup A_2, X_1 \cup X_2, Y_1 \cup Y_2, D\big)$, where $D((q_1,q_2),a) \coloneqq \mu_1 \times \mu_2$ iff for each $i \in \{0,1\}$, either 
+\begin{itemize}
+\item $a \notin A_i$ and $\mu_i = \delta(q_i)$, or
 \item $\mu_i = D_i(q_i,a)$.  
 \end{itemize}
 \end{definition}
 
+\begin{definition}
+Given a a task $T$ for a PIOA $\mathcal{P}$, the \textbf{\emph{hiding of $T$ in $\mathcal{P}$}} is the PIOA $(Q,\bar{q},A,X\,\backslash\,\{T\}, Y \cup \{T\}, D)$.
+\end{definition}
+
+\begin{definition}
+Two PIOAs $\mathcal{P}_i = (Q_i, \bar{q}_i, A_i,X_i,Y_i,D_i)$, $i \in \{1,2\}$, are \emph{\textbf{comparable}} if $X_1 = X_2$ and $Y_1 = Y_2$. In that case, we say that $\mathcal{P}_2$ implements $\mathcal{P}_1$, written $\mathcal{P}_1 \leq \mathcal{P}_2$ if whenever $\E$ is an environment for both $\mathcal{P}_1$ and $\mathcal{P}_2$, then   
+\end{definition}
+
+
+
+{\small \em Difference from the paper: The paper allows a single task to contain a mix of output and hidden actions. It is unclear what purpose this serves. Also, the last condition in the definition of a task-PIOA is dropped in the last section of the paper but it is unclear what this gains us.}
+
+
+
+
+
+
+
+
+
+
+
+
+
 {\small \em Difference from section 2.4 of the paper: At present it appears we do not need to reason about execution fragments. In the infinite case, considering distributions on execution fragments rather than on states and traces avoids having to deal with large summations, but this is not a concern if we deal with finitely-supported distributions. It is also unclear what purpose the schedulers as introduced in section 2.4 serve in the paper since most of the analysis is task-based.}
-
-\begin{definition}
-A \textbf{\emph{task-PIOA (TPIOA)}} is a pair $(\mathcal{P},R)$, where $\mathcal{P} \coloneqq (Q,\bar{q},I,O,H,D)$ is a PIOA and $R$ is a partition of $O \cup H$ such that 
-\begin{itemize}
-\item for every \emph{\textbf{task}} $T \in R$, either $T \subseteq O$ or $T \subseteq H$, and
-\item for every state $q \in Q$ and task $T \in R$, at most one action $a \in T$ is enabled in $q$.
-\end{itemize}
-\end{definition}
-
-We think of a task as an action parametrized by a message, for instance $\mathsf{Report} \coloneqq \{\mathsf{report(0)},\mathsf{report(1)}, \ldots\}$. The grouping of the actions into a task also serves to hide any particular message that an action carries, as that information is not available when viewing or constructing a protocol (formally, a \emph{schedule}, as defined later). Input actions are not included in the tasks; this is because whenever we reason about a TPIOA $\mathcal{P}$ that is not closed, we quantify over all possible \emph{environments} $\E$ that provide the inputs $\mathcal{P}$ requires, and study the behavior of the \emph{closed} TPIOA $\mathcal{P} \parallel \E$. \medskip
-
-{\small \em Difference from section 3.1 of the paper: The paper allows a single task to contain a mix of output and hidden actions. It is unclear what purpose this serves. Also, the second condition in the definition of a task-PIOA is dropped in the last section of the paper but no examples are given there.}
-
-\begin{definition}
-Two TPIOAs $(\mathcal{P}_i,R_i)$, $i \in \{1,2\}$ are \emph{\textbf{compatible}} if $\mathcal{P}_1$ and $\mathcal{P}_2$ are compatible as PIOAs. In this case, the \textbf{\emph{composition}} $(\mathcal{P}_1,R_1) \parallel (\mathcal{P}_2,R_2)$ is the TPIOA $(\mathcal{P}_1 \parallel \mathcal{P}_2, R_1 \cup R_2)$.
-\end{definition}
-
-\begin{definition}
-Fix a TPIOA $\big((Q,\bar{q},I,O,H,D),R\big)$ and a task $T \in R$. The \textbf{\emph{hiding}} of the task $T$ is the new TPIOA $\big((Q,\bar{q},I,O \, \backslash \, T, H \cup T, D),R\big)$.
-\end{definition}
-
 
 
 A \emph{\textbf{schedule}} for a task-PIOA $(\mathcal{P},R)$ is a finite (possibly empty) sequence of tasks in $R$. A schedule $\gamma$ induces a distribution on the set of states of $\mathcal{P}$, representing the probability that we end up at state $q$ after executing the tasks in the order specified by $\gamma$. But we also want to keep track of the output actions performed during an execution. Thus, a schedule $\gamma$ induces a distribution on the set of finite sequences of output actions of $\mathcal{P}$. So what we have is a distribution on the set $\mathbb{T}_\mathcal{\mathcal{P}} \coloneqq Q \times O^*$, consisting of pairs of states and finite sequences of output actions. Let $\state : Q \times O^* \to O^*$ denote the first projection, $\trace : Q \times O^* \to O^*$ denote the second projection and $\pair_\tau : Q \to Q \times O^*$ for $\tau \in Q^*$ be the function which pairs up a state with the given sequence $\tau$. Given a task $T \in R$, we define the induced function $\apply_\mathcal{P}(T) : \M(\mathbb{T}_\mathcal{P}) \to \M(\mathbb{T}_\mathcal{P})$ on measures as follows:
