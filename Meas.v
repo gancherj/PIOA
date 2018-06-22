@@ -10,6 +10,7 @@ Require Import Coq.Classes.Equivalence.
 Require Import Relation_Definitions.
 Require Import Program.
 Require Import FCF.StdNat.
+Require Import Eqdep_dec.
 Open Scope rat_scope.
 
 
@@ -579,6 +580,19 @@ Lemma measBind_app {A B : Set} (d1 d2 : Meas A) (c : A -> Meas B) :
   unfold measEquiv; intros; crush.
 Qed.
 
+Lemma measEquiv_cons_cong {A : Set} {a b : (Rat * A)} (d1 d2 : Meas A) :
+  (fst a == fst b /\ snd a = snd b) ->
+  d1 ~~ d2 ->
+  (a :: d1) ~~ (b :: d2).
+  unfold measEquiv; unfold integ; intros.
+  repeat rewrite Fold.sumList_cons.
+  destruct H.
+  rewrite H.
+  rewrite H1.
+  rewrite H0.
+  crush.
+Qed.
+
 Lemma measEquiv_app_cong {A : Set} {d1 d2 d3 d4 : Meas A} :
   d1 ~~ d2 ->
   d3 ~~ d4 ->
@@ -649,15 +663,6 @@ Qed.
 
 (* TODO: tactics for simplifying distributions. *)
 
-Definition unif {A : Set} (xs : list A) `{StdNat.nz (length xs)} : Meas A :=
-  map (fun x => (1 / (length xs), x)) xs.
-
-
-Definition unifNats (n : nat) `{StdNat.nz n} : Meas (nat).
-  eapply (@unif _ (allNatsLt n)).
-  rewrite allNatsLt_length.
-  auto.
-Defined.
 
 Lemma measEquiv_zero_cons {A : Set} (d : Meas A) (a : Rat * A) :
   fst a == 0 -> d ~~ (a :: d).
@@ -868,36 +873,8 @@ Lemma measBind_zip {A B : Set} {d d' : Meas A} {c c' : A -> Meas B} :
   symmetry; apply (H3 f).
 Qed.
 
-Lemma unif_cons {A : Set} (l : list A) (a : A) `{H : StdNat.nz (length l)} p :
-  In p (unif (a :: l)) ->
-  (fst p = 1 / length (a :: l)) /\
-  ((snd p = a) \/ In (snd p) (measSupport (unif l))).
-  unfold unif.
-  simpl.
-  intros.
-  destruct H0.
-  split.
-  crush.
-  left; crush.
-  destruct p; apply in_map_iff in H0.
-  destruct H0.
-  destruct H0.
-  subst; simpl.
-  split.
-  crush.
-  right.
-  unfold measSupport.
-  unfold measRed.
-  apply in_map_iff.
-  exists ((1 / length l), a0).
-  crush.
-  apply filter_In.
-  crush.
-  apply in_map_iff.
-  exists a0.
-  crush.
-Qed.
 
+(*
 Global Instance nz_length_app {A} (l1 l2 : list A) {H1 : nz (length l1)} {H2 : nz (length l2)} : nz (length (l1 ++ l2)).
 destruct H1.
 destruct H2.
@@ -906,45 +883,148 @@ rewrite app_length.
 crush.
 Defined.
 
-Lemma unif_app {A : Set} (l1 l2 : list A) `{H1 : StdNat.nz (length l1)} `{H2 : StdNat.nz (length l2)} :
-  forall p, In p (unif (l1 ++ l2)) ->
-            (fst p = 1 / length (l1 ++ l2)) /\
-            (In (snd p) (measSupport (unif l1)) \/ In (snd p) (measSupport (unif l2))).
-  intros.
-  unfold unif in H.
-  apply in_map_iff in H; destruct H.
+Global Instance nz_allnatslt_length (n : nat) {H1 : nz n} : nz (length (allNatsLt n)).
+destruct n.
+destruct H1; crush.
+simpl.
+rewrite app_length.
+crush.
+constructor.
+crush.
+Defined.
+*)
+
+(* uniformity *)
+
+
+(* Proof irrelevent inverses *)
+
+Definition natpos (n : nat) :=
+  match n with | 0 => false | _ => true end = true.
+
+
+Global Instance natpos_nz (n : nat) {H : natpos n} : nz n.
+destruct n; crush.
+Defined.
+
+Definition natInverse (n : nat) {H : natpos n} : Rat.
+  apply RatIntro.
+  apply 1%nat.
+  eapply exist.
+  apply natpos_nz.
+  apply H.
+Defined.
+
+Notation "1 // n" := (match n with | 0 => 0 | S m => @natInverse (S m) eq_refl end) (at level 60).  
+
+Lemma natpos_irrel {n : nat} (H1 H2 : natpos n) : H1 = H2.
+  destruct n; crush.
+  unfold natpos in *.
+  apply eq_proofs_unicity.
+  decide equality.
+Qed.
+
+Definition unif {A : Set} (xs : list A) : Meas A :=
+  match (length xs) with
+  | 0 => nil
+  | S n => 
+    map (fun x => (1 // (S n), x)) xs
+        end.
+
+Definition unifNats (n : nat) : Meas (nat) := unif (allNatsLt n).
+
+
+Lemma unif_cons {A : Set} (l1 : list A) (a : A) :
+  unif (a :: l1) = ((1 // S (length l1), a) :: (map (fun p => (1 // (S (length l1)), snd p)) (unif l1))).
+  unfold unif; simpl.
+  destruct l1.
   crush.
-  apply in_app_iff in H3; destruct H3.
-  left.
-  unfold measSupport, unif, measRed.
-  apply in_map_iff.
-  eexists (_, x).
+  simpl.
+  rewrite map_map.
+  simpl.
   crush.
-  apply filter_In.
-  split.
-  apply in_map_iff.
-  exists x.
+Qed.
+
+
+Lemma unif_app {A : Set} (l1 l2 : list A) :
+  unif (l1 ++ l2) = map (fun p => (1 // length (l1 ++ l2), snd p)) (unif l1 ++ unif l2).
+  unfold unif.
+  destruct l1; destruct l2; simpl.
+  crush.
+  rewrite map_map; crush.
+  repeat rewrite app_nil_r; simpl.
+  rewrite map_map; simpl.
+  crush.
+  repeat rewrite map_app.
+  repeat rewrite map_map.
+  simpl.
+  repeat rewrite map_map.
+  simpl.
+  crush.
+Qed.
+
+Lemma unifNats_in (n : nat) : forall p,
+    In p (measSupport (unifNats n)) -> p < n.
+  induction n.
   crush.
   crush.
-  right.
-  unfold measSupport, unif, measRed.
-  apply in_map_iff.
-  eexists (_, x).
+  unfold unifNats in H.
+  simpl in H.
+  rewrite unif_app in H.
+  unfold measSupport in H.
+  unfold measRed in H.
+  rewrite map_app in H; crush.
+  rewrite filter_app in H.
+  simpl in H.
+  rewrite map_app in H.
+  apply in_app_iff in H; crush.
+  assert (In p (measSupport (unifNats n))).
+  apply in_map_iff in H0; crush.
+  apply filter_In in H1; crush.
+  apply in_map_iff in H; crush.
+  apply in_map_iff; exists x0.
   crush.
-  apply filter_In.
-  split.
-  apply in_map_iff.
-  exists x.
+  unfold measRed.
+  apply filter_In; crush.
+  clear H0.
+  clear IHn.
+  destruct n.
+  crush.
+  simpl in H2.
+  rewrite unif_app in H2.
+  rewrite map_app in H2; simpl in *.
+  destruct x0; apply in_app_iff in H2; crush.
+  apply in_map_iff in H; crush.
+  unfold natInverse.
+  rewrite app_length.
+  simpl.
+  remember (length (allNatsLt n) + 1)%nat.
+  destruct n0.
+  destruct (length (allNatsLt n)); crush.
+  crush.
+  unfold natInverse; rewrite app_length.
+  simpl.
+  remember (length (allNatsLt n0) + 1)%nat.
+  destruct n.
+  destruct (length (allNatsLt n0)); crush.
+  destruct (length (allNatsLt n0) + 1)%nat; crush.
+  apply Nat.lt_lt_succ_r.
+  crush.
+  apply in_map_iff in H0; crush.
+  destruct x; simpl.
+  remember (negb (beqRat (1 // length (allNatsLt n ++ [n])) 0)).
+  destruct b.
+  simpl in H1.
   crush.
   crush.
 Qed.
+
 
   Ltac dsimp := repeat (simpl; 
     match goal with
     | [ |- context[_ <- ret _; _] ] => rewrite bindRet
     | [ |- context[_ <- (_ <- _; _); _] ] => rewrite bindAssoc
     | [ |- context[_ <- _; ret _] ] => rewrite bindRet_r
-    | [ |- (_ <- ?H; _) ~~ (_ <- ?H; _) ] => apply measBind_cong_r; intros
     | [ |- ?H ~~ ?H ] => apply measEquiv_refl
                                             end; simpl).
 
