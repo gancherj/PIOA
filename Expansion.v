@@ -11,7 +11,8 @@ Require Import Ring.
 
 (* expansion R is the smallest relation that contains R and is closed under convex combinations and is a congruence with respect to ~~. *)
 
-Record isExpansion {A B : Set} (R : Meas A -> Meas B -> Prop) (d1 : Meas A) (d2 : Meas B)
+
+Record isExpansion {A B : Type} (R : Meas A -> Meas B -> Prop) (d1 : Meas A) (d2 : Meas B)
        (mu : Meas (Meas A * Meas B)) : Prop :=
   {
     leftEquiv : d1 ~~ (p <- mu; fst p);
@@ -19,10 +20,10 @@ Record isExpansion {A B : Set} (R : Meas A -> Meas B -> Prop) (d1 : Meas A) (d2 
     RValid : forall p, In p (measSupport mu) -> R (fst p) (snd p)
                                                   }.
 
-Definition expansion {A B : Set} (R : Meas A -> Meas B -> Prop) d1 d2 :=
+Definition expansion {A B : Type} (R : Meas A -> Meas B -> Prop) d1 d2 :=
   exists mu, isExpansion R d1 d2 mu.
 
-Lemma expansion_cong {A B : Set} (R : Meas A -> Meas B -> Prop) d1 d2 d3 d4 :
+Lemma expansion_cong {A B : Type} (R : Meas A -> Meas B -> Prop) d1 d2 d3 d4 :
   d1 ~~ d3 ->
   d2 ~~ d4 ->
   expansion R d1 d2 ->
@@ -37,7 +38,7 @@ Lemma expansion_cong {A B : Set} (R : Meas A -> Meas B -> Prop) d1 d2 d3 d4 :
 Qed.
 
 
-Lemma expansion_bind {A B C : Set} (R : Meas B -> Meas C -> Prop) (mu : Meas A) (f : A -> Meas B) (g : A -> Meas C) :
+Lemma expansion_bind {A B C : Type} (R : Meas B -> Meas C -> Prop) (mu : Meas A) (f : A -> Meas B) (g : A -> Meas C) :
   (forall p, In p (measSupport mu) -> expansion R (f p) (g p)) ->
   expansion R (p <- mu; f p) (p <- mu; g p).
   intros.
@@ -76,53 +77,45 @@ Lemma expansion_bind {A B C : Set} (R : Meas B -> Meas C -> Prop) (mu : Meas A) 
   crush.
   
   destruct (H (snd a) H0) as [muA muAExp]; clear H.
-  exists (IHm ++ (measScale (fst a) muA)).
+
+  exists ((measScale (fst a) muA) ++ IHm).
   
   destruct IHmExp, muAExp; constructor.
   rewrite measBind_cons; rewrite measBind_app; eapply measEquiv_app_cong.
+  unfold measEquiv; intros; 
+  repeat rewrite integ_measScale.
+  rewrite (leftEquiv1 f0).
+  repeat rewrite integ_measBind.
+  repeat rewrite integ_measScale.
   crush.
-
-  rewrite <- measScale_bind_l; symmetry; symmetry in leftEquiv1; rewrite (measScale_cong _ _ _ leftEquiv1); unfold measEquiv, integ, measScale, measBind, measJoin, measSum; intros;
-  repeat rewrite sumList_concat;
-  repeat rewrite Fold.sumList_map;
-  simpl;
-  rewrite Fold.sumList_cons; rewrite sumList_nil.
-  unfold measScale;
-  rewrite Fold.sumList_map;
-  rewrite <- ratAdd_0_r;
-  apply Fold.sumList_body_eq; intros.
-  simpl; ring.
-
-  rewrite measBind_cons; rewrite measBind_app; eapply measEquiv_app_cong.
   crush.
-
-  rewrite <- measScale_bind_l; symmetry; symmetry in rightEquiv1; rewrite (measScale_cong _ _ _ rightEquiv1); unfold measEquiv, integ, measScale, measBind, measJoin, measSum; intros;
-  repeat rewrite sumList_concat;
-  repeat rewrite Fold.sumList_map;
-  simpl;
-  rewrite Fold.sumList_cons; rewrite sumList_nil.
-  unfold measScale;
-  rewrite Fold.sumList_map;
-  rewrite <- ratAdd_0_r;
-  apply Fold.sumList_body_eq; intros.
-  simpl; ring.
-
+  rewrite measBind_cons.
+  rewrite measBind_app.
+  apply measEquiv_app_cong.
+  rewrite <- measScale_bind_l.
+  apply measScale_cong.
+  crush.
+  crush.
   intros.
   rewrite measSupport_app in H.
-
-  apply in_app_iff in H; crush.
-  cut (In p (measSupport muA)).
+  apply in_app_iff in H; destruct H.
+  erewrite <- measSupport_measScale in H.
   crush.
-
-  remember (beqRat (fst a) 0) as b; destruct b.
-  crush.
-  assert (~ (fst a == 0)).
-  crush.
-  rewrite <- (measSupport_measScale _ _ H) in H1.
+  intro.
+  rewrite H1 in Heqb; crush.
   crush.
 Qed.
 
-Lemma joinDistrib_expansion_compat {A B : Set} (R : Meas A -> Meas B -> Prop) mu1 mu2 mu f g :
+
+Definition fmap {A B} (d : Meas A) (f : A -> B) : Meas B :=
+  (x <- d; ret (f x)).
+
+Definition measCong {A B} (f : Meas A -> Meas B) := forall d1 d2, d1 ~~ d2 -> f d1 ~~ f d2.
+
+Definition joinDistrib {A B} (f : Meas A -> Meas B) := forall mu, f (d <- mu; d) ~~ (d <- mu; f d).
+
+
+Lemma joinDistrib_expansion_compat {A B : Type} (R : Meas A -> Meas B -> Prop) mu1 mu2 mu f g :
   measCong f ->
   joinDistrib f ->
   measCong g ->
