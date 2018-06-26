@@ -7,7 +7,7 @@ Require Import Ring.
 Require Import List.
 Require Import CpdtTactics.
 Require Import Ott.ott_list.
-From mathcomp Require Import ssreflect ssrfun ssrbool finset.
+From mathcomp Require Import ssreflect ssrfun ssrbool finset eqtype.
 From extructures Require Import ord fset.
 
 Record prePIOA {A : Type} :=
@@ -176,7 +176,7 @@ Lemma expansion_trace : forall {Q Q' act} (R : Meas (Q * list act) -> Meas (Q' *
 Qed.
 
 
-Lemma simSound {A} (P1 P2 : @PIOA A) R `{H: inputClosed P1} `{H2 : inputClosed P2} {Heqact : forall x y : A, {x = y} + {x <> y}} {HeqQ1 : forall x y : pQ P1, {x = y} + {x <> y}} :
+Lemma simSound {A} (P1 P2 : @PIOA A) R `{H: inputClosed P1} `{H2 : inputClosed P2} {HeqQ1 : forall x y : pQ P1, {x = y} + {x <> y}} :
   SimR P1 P2 R -> @refinement _ P1 P2 H H2.
   intro.
   destruct H0.
@@ -236,7 +236,10 @@ Lemma simSound {A} (P1 P2 : @PIOA A) R `{H: inputClosed P1} `{H2 : inputClosed P
   eapply measSupport_measEquiv.
 
   decide equality.
-  apply list_eq_dec; crush.
+  apply list_eq_dec.
+  intros.
+  pose proof (@eqP _ x3 y0).
+  destruct H5; [left | right] ; crush.
   symmetry; apply leftEquiv.
   crush.
 
