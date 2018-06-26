@@ -160,15 +160,40 @@ Lemma integ_measBind {A B : Type} (d : Meas A) (df : A -> Meas B) f :
 Qed.
 
 Lemma integ_cong_l {A : Type} (d : Meas A) (f1 f2 : A -> Rat) :
-  (forall x, f1 x == f2 x) ->
+  (forall x, In x (measSupport d) -> f1 x == f2 x) ->
   integ d f1 == integ d f2.
   unfold integ.
   crush.
   induction d; crush.
+  destruct (eq_Rat_dec (fst a) 0).
+
+  repeat rewrite sumList_cons.
+  rewrite e.
+  rewrite IHd.
+  ring.
+  intros.
+  assert (In x (measSupport (a :: d))).
+  unfold measSupport in *.
+  simpl.
+  rewrite e.
+  crush.
+  apply H; crush.
   repeat rewrite sumList_cons.
   rewrite IHd.
   rewrite H.
   ring.
+  unfold measSupport.
+  simpl.
+  apply (Bool.not_true_is_false _) in n.
+  rewrite n.
+  crush.
+  intros.
+  apply H.
+  unfold measSupport.
+  apply (Bool.not_true_is_false _) in n.
+  simpl.
+  rewrite n.
+  crush.
 Qed.
 
 
@@ -255,11 +280,13 @@ Lemma measBind_cong_l {A B : Type} {d d' : Meas A} {c : A -> Meas B} :
 Qed.
 
 Lemma measBind_cong_r {A B : Type} {d : Meas A} {c1 c2 : A -> Meas B} :
-  (forall x, c1 x ~~ c2 x) ->
+  (forall x, In x (measSupport d) -> c1 x ~~ c2 x) ->
   measBind d c1 ~~ measBind d c2.
   intros.
   unfold measEquiv; intros; repeat rewrite integ_measBind.
   apply integ_cong_l.
+  crush.
+  apply H.
   crush.
 Qed.
 
@@ -675,6 +702,111 @@ Lemma unifNats_in (n : nat) : forall p,
   crush.
 Qed.
 
+Lemma in_concat_iff {A} : forall (x : A) (ls : list (list A)),
+      In x (concat ls) <-> exists l, In l ls /\ In x l.
+    intros.
+    split.
+    induction ls.
+    intros.
+    inversion H.
+    intros.
+    simpl in H.
+    apply in_app_or in H.
+    destruct H.
+    exists a.
+    crush.
+    destruct (IHls H).
+    exists x0.
+    crush.
+
+    intros.
+    destruct H.
+    induction ls.
+    crush.
+    simpl.
+    destruct H.
+    apply in_app_iff.
+    crush.
+  Qed.
+
+Lemma measBind_in {A B} (d : Meas A) (d' : A -> Meas B) :
+  forall y, In y (measSupport (measBind d d')) <-> exists x,
+      In x (measSupport d) /\ In y (measSupport (d' x)).
+  split; intros.
+  unfold measSupport, measBind, measRed, measJoin in H.
+  rewrite map_map in H; simpl in H.
+  unfold measSum in H.
+  apply in_map_iff in H; crush.
+  apply filter_In in H1; crush.
+
+  apply in_concat_iff in H; crush.
+  apply in_map_iff in H1; crush.
+  unfold measScale in H2.
+  apply in_map_iff in H2; crush.
+
+  destruct (eq_Rat_dec (fst x1) 0).
+  assert ((fst x1) * (fst x0) == 0).
+  rewrite e; ring.
+  rewrite H in H0.
+  crush.
+  destruct (eq_Rat_dec (fst x0) 0).
+  assert (fst x1 * fst x0 == 0). rewrite e; ring.
+  rewrite H in H0; crush.
+
+
+  exists (snd x1).
+  split.
+  unfold measSupport.
+  unfold measRed.
+  apply in_map_iff.
+  exists x1.
+  crush.
+  apply filter_In.
+  crush.
+  unfold measSupport.
+  unfold measRed.
+  apply in_map_iff; exists x0.
+  crush.
+  apply filter_In.
+  crush.
+
+  destruct H.
+  unfold measBind, measSupport.
+  crush.
+  unfold measSupport in *.
+  apply in_map_iff in H0; crush.
+  apply in_map_iff in H1; crush.
+  unfold measRed in *.
+  apply filter_In in H2; crush.
+  apply filter_In in H1; crush.
+  apply in_map_iff.
+
+  exists (fst x0 * fst x, snd x).
+  crush.
+  apply filter_In.
+  crush.
+  unfold measJoin.
+  unfold measSum.
+  rewrite map_map.
+  unfold measScale.
+  simpl.
+  apply in_concat_iff.
+  exists (measScale (fst x0) (d' (snd x0))).
+  crush.
+  apply in_map_iff.
+  exists x0.
+  crush.
+  apply in_map_iff.
+  exists x.
+  crush.
+
+  rewrite Bool.negb_true_iff in *.
+  assert (forall n, n = false <-> n <> true).
+  destruct n; crush.
+  apply H1.
+  apply ratMult_nz.
+  crush.
+Qed.
 
   Ltac dsimp := repeat (simpl; 
     match goal with
