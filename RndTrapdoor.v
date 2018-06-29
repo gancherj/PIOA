@@ -168,6 +168,7 @@ Qed.
 
 Definition RndPIOA : @PIOA [finType of Action].
 econstructor.
+instantiate (5 := rndpre).
 apply rnd_taskStructure.
 instantiate (1 := RndI).
 rewrite /trivIset /cover.
@@ -251,8 +252,8 @@ Qed.
 Definition TrapQ := (unit + 'I_(S n) + 'I_(S n))%type. 
 
 
-Context (f : 'I_(S n) -> 'I_(S n)).
-Hypothesis (H : bijective f).
+Context (f g : 'I_(S n) -> 'I_(S n)).
+Hypothesis (H : cancel f g /\ cancel g f).
 
 Definition TrapTr (x : TrapQ) (a : Action) : option (Meas TrapQ) :=
   match x, a with
@@ -270,6 +271,52 @@ Definition TrapI : {set Action} := set0.
 Definition TrapO : {set Action} := Output @: 'I_(S n).
 
 
+Lemma TrapOneqTrapH : TrapO != TrapH.
+  rewrite /TrapO /TrapH; apply/eqP/setP; move=> H2; move:(H2 Choose); rewrite !in_set //=.
+  move/imsetP.
+  elim; move=> y; done.
+Qed.
+
+Lemma TrapLocal_neq0 : TrapH != set0 /\ TrapO != set0.
+  split.
+  apply/set0Pn.
+  exists Choose.
+  apply in_set2.
+  apply/set0Pn; exists (Output ord0); apply /imsetP; exists ord0; done.
+Qed.
+
+Lemma TrapLocal_disjoint : TrapH :&: TrapO = set0.
+  apply/setP; move=> x; rewrite in_setI /TrapH /TrapO !in_set.
+  elim x; simpl.
+  apply/imsetP; elim; done.
+  done.
+  apply/imsetP; elim; done.
+Qed.
+
+Lemma set1_inter_neq {A : finType} (x y : A) : x != y -> [set x] :&: [set y] = set0.
+  intro;apply/setP.
+  move=>a.
+  rewrite in_setI !in_set.
+  case (eqVneq a x).
+  intro; subst.
+  rewrite eq_refl.
+  simpl.
+  apply negbTE; done.
+  case (eqVneq a y).
+  intro; subst.
+  rewrite eq_refl.
+  rewrite andbT.
+  apply negbTE.
+  intros.
+  have: (a == x) && (a == y) = ~~ ((a != x) || (a != y)).
+  rewrite negb_or !negbK; done.
+  intro; rewrite x0.
+  rewrite i.
+  rewrite i0.
+  crush.
+Qed.
+
+
 Lemma trap_taskStructure : TaskStructure trappre TrapO TrapH (set1 RndO) [set (set1 Choose); (set1 Compute)].
 constructor.
 - apply partition_set1; apply/eqP /set0Pn; exists (Output ord0); rewrite /TrapO; by apply mem_imset.
@@ -278,13 +325,10 @@ constructor.
   - apply /andP; split.
     - rewrite /trivIset /cover !bigcup_setU !big_set1 !big_setU1 //=.
       rewrite !big_set1 cardsU. 
-      have: [set Choose] :&: [set Compute] == set0.
-      - apply/set0Pn; elim=> x; move/setIP; rewrite !in_set; apply /andP /eqP; elim x; done. 
-      - move=> H0; rewrite (eqP H0); rewrite cards0 subn0; done.
+      rewrite set1_inter_neq; last first. done.
+      rewrite cards0 subn0; done.
       - rewrite in_set; apply/eqP/setP => x; move: (x Choose); rewrite !in_set; done.
-      - rewrite in_set negb_or !in_set; apply/andP; split; rewrite eq_sym; apply/set0Pn.
-        - by exists Choose; rewrite in_set.
-        - by exists Compute; rewrite in_set.
+      - rewrite in_set negb_or !in_set; apply/andP. split; rewrite eq_sym; rewrite -card_gt0 cards1; done.
 - move=>T; rewrite !in_setU => HT; case (or3P HT); rewrite in_set => Teq; rewrite (eqP Teq) /actionDeterm.
   - rewrite /RndO; elim => a. rewrite cards_eq0.
   - apply/orP; left; apply /eqP /setP => x; rewrite !in_set; apply negbTE; elim x.
@@ -320,107 +364,55 @@ econstructor.
 apply trap_taskStructure.
 instantiate (1 := TrapI).
 rewrite /trivIset /cover !big_setU1 //= /TrapI. rewrite !big_set0 setU0 addn0 set0U cards0 add0n !cardsU.
-have H0 : TrapO :&: TrapH == set0.
-- rewrite /TrapO /TrapH; apply /set0Pn; elim => x; rewrite in_setI. elim x.
-  - rewrite !in_set andbT; move /imsetP; elim; done.
-  - intro; rewrite !in_set andbF; done.
-  - rewrite !in_set andbT; move /imsetP; elim; done.
-rewrite (eqP H0).
-have H1 : [set Choose] :&: [set Compute] == set0.
-- apply /set0Pn; elim => y; rewrite in_setI !in_set; elim y; done.
-rewrite (eqP H1).
-
-rewrite !cards0 !subn0; done.
-
+rewrite set1_inter_neq; last first. done.
+rewrite setIC TrapLocal_disjoint !cards0 !subn0; done.
 by rewrite in_set0.
 
 rewrite in_setU1 negb_or; apply /andP; split.
-- rewrite /TrapO /TrapH.
-  apply contraT. rewrite negbK. move /eqP; move /setP => Hin.
-  move : (Hin Choose); rewrite !in_set //=.
-  move /imsetP; elim; done.
-- by rewrite in_set0.
+apply /contraT; rewrite negbK; move=>Heq. 
+move/eqP/setP: Heq => Heqi; move: (Heqi Choose); rewrite /TrapO /TrapH !in_set //=.
+move/imsetP; elim; move=> x; done.
+by rewrite in_set0.
 
 rewrite !in_setU1 !negb_or.
-admit.
+apply /andP; split.
+rewrite eq_sym; apply /set0Pn; exists (Output ord0); apply /imsetP; exists ord0; done.
+apply/andP;split.
+rewrite eq_sym; apply /set0Pn; exists (Choose); rewrite !in_set; done.
 by rewrite in_set0.
-admit.
-admit.
+by rewrite in_set0.
+
+rewrite in_setU negb_or; apply/andP; rewrite in_set.
+split; [apply TrapOneqTrapH | by rewrite in_set0].
+rewrite  setU0 !in_set negb_or; apply /andP; split; rewrite eq_sym; elim (TrapLocal_neq0); done.
 
 move=> s x; rewrite /TrapI in_set0; done.
 
-move=> s x _.
-elim x.
-apply/setUP; right; apply/setUP; right; rewrite /TrapH !in_set; done.
-intro; apply/setUP; right; apply/setUP; left; rewrite /TrapO; apply /imsetP; exists o; done.
-apply/setUP; right; apply/setUP; right; rewrite /TrapH !in_set; done.
-
-Admitted.
+intros; rewrite /TrapI /TrapO /TrapH set0U !in_setU !in_set; elim x.
+apply/orP; right; done.
+move=> o; apply/orP; left; apply /imsetP; exists o; done.
+apply/orP; right; done.
+Qed.
 
 
-
-Definition RTSimR (n : nat) : Meas (RndQ * list TRAct) -> Meas (TrapQ * list TRAct) -> Prop := fun d1 d2 =>
+Definition RTSimR : Meas (pQ RndPIOA * seq Action) -> Meas (TrapQ * seq Action) -> Prop := fun d1 d2 =>
 (exists t, (d1 ~~ ret (None, t)) /\ (d2 ~~ ret (inl (inl tt), t))) \/
 (exists x t, (d1 ~~ ret (Some x, t)) /\ (d2 ~~ ret (inr x, t))).
 
   
-Inductive TRSimR (n : nat) (d1 : Meas (TrapQ * list TRAct)) (d2 : Meas (RndQ * list TRAct)) : Prop := 
-| TRSimR_case1 : (exists t, (d1 ~~ (ret (inl (inl tt), t))) /\ (d2 ~~ (ret (None, t)))) -> TRSimR n d1 d2
-| TRSimR_case2 : (exists t x, (x < n) /\
-                              (d1 ~~ (ret (inl (inr (Nat.pred n - x)), t))) /\
-                              (d2 ~~ (ret (Some (x), t)))) -> TRSimR n d1 d2
-| TRSimR_case3 : (exists t x, (x < n) /\ (d1 ~~ (ret (inr x, t))) /\ (d2 ~~ (ret (Some x, t)))) -> TRSimR n d1 d2.
+Inductive TRSimR (d1 : Meas (TrapQ * seq Action)) (d2 : Meas (RndQ * seq Action)) : Prop := 
+| TRSimR_case1 : (exists t, (d1 ~~ (ret (inl (inl tt), t))) /\ (d2 ~~ (ret (None, t)))) -> TRSimR d1 d2
+| TRSimR_case2 : (exists t x, 
+                              (d1 ~~ (ret (inl (inr (g x)), t))) /\
+                              (d2 ~~ (ret (Some (x), t)))) -> TRSimR d1 d2
+| TRSimR_case3 : (exists t x, (d1 ~~ (ret (inr x, t))) /\ (d2 ~~ (ret (Some x, t)))) -> TRSimR d1 d2.
 
-Lemma unifNats_sub_equal_rev (n : nat) :
-  rev (unifNats n) = map (fun p => (fst p, Nat.sub (Nat.pred n) (snd p))) (unifNats n).
 
-  induction n.
-  crush.
-  simpl.
-  unfold unifNats.
-  simpl.
-  rewrite unif_app.
-  rewrite <- map_rev.
-  rewrite rev_app_distr.
-  fold (@unifNats n).
-  rewrite IHn.
-  simpl.
-  repeat rewrite map_map; simpl.
-  repeat rewrite map_app; simpl.
-  rewrite PeanoNat.Nat.sub_diag.
-  SearchAbout (Nat.pred _ - _).
-  generalize (1 // length (allNatsLt n ++ [n])); intros.
-  clear IHn.
-  assert ([(r,0%nat)] = map (fun x => (r, n - snd x)) ([(r, n)])).
-  simpl; rewrite PeanoNat.Nat.sub_diag; crush.
-  rewrite H.
-  rewrite <- map_app.
+Lemma unifNats_sub_equiv :
+  unifFin (S n) ~~ (x <- unifFin (S n); ret (g x)).
   admit.
 Admitted.
 
-Lemma unifNats_sub_equiv (n : nat) :
-  unifNats n ~~ (x <- unifNats n; ret ((Nat.pred n) - x)).
-  admit.
-Admitted.
-
-Lemma gt_irrel (n : nat) (H1 H2 : n > 0) : H1 = H2.
-  induction n.
-  inversion H1.
-  
-  dependent destruction H1; dependent destruction H2.
-  crush.
-  crush.
-  crush.
-  assert (H1 = H2).
-  apply IHn.
-  crush.
-Qed.
-
-Lemma nz_irrel (n : nat) (H1 H2 : StdNat.nz n) : H1 = H2.
-  destruct H1, H2.
-  rewrite (gt_irrel n agz agz0).
-  crush.
-Qed.
 
 
 (*
@@ -428,7 +420,16 @@ Lemma rat_red (r : Rat) :
   r == (match r with | RatIntro n (exist _ p _) => let g := Nat.gcd n p in RatIntro (Nat.div n g) (exist _ (Nat.div p g) _) end).
 *)
 
-Lemma RTSim (n : nat) `{H : StdNat.nz n} : SimR (Rnd n) (Trap n) (RTSimR n).
+Lemma RTSim : exists R, SimR (RndPIOA) (TrapPIOA) R.
+  unfold Trace.
+  simpl.
+  destruct RndPIOA.
+  unfold pQ.
+  simpl.
+  destruct pP.
+  simpl.
+
+  exists RTSimR.
   constructor.
   unfold RTSimR.
   left; exists nil; split; apply measEquiv_refl.
