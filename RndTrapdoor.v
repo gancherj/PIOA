@@ -9,6 +9,251 @@ Require Import Ring.
 Require Import FcfLems.
 Require Import FCF.Fold.
 Require Import Program.
+Require Fin.
+From mathcomp Require Import
+  ssreflect ssrfun ssrbool ssrnat eqtype seq choice fintype generic_quotient finset bigop.
+
+Set Implicit Arguments.
+Unset Strict Implicit.
+
+
+Definition unifFin (n : nat) : Meas ('I_n) :=
+  map (fun x => (1 // (S n), x)) (ord_enum n).
+
+
+Section TrapRandDef.
+  Context (n : nat).
+
+Inductive Action : Type :=
+  | Choose : Action 
+  | Output : 'I_(S n) -> Action
+  | Compute : Action .
+
+Definition sum_of_action (a : Action) :=
+  match a with
+  | Choose => inl tt
+  | Output x => inr (inl x)
+  | Compute => inr (inr tt)
+                   end.
+
+Definition action_of_sum t :=
+  match t with
+  | inl tt => Choose
+  | inr (inl x) => Output x
+  | inr (inr tt) => Compute
+                      end.
+
+Lemma action_cancel : cancel sum_of_action action_of_sum.
+  by case.
+Qed.
+
+Definition action_eqmix := CanEqMixin action_cancel.
+Canonical action_eqType := EqType Action action_eqmix.
+Definition action_choicemix := CanChoiceMixin action_cancel.
+Canonical action_choiceType := ChoiceType Action action_choicemix.
+Definition action_countmix := CanCountMixin action_cancel.
+Canonical action_countType := CountType Action action_countmix.
+Definition action_finmix := CanFinMixin action_cancel.
+Canonical action_finType := FinType Action action_finmix.
+
+
+Definition RndQ := option ('I_(S n)).
+
+
+Definition RndTr (x : RndQ) (a : Action) : option (Meas RndQ) :=
+  match x, a with
+  | None, Choose => Some (x <- unifFin (S n); ret (Some x))
+  | Some x, Output y => if x == y then Some (ret (Some x)) else None
+  | _, _ => None
+              end.
+
+Definition rndpre := mkPrePIOA [finType of Action] _ None RndTr.
+
+Print mkPIOA.
+
+Definition RndH := set1 Choose.
+Definition RndI : {set Action} := set0.
+SearchAbout (seq _ -> {set _}).
+Definition RndO : {set Action} := Output @: 'I_(S n).
+
+Lemma partition_set1 {A : finType} (s : {set A}) :
+  s <> set0 -> partition [set s] s.
+  unfold partition; intros; apply/andP; split.
+  unfold cover.
+  rewrite big_set1.
+  apply eq_refl.
+  apply/andP;split.
+  apply/trivIsetP.
+  move=> x y Hx Hy.
+  rewrite (set1P Hx).
+  rewrite (set1P Hy).
+  rewrite eq_refl; crush.
+
+  apply/negP.
+  move=> Hx.
+  rewrite (set1P Hx) in H.
+  crush.
+Qed.
+
+Lemma rnd_taskStructure : TaskStructure rndpre RndO RndH (set1 RndO) (set1 RndH).
+constructor.
+apply partition_set1.
+apply /eqP /set0Pn; exists (Output ord0); apply mem_imset; done.
+
+apply partition_set1.
+apply /eqP /set0Pn; exists (Choose); by rewrite in_set.
+
+intro.
+rewrite /actionDeterm.
+rewrite in_setU.
+move/orP; elim.
+rewrite in_set.
+move/eqP => H; subst.
+elim.
+
+intro; apply /orP; right.
+apply/cards1P; exists (Output a).
+apply /setP; move=> x.
+unfold RndO.
+repeat rewrite in_set.
+destruct x.
+rewrite andbF; done.
+elim: (eqVneq o a).
+intro; subst.
+rewrite /enabled /tr //= .
+rewrite !eq_refl andbT.
+apply mem_imset; done.
+
+rewrite /enabled /tr //= .
+intro H.
+rewrite eq_sym in H.
+rewrite (negbTE H) andbF; symmetry.
+apply negbTE.
+apply contraT; intros.
+apply negbNE in H0.
+have H2 := (eqP H0).
+injection H2; intro; subst.
+rewrite eq_refl in H; done.
+rewrite /enabled /tr andbF; done.
+
+
+apply /orP; left.
+rewrite cards_eq0.
+apply /eqP /setP; move=> x; rewrite in_set0 in_set /enabled /tr.
+destruct x; rewrite //= /RndO ?andbT.
+apply negbTE.
+apply /negP.
+intro H; destruct (imsetP H); crush.
+rewrite andbF; done.
+rewrite andbF; done.
+
+rewrite in_set.
+move/eqP => H; subst.
+
+elim.
+intro; apply/orP; left.
+rewrite cards_eq0.
+unfold RndH.
+apply /set0Pn.
+elim.
+intros.
+rewrite in_set in H; move/andP: H; elim.
+rewrite in_set; move/eqP=> Heq; subst; rewrite /enabled/ tr; done.
+
+apply/orP; right.
+apply/cards1P; exists Choose.
+apply/setP; move=> x; rewrite !in_set /enabled /tr; destruct x; done.
+Qed.
+
+
+Definition RndPIOA : @PIOA [finType of Action].
+econstructor.
+apply rnd_taskStructure.
+instantiate (1 := RndI).
+rewrite /trivIset /cover.
+rewrite /RndI /RndO /RndH.
+repeat rewrite bigcup_setU.
+repeat rewrite big_setU1 //=.
+repeat rewrite big_set0.
+repeat rewrite big_set1.
+rewrite set0U.
+rewrite cards0.
+rewrite setU0.
+rewrite add0n.
+rewrite addn0.
+rewrite cardsU.
+have : (Output @: 'I_(S n)) :&: [set Choose] = set0.
+apply /setP.
+move=> x.
+apply /setIP.
+rewrite in_set0.
+apply /andP.
+rewrite negb_and.
+apply /orP.
+destruct x.
+left.
+apply /negP.
+move=> H.
+elim (imsetP H).
+done.
+right; rewrite in_set; done.
+right; rewrite in_set; done.
+
+intros.
+rewrite x cards0 subn0; done.
+rewrite in_set0; done.
+rewrite setU0.
+rewrite in_set.
+apply /negP.
+rewrite eq_sym.
+intro H; move/eqP: H.
+apply /setP.
+move=> H.
+move: (H Choose).
+repeat rewrite in_set.
+intro.
+symmetry in H0.
+rewrite eq_refl in H0.
+move/imsetP: H0.
+    by elim.
+
+
+repeat rewrite in_set.
+repeat rewrite negb_or.
+apply /andP; split.
+rewrite eq_sym; apply /set0Pn; exists (Output ord0).
+apply /imsetP; exists ord0; done.
+apply /andP; split.
+rewrite eq_sym.
+apply /set0Pn; exists Choose.
+    by rewrite in_set.
+    by done.
+
+rewrite /RndI.
+intros.
+rewrite in_set0 in H.
+done.
+
+intros.
+destruct x.
+apply /setUP; right.
+apply /setUP; right.
+unfold RndH.
+by rewrite in_set.
+apply /setUP; right.
+apply /setUP; left.
+rewrite /RndO.
+apply /imsetP; exists o; by done.
+destruct s; rewrite /tr in H; simpl in H; done.
+Qed.
+
+
+
+
+
+
+
+
 
 
 Inductive TRAct :=
@@ -18,7 +263,6 @@ Inductive RndTask :=
 | RndChoose : RndTask
 | RndOutput : RndTask.
 
-Definition RndQ := option nat.
 
 Definition RndtrT (n : nat) `{H : StdNat.nz n} : RndQ -> RndTask -> option (Meas (RndQ * option TRAct)) :=
   fun s t =>

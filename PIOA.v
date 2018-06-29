@@ -7,7 +7,7 @@ Require Import Ring.
 Require Import List.
 Require Import CpdtTactics.
 Require Import Ott.ott_list.
-From mathcomp Require Import ssreflect ssrfun ssrbool finset eqtype fintype choice seq.
+From mathcomp Require Import ssreflect ssrfun ssrbool ssrnat finset eqtype fintype choice seq.
 
 Record prePIOA {Act : finType} :=
   mkPrePIOA {
@@ -16,8 +16,14 @@ Record prePIOA {Act : finType} :=
       tr : pQ -> Act -> option (Meas pQ)
                            }.
 
+Definition enabled {Act : finType} (P : @prePIOA Act) (s : pQ P) :=
+  fun a =>
+    match (tr P s a) with | Some _ => true | None => false end.
+
+
+
 Definition actionDeterm {Act : finType} (P : @prePIOA Act) (T : {set Act}) :=
-  forall s x y, x \in T -> tr P s x <> None -> y \in T -> tr P s y <> None -> x = y.
+  forall s, (#|[set x in T | enabled P s x]| == 0%nat) || (#|[set x in T | enabled P s x]| == 1%nat).
 
 Record TaskStructure {Act : finType} (P : @prePIOA Act) (O H : {set Act} ) (TO TH : {set {set Act}}) :=
   {
@@ -35,15 +41,12 @@ mkPIOA {
   pTO : {set {set Act}};
   pTH : {set {set Act}};
   TS :> @TaskStructure Act pP pO pH pTO pTH;
-  _ : trivIset ([set pI; pO; pH]);
+  _ : trivIset ((pI |: (pO |: (pH |: set0))));
   inputEnabled : forall s x, x \in pI -> tr pP s x <> None;
   actSetValid : forall s x, tr pP s x <> None -> x \in (pI :|: (pO :|: pH))
   }.
 
-Definition Task {Act : finType} (P : @PIOA Act) := {set Act}.
-Definition enabled {Act : finType} (P : @PIOA Act) (s : pQ P) :=
-  fun a =>
-    match (tr P s a) with | Some _ => true | None => false end.
+Definition Task {Act : finType} (P : @PIOA Act) := {x : {set Act} | x \in (pTO P) :|: (pTH P)}.
 
 Definition external {A} (P : @PIOA A) :=
   (pI P) :|: (pO P).
@@ -57,7 +60,7 @@ Definition startTr {A} (P : @PIOA A) : Meas (Trace P) :=
 Definition appTask {Act : finType} (P : @PIOA Act) (T : Task P) (mu : Meas (Trace P)) : Meas (Trace P) := 
   t <- mu;
   let (s, actions) := t in
-  match [pick x in T | enabled P s x] with
+  match [pick x in (sval T) | enabled P s x] with
   | Some a =>
     match (tr P s a) with
     | Some mu =>
