@@ -610,8 +610,7 @@ Defined.
 Inductive TrapSpec (ts : seq (Task TrapPIOA)) : Prop :=
 | TrapSpec1 : runPIOA _ ts (startTr _) ~~ startTr _ @ 0 -> TrapSpec ts
 | TrapSpec2 : runPIOA _ ts (startTr _) ~~ (runPIOA _ (TrapChoose :: nil) (startTr _)) @ 0 -> TrapSpec ts
-| TrapSpec3 : runPIOA _ ts (startTr _) ~~ (runPIOA _ (TrapChoose :: TrapCompute :: nil) (startTr _)) @ 0 -> TrapSpec ts
-| TrapSpec4 : (exists n, runPIOA _ ts (startTr _) ~~ (runPIOA _ (TrapChoose :: TrapCompute :: nseq n TrapOutput) (startTr _)) @ 0 ) -> TrapSpec ts.
+| TrapSpec3 : (exists n, runPIOA _ ts (startTr _) ~~ (runPIOA _ (TrapChoose :: TrapCompute :: nseq n TrapOutput) (startTr _)) @ 0 ) -> TrapSpec ts.
 
 Lemma trapChoose : runPIOA _ (TrapChoose :: nil) (startTr _) ~~
                    (x <- unifFin _; ret (inl (inr x), nil)) @ 0.
@@ -632,59 +631,50 @@ Lemma trapChoose : runPIOA _ (TrapChoose :: nil) (startTr _) ~~
   rewrite /enabled in_set eq_refl //=.
 Qed.
 
-Lemma trapChooseCompute : (runPIOA _ (TrapChoose :: TrapCompute :: nil) (startTr _)) ~~
-                   (x <- unifFin _; ret (inr (f x), nil)) @ 0.
-  simpl.
-  have He := trapChoose.
-  simpl in He.
-  rewrite (appTask_cong _ _ _ _ He).
-  rewrite /appTask; dsimp; apply measBind_cong_r; intros; dsimp.
-  case:pickP => y.
-  move/andP; rewrite in_set; elim; move/eqP; intros; subst.
-  dsimp.
-  rewrite /external //= /TrapI /TrapO set0U.
-  case:imsetP.
-  elim;done.
-  reflexivity.
-  move: (y (Compute n)).
-  move/negP; elim.
-  rewrite /enabled in_set eq_refl //=.
-  apply uniford_subdist.
-Qed.
 
 Lemma trapChooseComputeOutput : forall n, 
     (runPIOA _ (TrapChoose :: TrapCompute :: nseq n TrapOutput) (startTr _)) ~~
     (x <- unifFin _; ret (inr (f x), nseq n (Output (f x)))) @ 0.                                                                                
   intros; simpl.
-  have HC := trapChooseCompute.
-  rewrite (runPIOA_cong _ _ _ _ HC).
-  clear HC.
+  rewrite (runPIOA_cong _ _ _ _ (appTask_cong _ _ _ _ trapChoose)).
   induction n0.
-  simpl; reflexivity. 
-  rewrite nseq_rcons; rewrite runPIOA_rcons.
-  rewrite (appTask_cong _ _ _ _ IHn0).
+  simpl.
   rewrite /appTask; dsimp.
   apply measBind_cong_r; intros; dsimp.
   case: pickP => y.
-  move/andP; rewrite /RndO; elim.
-  move/imsetP; elim; intros; subst.
-  rewrite /enabled in H3.
-  simpl in H3.
-  case (eqVneq (f x) x0).
-  intro; subst.
-  rewrite eq_refl.
-  dsimp.
-  rewrite /external //= /TrapI /TrapO //= set0U.
+  move/andP; elim; rewrite in_set; move/eqP; intro; subst.
+  rewrite /external //= set0U.
   case: imsetP.
+  elim; congruence.
+  intros; dsimp; reflexivity.
+  move: (y (Compute n)).
+  move/negP; elim; apply/andP; split.
+  rewrite in_set //=.
+  rewrite /enabled //=.
+  apply uniford_subdist.
+  rewrite nseq_rcons.
+  rewrite runPIOA_rcons.
+  rewrite (appTask_cong _ _ _ _ IHn0).
+  rewrite /appTask; dsimp.
+  apply measBind_cong_r; intros.
+  dsimp.
+  case:pickP; intros.
+  move/andP: i => [i1 i2].
+  rewrite /RndO in i1.
+  move/imsetP: i1; elim; intros; subst.
+  case (eqVneq (f x) x1).
+  intro; subst; rewrite eq_refl; dsimp.
+  rewrite /external //= set0U.
+  case: imsetP; elim; intros.
+  injection H3; intros; subst.
   reflexivity.
-  elim.
-  eexists; done.
-  move=>Hn; rewrite (negbTE Hn) in H3.
-  done.
-  move: (y (Output (f x))); move/negP; elim.
-  apply/andP; split.
-  apply/imsetP; eexists; rewrite //=.
+  eexists; rewrite //=.
+  intro; rewrite /enabled //= in i2.
+  rewrite (negbTE i) in i2; done.
+  move: (e (Output (f x))). 
+  move/negP; elim; apply/andP.
   rewrite /enabled //= eq_refl //=.
+  split; [apply/imsetP; eexists; rewrite //= | done].
   apply uniford_subdist.
 Qed.
 
@@ -761,9 +751,9 @@ Lemma trapSpec : forall ts, TrapSpec ts.
   rewrite in_set; move/eqP; intro; subst.
   apply TrapSpec3.
   rewrite runPIOA_rcons.
-  rewrite (appTask_cong _ _ _ _ H0).
+  exists 0%nat. rewrite (appTask_cong _ _ _ _ H0).
   rewrite (appTask_cong _ _ _ _ trapChoose).
-  symmetry; rewrite trapChooseCompute; symmetry.
+  symmetry; rewrite trapChooseComputeOutput; symmetry.
   rewrite /appTask; dsimp.
   apply measBind_cong_r; intros; dsimp.
 
@@ -790,18 +780,18 @@ Lemma trapSpec : forall ts, TrapSpec ts.
   simpl.
   elim.
   rewrite in_set; move/eqP; intro; subst.
-
-  apply TrapSpec4.
-  exists 1%nat.
+  destruct H0.
+  apply TrapSpec3.
   rewrite runPIOA_rcons.
+  eexists.
   rewrite (appTask_cong _ _ _ _ H0).
-  rewrite (appTask_cong _ _ _ _ trapChooseCompute).
+  rewrite (appTask_cong _ _ _ _ (trapChooseComputeOutput _)).
   symmetry; rewrite trapChooseComputeOutput; symmetry.
   rewrite /appTask.
   dsimp.
   apply measBind_cong_r; intros; dsimp. case:pickP => y.
   move/andP; rewrite /RndO; elim; move/imsetP; elim; intros; subst.
-  have: f x == x0.
+  have: (f x0) == x1.
   rewrite /enabled in H4.
   simpl in H4.
   apply/contraT.
@@ -815,10 +805,12 @@ Lemma trapSpec : forall ts, TrapSpec ts.
   injection H5.
   intro; subst.
   rewrite (eqP He).
+  instantiate (1 := S x).
+  simpl.
   reflexivity.
   elim.
   eexists; rewrite //=.
-  move: (y (Output (f x))).
+  move: (y (Output (f x0))).
   move/negP.
   elim.
   apply/andP; split.
@@ -827,9 +819,11 @@ Lemma trapSpec : forall ts, TrapSpec ts.
   apply uniford_subdist.
   intro; apply TrapSpec3.
   rewrite runPIOA_rcons.
+  destruct H0.
+  exists x0.
   rewrite (appTask_cong _ _ _ _ H0).
-  rewrite (appTask_cong _ _ _ _ trapChooseCompute).
-  symmetry; rewrite trapChooseCompute; symmetry.
+  rewrite (appTask_cong _ _ _ _ (trapChooseComputeOutput _)).
+  symmetry; rewrite (trapChooseComputeOutput _); symmetry.
   rewrite /appTask.
   dsimp; apply measBind_cong_r; intros; dsimp.
   case:pickP => y.
@@ -838,55 +832,6 @@ Lemma trapSpec : forall ts, TrapSpec ts.
   elim;
   rewrite in_set; move/eqP; intro; subst; rewrite in_set; move/eqP; intro; subst.
 
-  done.
-  done.
-  reflexivity.
-  apply uniford_subdist.
-
-  destruct H0.
-  destruct x.
-  have Hi := i.
-  move/setUP: Hi; elim.
-  rewrite in_set.
-  move/eqP; intro; subst.
-  apply TrapSpec4.
-  exists (S x0).
-  rewrite runPIOA_rcons.
-  rewrite (appTask_cong _ _ _ _ H0).
-  rewrite (appTask_cong _ _ _ _ (trapChooseComputeOutput _)).
-  symmetry; rewrite trapChooseComputeOutput; symmetry.
-  rewrite /appTask.
-  dsimp; apply measBind_cong_r; intros; dsimp.
-  case:pickP => y.
-  move/andP; elim.
-  move/imsetP; elim; intros; subst.
-  have: f x = x1.
-  rewrite /enabled //= in H4.
-  apply/eqP/contraT.
-  intro Hq; rewrite (negbTE Hq) in H4; done.
-  intro; subst; rewrite eq_refl //=.
-  dsimp.
-  rewrite /external //= /TrapI /TrapO set0U; case: imsetP.
-  elim; intros; subst; reflexivity.
-  elim; eexists; done.
-  move: (y (Output (f x))).
-  move/negP; elim.
-  apply/andP; split.
-  apply/imsetP; eexists; rewrite //=.
-  rewrite /enabled //= eq_refl //=.
-  apply uniford_subdist.
-  intro; apply TrapSpec4; exists x0.
-  symmetry; rewrite trapChooseComputeOutput; symmetry.
-  rewrite runPIOA_rcons.
-  rewrite (appTask_cong _ _ _ _ H0).
-  rewrite (appTask_cong _ _ _ _ (trapChooseComputeOutput _)).
-
-  rewrite /appTask.
-  dsimp; apply measBind_cong_r; intros; dsimp.
-  case:pickP => y.
-  move/andP; elim.
-  rewrite //= in H1.
-  move/setUP: H1; elim; rewrite in_set; move/eqP; intro; subst; rewrite in_set; move/eqP; intro; subst.
   done.
   done.
   reflexivity.
@@ -934,21 +879,7 @@ Lemma TRRefine : @refinement _ (TrapPIOA f) (RndPIOA n) (trapInputClosed f) (Rnd
   intro; dsimp.
   intro; dsimp.
 
-  exists (RndChoose n :: nil).
-  rewrite (fmap_cong _ _ _ _ H).
-  etransitivity.
-  apply fmap_cong.
-  apply trapChooseCompute.
-  symmetry; etransitivity.
-  have H2 := rndChooseOutput 0%nat.
-  simpl in H2.
-  simpl.
-  apply fmap_cong.
-  apply H2.
-  rewrite /meas_fmap; dsimp; apply measBind_cong_r; intros; dsimp.
 
-
-  apply uniford_subdist.
   destruct H.
   exists (RndChoose n :: nseq x (RndOutput n)).
   rewrite (fmap_cong _ _ _ _ H).
