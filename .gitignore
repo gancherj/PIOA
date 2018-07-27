@@ -1,0 +1,9 @@
+*~
+*.vo
+*.glob
+\#*\#
+*.aux
+*.fdb_latexmk
+*.swp
+*.fls
+*.log

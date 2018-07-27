@@ -1,153 +1,173 @@
-Add LoadPath "~/fcf/src".
-Add LoadPath ".".
+From mathcomp Require Import ssreflect ssrfun ssrbool ssrint eqtype ssrnat seq choice fintype rat finfun.
+From mathcomp Require Import bigop ssralg div ssrnum ssrint.
+Require Import Posrat.
 Require Import Meas.
-Require Import List.
-Require Import CpdtTactics.
-Require Import FCF.Rat.
-Require Import Program.
-Require Import FcfLems.
-Require Import Ring.
 
 
 (* expansion R is the smallest relation that contains R and is closed under convex combinations and is a congruence with respect to ~~. *)
 
 
-Record isExpansion {A B : Type} (R : Meas A -> Meas B -> Prop) (d1 : Meas A) (d2 : Meas B)
-       (mu : Meas (Meas A * Meas B)) : Prop :=
+Record isExpansion {A B : eqType} (R : Meas A -> Meas B -> Prop) (d1 : Meas A) (d2 : Meas B)
+       (mu : Meas ([eqType of Meas A * Meas B])%type) : Prop :=
   {
-    leftEquiv : d1 ~~ (p <- mu; fst p);
-    rightEquiv : d2 ~~ (p <- mu; snd p);
-    RValid : forall p, In p (measSupport mu) -> R (fst p) (snd p)
+    leftEquiv : d1 ~~ (p <- mu; fst p) @ 0;
+    rightEquiv : d2 ~~ (p <- mu; snd p) @ 0;
+    RValid : forall p,  p \in (measSupport mu) -> R (fst p) (snd p)
                                                   }.
 
-Definition expansion {A B : Type} (R : Meas A -> Meas B -> Prop) d1 d2 :=
+Definition expansion {A B : eqType} (R : Meas A -> Meas B -> Prop) d1 d2 :=
   exists mu, isExpansion R d1 d2 mu.
 
-Lemma expansion_cong {A B : Type} (R : Meas A -> Meas B -> Prop) d1 d2 d3 d4 :
-  d1 ~~ d3 ->
-  d2 ~~ d4 ->
+Lemma expansion_cong {A B : eqType} (R : Meas A -> Meas B -> Prop) d1 d2 d3 d4 :
+  d1 ~~ d3 @ 0 ->
+  d2 ~~ d4 @ 0 ->
   expansion R d1 d2 ->
   expansion R d3 d4.
   intros.
   destruct H1.
   exists x.
   destruct H1; constructor.
-  symmetry in H; rewrite H; crush.
-  symmetry in H0; rewrite H0; crush.
-  crush.
+  apply measEquiv_symm in H.
+  drewr H.
+  done.
+
+  apply measEquiv_symm in H0; drewr H0.
+  done.
+  done.
 Qed.
 
 
-Lemma expansion_bind {A B C : Type} (R : Meas B -> Meas C -> Prop) (mu : Meas A) (f : A -> Meas B) (g : A -> Meas C) :
-  (forall p, In p (measSupport mu) -> expansion R (f p) (g p)) ->
+Lemma expansion_bind {A B C : eqType} (R : Meas B -> Meas C -> Prop) (mu : Meas A) (f : A -> Meas B) (g : A -> Meas C) :
+  (forall x, measMass (f x) <= 1) ->
+  (forall x, measMass (g x) <= 1) ->
+  (forall p, p \in (measSupport mu) -> expansion R (f p) (g p)) ->
   expansion R (p <- mu; f p) (p <- mu; g p).
   intros.
   induction mu; intros.
-  exists [].
+  exists nil.
   constructor.
   apply measEquiv_refl.
   apply measEquiv_refl.
-  crush.
-  assert (forall p, In p (measSupport mu) -> expansion R (f p) (g p)).
-  intros; apply H.
+  done.
+  assert (forall p, p \in (measSupport mu) -> expansion R (f p) (g p)).
+  intros; apply H1.
   unfold measSupport in *.
-  apply in_map_iff in H0; repeat destruct H0.
-  apply in_map_iff; exists x.
-  crush.
-  destruct (negb (beqRat (fst a) 0)).
-  crush.
-  crush.
+  move/mapP: H2; elim; intros.
+  apply/mapP. exists x.
+  simpl.
+  destruct (a.1 != 0).
+  rewrite in_cons H2 orbT; done.
+  done.
+  done.
 
-  destruct (IHmu H0) as [IHm IHmExp]; clear IHmu H0.
-  remember (beqRat (fst a) 0) as b; destruct b.
-  assert ((fst a) == 0). unfold eqRat; crush.
-  clear Heqb.
+  destruct (IHmu H2) as [IHm IHmExp]; clear IHmu H2.
+  destruct (eqVneq a.1 0).
   eapply expansion_cong.
   eapply measBind_cong_l.
   apply measEquiv_zero_cons.
-  crush.
+  rewrite e; done.
+  done.
   eapply measBind_cong_l.
-  apply measEquiv_zero_cons; crush.
-  exists IHm; crush.
+  apply measEquiv_zero_cons; rewrite e; done.
+  done.
 
-  assert (In (snd a) (measSupport (a :: mu))).
+
+  exists IHm; done.
+
+  assert ((snd a) \in (measSupport (a :: mu))).
   unfold measSupport.
-  apply in_map_iff; exists a; crush.
-  rewrite <- Heqb.
-  crush.
+  apply/mapP.
+  exists a.
+  simpl.
+  rewrite (negbTE i); simpl.
+  rewrite in_cons eq_refl; done.
+  done.
   
-  destruct (H (snd a) H0) as [muA muAExp]; clear H.
+  destruct (H1 (snd a) H2) as [muA muAExp]; clear H.
 
   exists ((measScale (fst a) muA) ++ IHm).
   
   destruct IHmExp, muAExp; constructor.
-  rewrite measBind_cons; rewrite measBind_app; eapply measEquiv_app_cong.
+  eapply measEquiv_0_trans.
+  apply measBind_cons.
+  apply measEquiv_symm.
+  eapply measEquiv_0_trans.
+  apply measBind_app.
+  apply measEquiv_app_cong_0.
+
   unfold measEquiv; intros; 
   repeat rewrite integ_measScale.
-  rewrite (leftEquiv1 f0).
-  repeat rewrite integ_measBind.
-  repeat rewrite integ_measScale.
-  crush.
-  crush.
-  rewrite measBind_cons.
-  rewrite measBind_app.
-  apply measEquiv_app_cong.
-  rewrite <- measScale_bind_l.
-  apply measScale_cong.
-  crush.
-  crush.
+  rewrite integ_measBind.
+  rewrite integ_measScale.
+  rewrite pdist_mul_l.
+  apply measEquiv_symm in leftEquiv1.
+  have Hl := (leftEquiv1 f0 H).
+  rewrite ple_le0 in Hl.
+  rewrite integ_measBind in Hl.
+  rewrite (eqP Hl).
+  rewrite pmulr0; done.
+  apply measEquiv_symm; apply leftEquiv0.
+  eapply measEquiv_0_trans. apply measBind_cons.
+  apply measEquiv_symm.
+  eapply measEquiv_0_trans. apply measBind_app.
+  apply measEquiv_app_cong_0.
+  intro; intro.
+  rewrite integ_measBind.
+  rewrite integ_measScale.
+  admit.
+  apply measEquiv_symm in rightEquiv0; apply rightEquiv0.
   intros.
   rewrite measSupport_app in H.
-  apply in_app_iff in H; destruct H.
-  erewrite <- measSupport_measScale in H.
-  crush.
-  intro.
-  rewrite H1 in Heqb; crush.
-  crush.
-Qed.
+  rewrite mem_cat in H.
+  move/orP: H; elim.
+  rewrite -(measSupport_measScale _ _ i).
+  apply RValid1; done.
+  apply RValid0; done.
+Admitted.
 
 
-Definition fmap {A B} (d : Meas A) (f : A -> B) : Meas B :=
-  (x <- d; ret (f x)).
 
-Definition measCong {A B} (f : Meas A -> Meas B) := forall d1 d2, d1 ~~ d2 -> f d1 ~~ f d2.
+Definition measCong {A B} (f : Meas A -> Meas B) := forall d1 d2, d1 ~~ d2 @ 0 -> f d1 ~~ (f d2) @ 0.
 
-Definition joinDistrib {A B} (f : Meas A -> Meas B) := forall mu, f (d <- mu; d) ~~ (d <- mu; f d).
+Definition joinDistrib {A B} (f : Meas A -> Meas B) := forall mu, isSubdist mu -> f (d <- mu; d) ~~ (d <- mu; f d) @ 0.
 
 
-Lemma joinDistrib_expansion_compat {A B : Type} (R : Meas A -> Meas B -> Prop) mu1 mu2 mu f g :
+Lemma joinDistrib_expansion_compat {A B : eqType} (R : Meas A -> Meas B -> Prop) mu1 mu2 mu f g :
   measCong f ->
   joinDistrib f ->
   measCong g ->
   joinDistrib g ->
   isExpansion R mu1 mu2 mu ->
-  mu1 ~~ (p <- (fmap mu fst); p) ->
-  mu2 ~~ (p <- (fmap mu snd); p) ->
-  (forall p, In p (measSupport mu) -> (expansion R) (f (fst p)) (g (snd p)))  ->
+  mu1 ~~ (p <- (meas_fmap mu fst); p) @ 0 ->
+  mu2 ~~ (p <- (meas_fmap mu snd); p) @ 0 ->
+  (forall p, p \in (measSupport mu) -> (expansion R) (f (fst p)) (g (snd p)))  ->
   (expansion R) (f mu1) (g mu2).
+  admit.
   
+(*
 intros.
 eapply expansion_cong.
+instantiate (1 := (p <- mu; f (p.1))).
+symmetry; rewrite (H _ _ H4).
+rewrite H0.
+rewrite /meas_fmap.
+rewrite bindAssoc.
+apply measBind_cong_r; intros.
+rewrite bindRet.
+done.
 
-instantiate (1 := (p <- mu; f (fst p))).
-symmetry.
-rewrite (H _ _ H4).
-rewrite (H0 _).
-unfold fmap.
-repeat rewrite bindAssoc.
-apply measBind_cong_r; intros; repeat rewrite bindRet; simpl; apply measEquiv_refl.
-
-instantiate (1 := (p <- mu; g (snd p))).
+instantiate (1 := (p <- mu; g (p.2))).
 symmetry; rewrite (H1 _ _ H5).
-rewrite (H2 _).
-unfold fmap.
-repeat rewrite bindAssoc.
-apply measBind_cong_r; intros; repeat rewrite bindRet; simpl; apply measEquiv_refl.
+rewrite H2 /meas_fmap bindAssoc.
+apply measBind_cong_r; intros.
+rewrite bindRet; done.
 
 apply expansion_bind.
 intros.
-crush.
-Qed.
+apply H6.
+done.
+*)
+Admitted.
 
 Ltac expansion_simp :=
   eapply expansion_cong; [ dsimp; apply measEquiv_refl | dsimp; apply measEquiv_refl | idtac ].

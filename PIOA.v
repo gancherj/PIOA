@@ -1,25 +1,22 @@
-Add LoadPath "~/fcf/src".
+From mathcomp Require Import ssreflect ssrfun ssrbool ssrint eqtype ssrnat seq choice fintype rat finfun.
+From mathcomp Require Import bigop ssralg div ssrnum ssrint finset.
 Require Import Meas.
 Require Import Program.
 Require Import Expansion.
-Require Import FCF.Rat.
-Require Import Ring.
-Require Import List.
-Require Import CpdtTactics.
-Require Import Ott.ott_list.
-From mathcomp Require Import ssreflect ssrfun ssrbool ssrnat finset eqtype fintype choice seq.
+Require Import Posrat.
 
 Record prePIOA {Act : finType} :=
   mkPrePIOA {
       pQ : finType;
       start : pQ;
-      tr : pQ -> Act -> option (Meas pQ)
+      tr : pQ -> Act -> option (Meas pQ);
+      _ : forall s a mu, tr s a = Some mu -> isSubdist mu;
                            }.
+
 
 Definition enabled {Act : finType} (P : @prePIOA Act) (s : pQ P) :=
   fun a =>
     match (tr P s a) with | Some _ => true | None => false end.
-
 
 
 Definition actionDeterm {Act : finType} (P : @prePIOA Act) (T : {set Act}) :=
@@ -46,13 +43,23 @@ mkPIOA {
   actSetValid : forall s x, tr pP s x <> None -> x \in (pI :|: (pO :|: pH))
   }.
 
+Lemma tr_subDist {A} (P : @PIOA A) s a mu :
+  tr P s a = Some mu ->
+  isSubdist mu.
+intros.
+destruct P.
+destruct pP0.
+eapply i0.
+apply H.
+Qed.
+
 Definition Task {Act : finType} (P : @PIOA Act) := {x : {set Act} | x \in (pTO P) :|: (pTH P)}.
 
 Definition external {A} (P : @PIOA A) :=
   (pI P) :|: (pO P).
   
 Definition Trace {ActSpace} (P : @PIOA ActSpace) :=
-  ((pQ P) * (list ActSpace))%type.
+  [eqType of ((pQ P) * (list ActSpace))%type].
 
 Definition startTr {A} (P : @PIOA A) : Meas (Trace P) :=
   ret (start P, nil).
@@ -73,64 +80,93 @@ Definition appTask {Act : finType} (P : @PIOA Act) (T : Task P) (mu : Meas (Trac
 
 Lemma appTask_distrib {A} (P : @PIOA A) (T : Task P) :
   joinDistrib (appTask P T).
-  unfold joinDistrib, appTask; intros; dsimp; apply measEquiv_refl.
+  unfold joinDistrib, appTask; intros; dsimp.
+  apply measEquiv_refl.
 Qed.
 
-Lemma appTask_cong {A} (P : @PIOA A) (T : Task P) :
+Ltac dsubdist := repeat (
+  match goal with
+  | [ |- is_true (isSubdist (ret _)) ] => apply isSubdist_ret
+  | [ |- is_true (isSubdist (_ <- _; _)) ] => apply isSubdist_bind
+  | [ H : tr _ _ _ = Some ?m |- is_true (isSubdist ?m) ] => eapply tr_subDist; apply H
+ end).
+
+Lemma appTask_cong {A} (P : @PIOA A) : forall (T : Task P),
   measCong (appTask P T).
-  unfold measCong, appTask; intros; dsimp; rewrite (measBind_cong_l H); apply measEquiv_refl.
+  unfold measCong, appTask; intros; dsimp.
+  drewr (measBind_cong_l H).
+  intros.
+  destruct x; intros.
+  case: pickP; intros.
+  remember (tr P s x) as mu; symmetry in Heqmu; destruct mu; dsubdist.
+  intro x0; destruct (x \in external P); dsubdist.
+  dsubdist.
+  dsimp.
 Qed.
 
 Definition runPIOA {A} (P : @PIOA A) (ts : seq (Task P)) (d : Meas (Trace P)) : Meas (Trace P) :=
-  fold_right (fun t acc => appTask P t acc) d ts.
-
+  foldl (fun acc t => appTask P t acc) d ts.
 
 Lemma runPIOA_cons {A} (P : @PIOA A) (t : Task P) (ts : seq (Task P)) d :
-  runPIOA P (t :: ts) d = appTask P t (runPIOA P ts d).
+  runPIOA P (t :: ts) d = (runPIOA P ts (appTask P t d)).
   unfold runPIOA.
   simpl.
   auto.
 Qed.
 
+Lemma runPIOA_rcons {A} (P : @PIOA A) (t : Task P) ts d :
+  runPIOA P (rcons ts t) d = appTask P t (runPIOA P ts d).
+  move: d.
+  induction ts.
+  simpl.
+  done.
+  simpl.
+  intros.
+  rewrite IHts.
+  done.
+Qed.
+
 Lemma runPIOA_app {A} (P : @PIOA A) (ts ts' : seq (Task P)) d :
-  runPIOA P (ts ++ ts') d = runPIOA P ts (runPIOA P ts' d).
-  unfold runPIOA; rewrite fold_right_app; auto.
+  runPIOA P (ts ++ ts') d = runPIOA P ts' (runPIOA P ts d).
+  unfold runPIOA; rewrite foldl_cat.
+  done.
 Qed.
 
 Lemma runPIOA_cong {A} (P : @PIOA A) ts :
   measCong (runPIOA P  ts).
   unfold measCong, runPIOA; intros.
-  induction ts.
-  simpl.
-  crush.
-  simpl.
-  rewrite (appTask_cong _ _ _ _ IHts).
-  apply measEquiv_refl.
+  move: ts.
+  apply last_ind.
+  simpl; done.
+  intros; simpl; rewrite -!cats1 !foldl_cat //=.
+  drewr (appTask_cong P).
+  apply H0.
+  dsimp.
 Qed.
       
   
 Lemma runPIOA_distrib {A} {P : @PIOA A} ts :
   joinDistrib (runPIOA P ts).
-  induction ts.
-  unfold joinDistrib, runPIOA.
-  crush.
-  apply measEquiv_refl.
-  unfold joinDistrib in *.
+  move: ts. apply last_ind.
+  rewrite /joinDistrib /runPIOA //=.
   intros.
-  repeat rewrite runPIOA_cons.
-  etransitivity.
-  apply appTask_cong.
-  rewrite IHts.
-  apply measEquiv_refl.
-  simpl.
-  symmetry in IHts.
-  unfold appTask.
+  unfold joinDistrib in *.
   dsimp.
+  rewrite /joinDistrib; intros.
+  rewrite runPIOA_rcons.
+  drewr (appTask_cong P).
+  apply H.
+  rewrite /appTask; dsimp.
+  done.
+  rewrite /appTask; dsimp.
+  apply measBind_cong_r; intros.
+  rewrite runPIOA_rcons /appTask.
   apply measEquiv_refl.
+  done.
 Qed.
 
-Definition traceOf {Q act} (D : Meas (Q * list act)) :=
-  fmap D snd.
+Definition traceOf {Q act : eqType} (D : Meas ([eqType of Q * list act])%type) :=
+  meas_fmap D snd.
 
 Definition inputClosed {A} (P : @PIOA A) :=
   (pI P) = set0.
@@ -138,43 +174,61 @@ Definition inputClosed {A} (P : @PIOA A) :=
 Definition inputEquiv {A} (P1 P2 : @PIOA A) :=
   (pI P1) = (pI P2).
 
-Definition refinement {A} (P1 P2 : @PIOA A)  `{inputClosed P1} `{inputClosed P2} :=
+Definition refinement {A} (P1 P2 : @PIOA A)  `{inputClosed P1} `{inputClosed P2} e :=
   forall ts, exists ts',
-      traceOf (runPIOA P1 ts (startTr P1)) ~~ traceOf (runPIOA P2 ts' (startTr P2)).
+      traceOf (runPIOA P1 ts (startTr P1)) ~~ traceOf (runPIOA P2 ts' (startTr P2)) @ e.
 
-Definition consistentWith {A} {P1 : @PIOA A} (ts : seq (Task P1)) (d : Meas (Trace P1)) :=
-  forall p, In p (measSupport d) -> In p (measSupport (runPIOA P1 ts (startTr P1))).
+(*
+Definition consistent {A} {P : @PIOA A} (d1 : Meas (Trace P)) (ts : seq (Task P)) (d2 : Meas (Trace P)) :=
+  forall p, p \in measSupport d2 -> p \in measSupport (runPIOA P ts d1).
+
+Lemma consistent_cons {A} {P : @PIOA A} (ts : seq (Task P)) (t : Task P) (d1 d3 : Meas (Trace P)) :
+  consistent d1 (t :: ts) d3 -> exists d2,
+    consistent d1 [:: t] d2 /\ consistent d2 ts d3.
+intros.
+rewrite /consistent in H; simpl in H.
+
+exists (appTask _ t d1).
+rewrite /consistent; split.
+intros.
+simpl.
+done.
+intros.
+apply H.
+done.
+Qed.
+
 
 Record SimR {A} (P1 P2 : @PIOA A) 
-       (R : Meas (Trace P1) -> Meas (Trace P2) -> Prop) :=
+       (R : Meas ([eqType of Trace P1]) -> Meas (Trace P2) -> Prop) :=
   {
     simStart : R (ret (start P1, nil)) (ret (start P2, nil));
     simTr : forall d1 d2, R d1 d2 -> traceOf d1 ~~ traceOf d2;
-    simStep : forall ts T, exists ts', forall d1 d2, consistentWith ts d1 -> R d1 d2 ->
+    simStep : forall ts T, exists ts', forall d1 d2, consistent (startTr _) ts d1 -> R d1 d2 ->
           (expansion R) (appTask P1 T d1) (runPIOA P2 ts' d2)}.
 
 
-Lemma fmap_cong {A B} (d1 d2 : Meas A) (f : A -> B) :
-  d1 ~~ d2 -> fmap d1 f ~~ fmap d2 f.
-  intros. unfold fmap.
+Lemma fmap_cong {A B : eqType} (d1 d2 : Meas A) (f : A -> B) :
+  d1 ~~ d2 -> meas_fmap d1 f ~~ meas_fmap d2 f.
+  intros. unfold meas_fmap.
   rewrite (measBind_cong_l H).
   apply measEquiv_refl.
 Qed.
   
 
-Lemma expansion_trace : forall {Q Q' act} (R : Meas (Q * list act) -> Meas (Q' * list act) -> Prop) d1 d2, (forall d1 d2, R d1 d2 -> traceOf d1 ~~ traceOf d2) -> expansion R d1 d2 -> traceOf d1 ~~ traceOf d2.
+Lemma expansion_trace : forall {Q Q' act : eqType} (R : Meas ([eqType of Q * list act]%type) -> Meas ([eqType of Q' * list act]%type) -> Prop) d1 d2, (forall d1 d2, R d1 d2 -> traceOf d1 ~~ traceOf d2) -> expansion R d1 d2 -> traceOf d1 ~~ traceOf d2.
   intros.
   destruct H0.
   destruct H0.
   unfold traceOf.
   rewrite (fmap_cong _ _ _ leftEquiv).
   rewrite (fmap_cong _ _ _ rightEquiv).
-  unfold fmap.
+  unfold meas_fmap.
   dsimp.
   apply measBind_cong_r; intros.
   apply H.
   apply RValid.
-  crush.
+  done.
 Qed.
 
 
@@ -190,60 +244,68 @@ Lemma simSound {A} (P1 P2 : @PIOA A) R `{H: inputClosed P1} `{H2 : inputClosed P
   intro Hex; destruct Hex.
   exists x.
   apply (expansion_trace R).
-  crush.
-  crush.
+  done.
+  done.
 
-  induction ts.
+  move: ts; apply last_ind.
   exists nil.
-  exists (ret (ret (start P1, []), ret (start P2, []))).
+  exists (ret (ret (start P1, nil), ret (start P2, nil))).
   constructor.
-  simpl; rewrite bindRet; simpl; unfold startTr; unfold measEquiv; crush.
-  simpl; rewrite bindRet; simpl; unfold startTr; unfold measEquiv; crush.
+  simpl; rewrite bindRet; simpl; unfold startTr; unfold measEquiv; done.
+  simpl; rewrite bindRet; simpl; unfold startTr; unfold measEquiv; done.
   intros.
   simpl in H0.
-  destruct H0.
-  2: { crush. }
+  rewrite /measSupport in H0.
+  simpl in H0.
+  rewrite in_cons in H0.
+  move/orP: H0.
+  elim.
+  move/eqP => Hp.
   subst; simpl.
   apply simStart0.
-
-
-  destruct IHts.
+  done.
+  intros.
   destruct H0.
-  destruct (simStep0 ts a).
-  exists (x1 ++ x).
+  destruct H0.
+  destruct H0.
+  
+  destruct (simStep0 s x).
+  simpl.
+  exists (x0 ++ x2).
+  rewrite runPIOA_rcons.
   rewrite runPIOA_app.
-  rewrite runPIOA_cons.
-
   eapply joinDistrib_expansion_compat.
   apply appTask_cong.
   apply appTask_distrib.
   apply runPIOA_cong.
   apply runPIOA_distrib.
-  apply H0.
-  destruct H0.
+  constructor.
   rewrite leftEquiv.
-  unfold fmap;
-  rewrite bindAssoc; apply measBind_cong_r; intros; rewrite bindRet; unfold measEquiv; crush.
-  destruct H0.
-  rewrite rightEquiv; unfold fmap;
-  rewrite bindAssoc; apply measBind_cong_r; intros; rewrite bindRet; unfold measEquiv; crush.
-
-  intros; apply H1.
-  destruct H0.
-  unfold consistentWith.
+  rewrite /meas_fmap.
+  dsimp.
+  apply measBind_cong_r; intros; dsimp.
+  rewrite rightEquiv.
+  rewrite /meas_fmap.
+  dsimp.
+  apply RValid.
+  rewrite /meas_fmap.
+  dsimp.
+  rewrite leftEquiv.
+  apply measBind_cong_r; intros; dsimp.
+  rewrite rightEquiv /meas_fmap.
+  dsimp.
+  apply measBind_cong_r; intros; dsimp.
   intros.
-  assert (In p0 (measSupport (p <- x0; fst p))).
+  simpl in p.
+  apply H0.
+  rewrite /consistent.
+  intros.
+  eapply measSupport_measEquiv.
+  symmetry; apply leftEquiv.
   apply measBind_in.
   exists p.
-  crush.
-
-
-  eapply measSupport_measEquiv.
-  intros x2 y; destruct (@eqP _ x2 y); crush.
-  symmetry; apply leftEquiv.
-  crush.
-
-  destruct H0.
+  apply/andP; done.
   apply RValid.
-  crush.
+  done.
 Qed.  
+*)

@@ -1,199 +1,191 @@
-Add LoadPath "~/fcf/src".
-Add LoadPath ".".
-Require Import FCF.Rat.
-Require Import FCF.Fold.
-Require Import CpdtTactics.
-Require Import FcfLems.
-Require Import Ring.
-Require Import List.
-Require Import Coq.Classes.Equivalence.
-Require Import Relation_Definitions.
-Require Import Program.
-Require Import FCF.StdNat.
-Require Import Eqdep_dec.
-Open Scope rat_scope.
+From mathcomp Require Import ssreflect ssrfun ssrbool ssrint eqtype ssrnat seq choice fintype rat finfun.
+From mathcomp Require Import bigop ssralg div ssrnum ssrint.
+Require Import Posrat.
 
-
-
-Lemma sr_rat : @semi_ring_theory Rat 0 1 ratAdd ratMult eqRat.
-  econstructor.
-  intros; rewrite <- ratAdd_0_l; auto.
-  crush.
-  intros; rewrite ratAdd_comm; crush.
-  intros; rewrite ratAdd_assoc; crush.
-  intros; rewrite ratMult_1_l; crush.
-  intros; rewrite ratMult_0_l; crush.
-  intros; rewrite ratMult_comm; crush.
-  intros; rewrite ratMult_assoc; crush.
-  intros; rewrite ratMult_comm; rewrite ratMult_distrib; rewrite ratMult_comm; apply ratAdd_eqRat_compat; [crush | apply ratMult_comm; crush].
-  Defined.
-
-
-Add Ring ratring : sr_rat.
+Import Monoid.Theory.
 
 (* Linear combinations of elements of A *)
-Definition Meas (A : Type) : Type := list (Rat * A).
 
-Definition ratDisp (r : Rat) : nat * nat :=
-  match r with
-  | RatIntro n1 p =>
-    match p with
-    | exist _ n2 _ => (n1, n2)
-    end
-  end.
+Definition Meas (A : eqType) := seq (posrat * A).
 
-Definition MeasDisp {A} (d : Meas A) : list ((nat * nat) * A) :=
-  map (fun p => (ratDisp (fst p), snd p)) d.
 
 Section MeasOps.
-  Context {A : Type}.
-  Definition measMass (d : Meas A) := sumList (map fst d) (fun x => x).
-  (* A measure is a distribution when it has total mass 1 and all elements have positive mass *)
-  (* TODO: I can now remove the = 0 condition. *)
+  Context {A : eqType}.
+  Definition measMass (d : Meas A) :=
+    \big[padd/0%PR]_(p <- d) (p.1).
   Definition isDist (d : Meas A) :=
     (measMass d == 1).
+  Definition isSubdist (d : Meas A) :=
+    (measMass d <= 1).
   Definition measRed (d : Meas A) :=
-    filter (fun p => negb (beqRat (fst p) 0)) d.
+    filter (fun p => p.1 != 0) d.
   Definition measSupport (d : Meas A) := map snd (measRed d).
-  Definition integ (d : Meas A) (f : A -> Rat) :=
-    sumList (map (fun p => (fst p) * (f (snd p))) d) (fun x => x).
+  Definition indicator (x : A) := fun y => (if x == y then 1 else 0)%PR.
+  Definition integ (d : Meas A) (f : A -> posrat) :=
+    \big[padd/0%PR]_(p <- d) (p.1 * (f (p.2))).
+  Definition measEquiv (e : posrat) (d1 d2 : Meas A)  := forall f, (forall x, f x <= 1)%PR ->
+                                                                  pdist (integ d1 f) (integ d2 f) <= e.
 
-  Definition measEquiv (d1 d2 : Meas A) := forall f, integ d1 f == integ d2 f.
 
 End MeasOps.
 
 Section MeasMonad.
-  Context {A B : Type}.
+  Context {A B : eqType}.
 
-  Definition measRet (a : A) : Meas A := (1, a) :: nil.
+  Definition measRet (a : A) : Meas A := (1%PR,a) :: nil.
+
   Lemma isDist_ret : forall a, isDist (measRet a).
     intros.
-    unfold isDist, measRet.
-    unfold measMass.
-    crush.
-    unfold sumList; crush.
-    ring.
+    rewrite /isDist /measRet /measMass //=.
+    rewrite big_cons big_nil.
+    done.
   Qed.
 
-  Definition measScale (r : Rat) (d : Meas B) :=
-    map (fun p => (r * (fst p), snd p)) d.
+  Definition measScale (r : posrat) (d : Meas B) : Meas B :=
+    map (fun p => (r * p.1, p.2))%PR d.
 
-  Definition measSum (ds : list (Meas B)) := concat ds.
-  
-  Definition measJoin (d : Meas (Meas B)) : Meas B :=
-    measSum (map (fun p => measScale (fst p) (snd p)) d).
+  Definition measSum (ds : list (Meas B)) : Meas B :=
+    flatten ds.
+
+  Definition measJoin (d : Meas ([eqType of Meas B])) : Meas B :=
+    measSum (map (fun p => measScale p.1 p.2) d).
+
 
   Definition measBind (d : Meas A) (f : A -> Meas B) : Meas B :=
-    measJoin (map (fun p => (fst p, f (snd p))) d).
+    measJoin (map (fun p => (p.1, f (p.2))) d).
+
    
-
-
 End MeasMonad.
 
-Lemma measJoin_cons {A : Type} (d : Meas (Meas A)) a :
+  Definition meas_fmap {A C : eqType} (d : Meas A) (f : A -> C) : Meas C :=
+    measBind d (fun x => measRet (f x)).
+
+
+Lemma measJoin_cons {A : eqType} (d : Meas ([eqType of Meas A])) a :
   measJoin (a :: d) = (measScale (fst a) (snd a)) ++ (measJoin d).
   unfold measJoin.
   simpl.
-  crush.
+  done.
 Qed.
 
-Lemma integ_nil {A : Type} (f : A -> Rat) : integ [] f == 0.
-  unfold integ;
-    rewrite sumList_nil;
-    crush.
+Lemma integ_nil {A : eqType} (f : A -> posrat) : integ nil f = 0.
+  rewrite /integ.
+  rewrite big_nil.
+  done.
 Qed.
 
-Lemma integ_cons {A : Type} (d1 : Meas A) a f : integ (a :: d1) f == (fst a) * f (snd a) + integ d1 f.
+Lemma integ_cons {A : eqType} (d1 : Meas A) a f : integ (a :: d1) f = (fst a) * f (snd a) + integ d1 f.
   unfold integ.
-  simpl.
-  rewrite sumList_cons.
-  crush.
+  rewrite big_cons.
+  done.
 Qed.
 
-Lemma integ_app {A : Type} (d1 d2 : Meas A) f : integ (d1 ++ d2) f == integ d1 f + integ d2 f.
+Lemma integ_app {A : eqType} (d1 d2 : Meas A) f : integ (d1 ++ d2) f = integ d1 f + integ d2 f.
   unfold integ.
-  rewrite map_app; simpl.
-  rewrite sumList_app.
-  crush.
+  rewrite big_cat //=.
 Qed.
 
-Lemma integ_measScale {A : Type} (d1 : Meas A) r f :
-  integ (measScale r d1) f == r * (integ d1 f).
-  unfold integ, measScale.
-  rewrite map_map.
-  simpl.
-  induction d1.
-  crush.
-  rewrite sumList_nil.
-  ring.
-  simpl.
-  repeat rewrite sumList_cons.
-  rewrite IHd1.
-  crush.
-  ring.
+Lemma integ_measScale {A : eqType} (d1 : Meas A) r f :
+  integ (measScale r d1) f = r * (integ d1 f).
+  unfold integ, measScale; rewrite //=.
+  rewrite big_map //=.
+  rewrite big_distrr //=.
+  apply eq_big.
+  intros; done.
+  intros.
+  rewrite pmulrA.
+  done.
 Qed.
 
-Lemma integ_measJoin {A : Type} (d : Meas (Meas A)) (f : A -> Rat) :
-  integ (measJoin d) f == integ d (fun d' => integ d' f).
+Lemma integ_measJoin {A : eqType} (d : Meas ([eqType of Meas A])) (f : A -> posrat) :
+  integ (measJoin d) f = integ d (fun d' => integ d' f).
   induction d.
-  unfold measJoin, integ; crush.
+  rewrite /measJoin /integ //= !big_nil.
+  done.
   rewrite measJoin_cons.
   rewrite integ_app.
   rewrite integ_cons.
   rewrite IHd.
   rewrite integ_measScale.
-  ring.
+  done.
 Qed.
 
-Lemma integ_measBind {A B : Type} (d : Meas A) (df : A -> Meas B) f :
-  integ (measBind d df) f == integ d (fun x => integ (df x) f).
+Lemma integ_measBind {A B : eqType} (d : Meas A) (df : A -> Meas B) f :
+  integ (measBind d df) f = integ d (fun x => integ (df x) f).
   unfold measBind.
   rewrite integ_measJoin.
   induction d.
-  crush.
-  unfold integ; crush.
+  unfold integ.
+  rewrite big_map !big_nil.
+  done.
   rewrite integ_cons.
   rewrite <- IHd.
   simpl.
   rewrite integ_cons.
-  simpl; ring.
+  rewrite //=.
 Qed.
 
-Lemma integ_cong_l {A : Type} (d : Meas A) (f1 f2 : A -> Rat) :
-  (forall x, In x (measSupport d) -> f1 x == f2 x) ->
-  integ d f1 == integ d f2.
-  unfold integ.
-  crush.
-  induction d; crush.
-  destruct (eq_Rat_dec (fst a) 0).
+Lemma measSupport_cons {A : eqType} (d : Meas A) (a : posrat * A) :
+  measSupport (a :: d) = (if (fst a == 0) then measSupport d else (snd a) :: measSupport d).
+  rewrite /measSupport //=.
+  remember (a.1 == 0); symmetry in Heqb; destruct b.
+  simpl.
+  done.
+  simpl.
+  done.
+Qed.
 
-  repeat rewrite sumList_cons.
-  rewrite e.
-  rewrite IHd.
-  ring.
+Lemma integ_cong_l {A : eqType} (d : Meas A) (f1 f2 : A -> posrat) e :
+  (forall x, x \in (measSupport d) -> pdist (f1 x) (f2 x) <= e) ->
+  pdist (integ d f1) (integ d f2) <= (measMass d * e).
+  induction d.
+  intros; rewrite !integ_nil /measMass big_nil.
+  rewrite pmul0r.
+  done.
+  intro; rewrite !integ_cons.
+  case (eqVneq a.1 0).
+  intro Heq; rewrite Heq.
+  rewrite !pmul0r !padd0r.
+  rewrite /measMass.
+  rewrite big_cons.
+  rewrite Heq padd0r.
+  apply IHd.
+  intros; apply H.
+
+  rewrite measSupport_cons.
+  rewrite Heq; simpl.
+  done.
   intros.
-  assert (In x (measSupport (a :: d))).
-  unfold measSupport in *.
-  simpl.
-  rewrite e.
-  crush.
-  apply H; crush.
-  repeat rewrite sumList_cons.
-  rewrite IHd.
-  rewrite H.
-  ring.
-  unfold measSupport.
-  simpl.
-  apply (Bool.not_true_is_false _) in n.
-  rewrite n.
-  crush.
-  intros.
+  rewrite /measMass.
+  rewrite big_cons.
+  rewrite pmulrDl.
+  eapply ple_trans.
+  apply pdist_add_lr.
+  apply ple_add_lr.
+  rewrite pdist_mul_l.
+  apply ple_mul_l.
   apply H.
-  unfold measSupport.
-  apply (Bool.not_true_is_false _) in n.
-  simpl.
-  rewrite n.
-  crush.
+  rewrite measSupport_cons.
+  rewrite (negbTE i).
+  rewrite in_cons eq_refl orTb; done.
+  apply IHd.
+  intros; apply H.
+  rewrite measSupport_cons (negbTE i) in_cons H0 orbT; done.
+Qed.
+
+
+Lemma integ_cong_l_exact {A : eqType} (d : Meas A) (f1 f2 : A -> posrat) :
+  (forall x, x \in (measSupport d) -> f1 x = f2 x) ->
+  integ d f1 = integ d f2.
+  intros.
+  apply/eqP; rewrite -pdist_le0.
+  eapply ple_trans.
+  apply integ_cong_l.
+  intros.
+  instantiate (1 := 0).
+  rewrite pdist_le0.
+  apply/eqP; apply H; done.
+  rewrite pmulr0; done.
 Qed.
 
 
@@ -203,619 +195,626 @@ Notation "x <- c1 ; c2" := (@measBind _ _ c1 (fun x => c2))
 
 
 
-Notation "x ~~ y" := (@measEquiv _ x y) (at level 60).
+Notation "x ~~ y @ e" := (@measEquiv _ e x y) (at level 60).
 
-Lemma integ_cong_r {A : Type} (d1 d2 : Meas A) (f : A -> Rat) :
-  d1 ~~ d2 -> integ d1 f == integ d2 f.
-  crush.
+Lemma integ_cong_r {A : eqType} (d1 d2 : Meas A) (e : posrat) (f : A -> posrat) : (forall x, f x <= 1) ->
+  d1 ~~ d2 @ e -> pdist (integ d1 f) (integ d2 f) <= e.
+  intros.
+  apply H0.
+  done.
 Qed.
 
 Require Import Setoid.
 
-Lemma equiv_symm {A : Type} : forall (d1 d2 : Meas A),
-    d1 ~~ d2 -> d2 ~~ d1.
-  intros; unfold measEquiv in *; intros; crush.
+Lemma measEquiv_symm {A : eqType} : forall e (d1 d2 : Meas A),
+    d1 ~~ d2 @ e -> d2 ~~ d1 @ e.
+  intros; unfold measEquiv in *; intros. 
+  rewrite pdist_symm.
+  apply H.
+  done.
 Qed.
 
-Lemma equiv_trans {A : Type} : forall (d1 d2 d3 : Meas A),
-    d1 ~~ d2 -> d2 ~~ d3 -> d1 ~~ d3.
-  intros; unfold measEquiv in *; intros; crush.
+Lemma measEquiv_trans {A : eqType} : forall e1 e2 (d1 d2 d3 : Meas A) ,
+    d1 ~~ d2 @ e1 -> d2 ~~ d3 @ e2 -> d1 ~~ d3 @ (e1 + e2).
+  intros.
+  unfold measEquiv in *; intros.
+  eapply ple_trans.
+  apply pdist_triangle.
+  apply ple_add_lr.
+  apply H; done.
+  apply H0; done.
 Qed.
 
-Lemma measEquiv_refl {A : Type} : forall (d : Meas A), d ~~ d.
-  intros; unfold measEquiv; intros; crush.
+Lemma measEquiv_0_trans {A : eqType} : forall (d1 d2 d3 : Meas A),
+    d1 ~~ d2 @ 0 -> d2 ~~ d3 @ 0 -> d1 ~~ d3 @ 0.
+  apply measEquiv_trans.
 Qed.
 
-Add Parametric Relation (A : Type) : (Meas A) (@measEquiv A)
-   symmetry proved by equiv_symm
-   transitivity proved by equiv_trans
-   as meas_eq
-.
+Lemma measEquiv_refl {A : eqType} : forall (d : Meas A), d ~~ d @ 0.
+  intros; unfold measEquiv; intros.
+  rewrite ple_le0.
+  rewrite pdist_eq0.
+  done.
+Qed.
 
-(* Lemmas about monadic operations and ~~ *)
+Lemma measEquiv_sub {A : eqType} e1 e2 (d1 d2 : Meas A) :
+  e1 <= e2 -> d1 ~~ d2 @ e1 -> d1 ~~ d2 @ e2. 
+  intros.
+  rewrite /measEquiv.
+  intros.
+  eapply ple_trans.
+  apply H0.
+  done.
+  done.
+Qed.
 
-  Lemma bindAssoc {A B C : Type} : forall (c1 : Meas A) (c2 : A -> Meas B) (c3 : B -> Meas C),
-    (x <- (y <- c1; c2 y); c3 x) ~~ (y <- c1; x <- c2 y; c3 x).
+Add Parametric Relation (A : eqType) : (Meas A) (measEquiv 0)
+    reflexivity proved by (measEquiv_refl)
+    symmetry proved by (measEquiv_symm 0)
+    transitivity proved by (measEquiv_0_trans)
+    
+                             as measEquiv0_rel.
+
+
+(* Lemmas about monadic operations and ~~ *) 
+  Lemma bindAssoc (A B C : eqType) : forall (c1 : Meas A) (c2 : A -> Meas B) (c3 : B -> Meas C),
+    (x <- (y <- c1; c2 y); c3 x) ~~ (y <- c1; x <- c2 y; c3 x) @ 0.
     intros.
     unfold measEquiv; intros.
     repeat rewrite integ_measBind.
-    apply integ_cong_l; intros.
+    rewrite pdist_le0.
+    apply/eqP.
+    apply integ_cong_l_exact; intros.
     repeat rewrite integ_measBind.
-    apply integ_cong_l; intros.
-    crush.
+    apply integ_cong_l_exact; intros.
+    done.
   Qed.
 
-  Lemma bindRet {A B : Type} (x : A) (c : A -> Meas B) :
-    (z <- (ret x); c z) ~~ c x.
+  Lemma bindRet {A B : eqType} (x : A) (c : A -> Meas B) :
+    (z <- (ret x); c z) ~~ c x @ 0.
     intros; unfold measEquiv; intros.
+    rewrite pdist_le0; apply/eqP.
+
     repeat rewrite integ_measBind.
     unfold measRet.
     rewrite integ_cons.
-    simpl.
     rewrite integ_nil.
-    ring.
+    simpl.
+    rewrite paddr0.
+    destruct (integ (c x) f).
+    apply/eqP; rewrite /eq_op //=.
+    by rewrite GRing.Theory.mul1r.
   Qed.
 
-  Lemma bindRet_r {A : Type} (c : Meas A) :
-    (x <- c; ret x) ~~ c.
+  Lemma bindRet_r {A : eqType} (c : Meas A) :
+    (x <- c; ret x) ~~ c @ 0.
     unfold measEquiv; intros.
     rewrite integ_measBind.
-    apply integ_cong_l; intros.
+    rewrite pdist_le0; apply/eqP.
+    apply integ_cong_l_exact; intros.
     unfold measRet.
-    rewrite integ_cons; rewrite integ_nil; crush.
-    ring.
+    rewrite integ_cons integ_nil //= paddr0.
+    destruct (f x).
+    apply/eqP; rewrite /eq_op //=.
+    by rewrite GRing.Theory.mul1r.
   Qed.
 
-Ltac in_sumList_l := eapply eqRat_trans; [ apply sumList_body_eq; intros; simpl | idtac] .
 
-
-Lemma measBind_cong_l {A B : Type} {d d' : Meas A} {c : A -> Meas B} :
-  d ~~ d' ->
-  measBind d c ~~ measBind d' c.
+Lemma measBind_cong_l {A : eqType} {d d' : Meas A} {e} :
+  d ~~ d' @ e ->
+  forall (B : eqType) (c : A -> Meas B),
+  (forall x, isSubdist (c x)) ->
+  measBind d c ~~ measBind d' c @ e.
   intros.
   unfold measEquiv; intros.
   repeat rewrite integ_measBind.
-  apply integ_cong_r.
-  crush.
+  apply H.
+  intro; rewrite /integ.
+  eapply ple_trans.
+  eapply ple_sum.
+  intros.
+  instantiate (1 := fun x0 => x0.1 * 1); simpl.
+  apply ple_mul_lr.
+  apply ple_refl.
+  apply H1.
+  eapply ple_trans.
+  apply ple_sum.
+  intros.
+  rewrite pmulr1 //=; apply ple_refl.
+  apply H0.
 Qed.
 
-Lemma measBind_cong_r {A B : Type} {d : Meas A} {c1 c2 : A -> Meas B} :
-  (forall x, In x (measSupport d) -> c1 x ~~ c2 x) ->
-  measBind d c1 ~~ measBind d c2.
+Lemma measBind_cong_r {A B : eqType} {d : Meas A} {c1 c2 : A -> Meas B} e :
+  (forall x, x \in (measSupport d) -> c1 x ~~ c2 x @ e) ->
+  (isSubdist d) ->
+  measBind d c1 ~~ measBind d c2 @ e.
   intros.
   unfold measEquiv; intros; repeat rewrite integ_measBind.
-  apply integ_cong_l.
-  crush.
+  eapply ple_trans.
+  eapply integ_cong_l.
+  intros.
   apply H.
-  crush.
+  done.
+  done.
+  eapply ple_trans.
+  apply ple_mul_lr.
+  apply H0.
+  apply ple_refl.
+  rewrite pmul1r; apply ple_refl.
 Qed.
 
-Lemma measBind_app {A B : Type} (d1 d2 : Meas A) (c : A -> Meas B) :
+Lemma measBind_app {A B : eqType} (d1 d2 : Meas A) (c : A -> Meas B) :
   (p <- (d1 ++ d2); c p) ~~
-                         ((p <- d1; c p) ++ (p <- d2; c p)).
-  unfold measBind.
-  unfold measJoin.
-  rewrite map_app.
-  rewrite map_app.
-  unfold measSum.
-  rewrite concat_app.
-  unfold measEquiv; intros; crush.
+                         ((p <- d1; c p) ++ (p <- d2; c p)) @ 0.
+  rewrite /measBind /measJoin /meas_fmap !map_cat //=.
+  rewrite /measSum flatten_cat.
+  apply measEquiv_refl.
 Qed.
 
 
-Lemma measEquiv_cons_cong {A : Type} {a b : (Rat * A)} (d1 d2 : Meas A) :
-  (fst a == fst b /\ snd a = snd b) ->
-  d1 ~~ d2 ->
-  (a :: d1) ~~ (b :: d2).
-  unfold measEquiv; unfold integ; intros.
-  simpl.
-  repeat rewrite Fold.sumList_cons.
-  rewrite H0.
+Lemma measEquiv_cons_cong {A : eqType} {a b : (posrat * A)} (d1 d2 : Meas A) e :
+  (fst a = fst b /\ snd a = snd b) ->
+  d1 ~~ d2 @ e ->
+  (a :: d1) ~~ (b :: d2) @ e.
+  intros; unfold measEquiv; intros.
+  rewrite !integ_cons.
   destruct H.
   rewrite H.
-  rewrite H1.
-  ring.
+  rewrite H2.
+  rewrite -pdist_add_l.
+  apply H0; done.
 Qed.
 
-Lemma measEquiv_app_cong {A : Type} {d1 d2 d3 d4 : Meas A} :
-  d1 ~~ d2 ->
-  d3 ~~ d4 ->
-  (d1 ++ d3) ~~ (d2 ++ d4).
-  unfold measEquiv; unfold integ; intros.
-  repeat rewrite map_app.
-  repeat rewrite sumList_app.
-  rewrite H.
-  rewrite H0.
-  ring.
+Lemma measEquiv_app_cong {A : eqType} {d1 d2 d3 d4 : Meas A} e1 e2 :
+  d1 ~~ d2 @ e1 ->
+  d3 ~~ d4 @ e2 ->
+  (d1 ++ d3) ~~ (d2 ++ d4) @ (e1 + e2).
+  unfold measEquiv; intros.
+  rewrite /integ !big_cat //=.
+  eapply ple_trans.
+  apply pdist_add_lr.
+  apply ple_add_lr.
+  apply H; done.
+  apply H0; done.
 Qed.
 
-Lemma measBind_cons {A B : Type} (d1 : Meas A) (c : A -> Meas B) a :
-  (p <- a :: d1; c p) ~~ (measScale (fst a) (c (snd a)) ++ (p <- d1; c p)).
+Lemma measEquiv_app_cong_0 {A : eqType} {d1 d2 d3 d4 : Meas A} :
+  d1 ~~ d2 @ 0 ->
+  d3 ~~ d4 @ 0 ->
+  (d1 ++ d3) ~~ (d2 ++ d4) @ 0.
+  apply measEquiv_app_cong.
+  Qed.
+
+  
+
+Lemma measBind_cons {A B : eqType} (d1 : Meas A) (c : A -> Meas B) a :
+  (p <- a :: d1; c p) ~~ (measScale (fst a) (c (snd a)) ++ (p <- d1; c p)) @ 0.
   unfold measEquiv; intros.
   repeat rewrite integ_measBind.
   repeat rewrite integ_cons.
-  repeat rewrite integ_app.
-  repeat rewrite integ_measScale.
-  repeat rewrite integ_measBind.
-  crush.
+  rewrite pdist_le0.
+  done.
 Qed.
 
-Lemma measScale_bind_l {A B : Type} (d : Meas A) (f : A -> Meas B) (r : Rat) :
+Lemma measScale_bind_l {A B : eqType} (d : Meas A) (f : A -> Meas B) (r : posrat) :
   measScale r (p <- d; f p) ~~
-            (p <- (measScale r d); f p).
+            (p <- (measScale r d); f p) @ 0.
   unfold measEquiv; intros.
   rewrite integ_measScale.
   repeat rewrite integ_measBind.
   rewrite integ_measScale.
-  ring.
+  rewrite pdist_le0;
+  done.
 Qed.
 
-Lemma measScale_cong {A : Type} (d1 d2 : Meas A) (r : Rat) :
-  d1 ~~ d2 ->
-  (measScale r d1) ~~ (measScale r d2).
+Lemma measScale_cong {A : eqType} (d1 d2 : Meas A) (r : posrat) e :
+  d1 ~~ d2 @ e ->
+  (measScale r d1) ~~ (measScale r d2) @ (r * e).
   intros; unfold measEquiv; intros.
   repeat rewrite integ_measScale.
-  rewrite (H f).
-  crush.
+  rewrite pdist_mul_l.
+  apply ple_mul_lr.
+  apply ple_refl.
+  apply H; done.
 Qed.
 
 
-Lemma measEquiv_zero_cons {A : Type} (d : Meas A) (a : Rat * A) :
-  fst a == 0 -> d ~~ (a :: d).
+Lemma measEquiv_zero_cons {A : eqType} (d : Meas A) (a : posrat * A) :
+  fst a == 0 -> d ~~ (a :: d) @ 0.
   intros.
   unfold measEquiv, integ; intros.
-  rewrite map_cons.
-  rewrite sumList_cons.
-  rewrite H.
-  ring.
+  rewrite big_cons.
+  rewrite (eqP H).
+  rewrite pmul0r padd0r.
+  rewrite pdist_le0;
+  done.
 Qed.
 
-Lemma filter_app {A} (l1 l2 : list A) f : filter f (l1 ++ l2) = filter f l1 ++ filter f l2.
-  induction l1.
-  crush.
-  simpl.
-  rewrite IHl1.
-  destruct (f a); crush.
-Qed.
   
-Lemma measSupport_app {A : Type} (d1 d2 : Meas A) :
+Lemma measSupport_app {A : eqType} (d1 d2 : Meas A) :
   measSupport (d1 ++ d2) = measSupport d1 ++ measSupport d2.
   unfold measSupport.
   unfold measRed.
-  rewrite filter_app.
-  rewrite map_app.
-  crush.
+  rewrite filter_cat.
+  rewrite map_cat.
+  done.
 Qed.
 
-Lemma measSupport_cons {A : Type} (d : Meas A) (a : Rat * A) :
-  measSupport (a :: d) = (if beqRat (fst a) 0 then measSupport d else (snd a) :: measSupport d).
-  unfold measSupport.
-  crush.
-  destruct (beqRat a0 0); crush.
-Qed.
 
-Lemma measSupport_measScale {A : Type} (d : Meas A) (r : Rat) :
-  ~ (r == 0) -> measSupport d = measSupport (measScale r d).
+Lemma measSupport_measScale {A : eqType} (d : Meas A) (r : posrat) :
+   (r != 0) -> measSupport d = measSupport (measScale r d).
   intros.
   induction d.
-  crush.
+  rewrite //=.
+  rewrite //=.
+  rewrite !measSupport_cons //=.
+  destruct (eqVneq a.1 0).
+  rewrite e.
   simpl.
-  repeat rewrite measSupport_cons.
-  simpl.
-  remember (beqRat (fst a) 0).
-  destruct b.
-  assert (fst a == 0). unfold eqRat; crush.
-  assert (r * fst a == 0).
-  rewrite H0.
-  ring.
-  rewrite H1.
-  crush.
-
-  assert (~ (r * fst a == 0)).
-  apply ratMult_nz.
-  crush.
-  remember (beqRat (r * fst a) 0) as b; destruct b.
-  crush.
-  crush.
+  rewrite (pmulr0 r) //=.
+  rewrite (negbTE i).
+  have H2 := pmul0 r a.1.
+  rewrite (negbTE H) in H2.
+  rewrite (negbTE i) in H2.
+  simpl in H2.
+  rewrite -H2.
+  rewrite IHd.
+  done.
 Qed.
 
-Lemma measIndicator_in_support {A : Type} (H : forall x y : A, {x = y} + {x <> y}) (d : Meas A) : forall p, 
-    (~ (integ d (fun x => if H x p then 1 else 0) == 0)) <->
-    In p (measSupport d).
-  split.
-  intros.
-  induction d.
-  unfold integ in H0; rewrite sumList_nil in H0.
-  crush.
-  rewrite integ_cons in H0.
-  apply ratAdd_nz in H0.
-  destruct H0.
-  apply ratMult_nz in H0.
-  destruct H0.
-  rewrite measSupport_cons.
-  rewrite (Bool.not_true_is_false _ H0).
-  destruct (H (snd a) p).
-  crush.
-  crush.
-  rewrite measSupport_cons.
-  destruct (beqRat (fst a) 0).
-  apply IHd; crush.
-  right; apply IHd; crush.
-
-  intros.
-  induction d.
-  crush.
-  rewrite integ_cons.
-  rewrite measSupport_cons in H0.
-  destruct (eq_Rat_dec (fst a) 0).
-  apply ratAdd_nz.
-  right.
-  apply IHd.
-  rewrite e in H0.
-  crush.
-
-  rewrite (Bool.not_true_is_false _ n) in H0.
-  destruct H0.
-  apply ratAdd_nz.
-
-  left.
-  subst.
-  destruct (H (snd a) (snd a)).
-  apply ratMult_nz; crush.
-  crush.
-  apply ratAdd_nz; right; apply IHd; crush.
-Qed.
-  
-                           
-Lemma measSupport_measEquiv {A : Type} (H : forall x y : A, {x = y} + {x <> y}) (d1 d2 : Meas A) :
-  d1 ~~ d2 -> forall p, In p (measSupport d1) -> In p (measSupport d2). 
-  intros.
-  apply (measIndicator_in_support H) in H1.
-  apply (measIndicator_in_support H).
+Lemma measIndicator_in_support {A : eqType} (d : Meas A) : forall p, 
+    ((integ d (fun x => if x == p then 1 else 0) != 0)) <->
+    p \in (measSupport d).
+  intros; split.
   intro.
-  rewrite (H0 (fun x => if H x p then 1 else 0)) in H1.
-  crush.
+  induction d.
+  unfold integ in H.
+  rewrite big_nil in H.
+  done.
+  rewrite integ_cons in H.
+  rewrite measSupport_cons.
+  destruct (eqVneq a.2 p).
+  subst.
+  destruct (eqVneq a.1 0).
+  rewrite e //=.
+  apply IHd.
+  rewrite e in H.
+  rewrite pmul0r in H.
+  rewrite padd0r in H.
+  simpl in *.
+  done.
+  
+  rewrite (negbTE i).
+  rewrite in_cons.
+  rewrite eq_refl orTb; done.
+  destruct (eqVneq a.1 0).
+  rewrite e //=.
+  apply IHd.
+  rewrite e in H.
+  rewrite pmul0r in H.
+  rewrite padd0r in H.
+  done.
+  rewrite (negbTE i) in H.
+  rewrite pmulr0 in H.
+  rewrite padd0r in H.
+  rewrite (negbTE i0).
+  rewrite in_cons.
+  rewrite IHd.
+  apply orbT.
+  done.
+
+  intros.
+  induction d.
+  done.
+  rewrite integ_cons.
+  apply/contraT.
+  intros.
+  rewrite negbK in H0.
+  have HP := padd0 (a.1 * (if a.2 == p then 1 else 0)) (integ d (fun x => if x == p then 1 else 0)).
+  move/eqP: H0 => H0.
+  rewrite H0 in HP.
+  rewrite eq_refl in HP.
+  move/andP: HP => [HP1 HP2].
+  rewrite measSupport_cons in H.
+  rewrite -pmul0 in HP1.
+  move/orP: HP1 => HP1.
+  destruct HP1.
+  rewrite (eqP H1) in H.
+  simpl in H.
+  have HC := IHd H.
+  rewrite (eqP HP2) in HC.
+  done.
+  destruct (eqVneq a.2 p).
+  subst.
+  rewrite eq_refl in H1.
+  done.
+  rewrite (negbTE i) in H1.
+  rewrite (eqP HP2) in H0.
+  rewrite (negbTE i) in H0.
+  destruct (eqVneq a.1 0).
+  rewrite e in H.
+  simpl in H.
+  have HC := IHd H.
+  rewrite (eqP HP2) in HC.
+  done.
+  rewrite (negbTE i0) in H.
+  move/orP: H => H.
+  destruct H.
+  rewrite (eqP H) in i.
+  rewrite eq_refl in i.
+  done.
+  have HC := IHd H.
+  rewrite (eqP HP2) in HC.
+  done.
 Qed.  
 
-(*
-Lemma sumList_zip {A : Type} (l l' : list A) (f f' : A -> Rat) :
-  length l = length l' ->
-  (forall p, In p (zip l l') -> f (fst p) == f' (snd p)) ->
-  sumList l f == sumList l' f'.
-  revert l'.
-  induction l.
-  induction l'.
-  crush.
-  unfold sumList; crush.
-  crush.
+                           
+Lemma measSupport_measEquiv {A : eqType} (d1 d2 : Meas A) : 
+  d1 ~~ d2 @ 0 -> forall p, p \in (measSupport d1) -> p \in (measSupport d2). 
   intros.
-  induction l'.
-  crush.
-  assert (sumList l f == sumList l' f').
-  apply IHl.
-  crush.
-  intros.
-  simpl in H0.
-  apply H0; crush.
-  repeat rewrite sumList_cons.
-  rewrite H1.
-  pose proof (H0 _ (or_introl (eq_refl (a, a0)))); simpl in *.
-  rewrite H2.
-  crush.
-Qed.
-*)
+  apply measIndicator_in_support.
+  apply measIndicator_in_support in H0.
+  have: forall x, (if x == p then 1 else 0) <= 1.
+  intro; destruct (x == p); done.
+  intro.
+  have He := H (fun x => if x == p then 1 else 0) x.
+  rewrite pdist_le0 in He.
+  move/eqP: He => He.
+  rewrite -He.
+  done.
+Qed.  
 
-Lemma measEquiv_app_symm {A : Type} (d1 d2 : Meas A) :
-  (d1 ++ d2) ~~ (d2 ++ d1).
+
+Lemma measEquiv_app_symm {A : eqType} (d1 d2 : Meas A) :
+  (d1 ++ d2) ~~ (d2 ++ d1) @ 0.
   unfold measEquiv, integ; intros.
-  repeat rewrite map_app.
-  repeat rewrite sumList_app.
-  ring.
+  rewrite !big_cat //=.
+  rewrite paddrC.
+  rewrite pdist_le0;
+  done.
 Qed.
 
-Lemma measEquiv_rev {A : Type} (d : Meas A) :
-  d ~~ (rev d).
+Lemma measEquiv_rev {A : eqType} (d : Meas A) :
+  d ~~ (rev d) @ 0.
   induction d.
-  unfold measEquiv; crush.
-  simpl.
-  assert (a :: d = [a] ++ d).
-  crush.
-  rewrite H.
-  rewrite measEquiv_app_symm.
+  intro.
+  rewrite integ_nil.
+  done.
+  have: a :: d = (a :: nil) ++ d.
+  done.
+  intro H; rewrite H; clear H.
+  rewrite -(paddr0 0).
+  eapply measEquiv_trans.
+  apply measEquiv_app_symm.
+  rewrite rev_cat.
+  rewrite -(paddr0 0).
   apply measEquiv_app_cong.
-  crush.
-  unfold measEquiv; crush.
+  done.
+  intro; intros; rewrite //=.
+  rewrite /rev; simpl.
+  rewrite pdist_le0; done.
 Qed.
 
-(*
-Lemma measBind_zip {A B : Type} {d d' : Meas A} {c c' : A -> Meas B} :
-  length d = length d' ->
-  (forall p, In p (zip d d') -> fst (fst p) == fst (snd p) /\ c (snd (fst p)) ~~ c' (snd (snd p))) ->
-  measBind d c ~~ measBind d' c'.
+Definition unif {A : eqType} (xs : list A) : Meas A :=
+  map (fun x => ((1 / posrat_of_nat (size xs)), x)) xs.
 
-  intros.
-  unfold measBind, measJoin, measEquiv, measSum, integ; intros.
-  repeat rewrite sumList_concat.
-  repeat rewrite sumList_map.
-  eapply sumList_zip.
-  crush.
-  intros.
+Lemma psumr_const {A} (xs : list A) (r : posrat) :
+    \big[padd/0]_(p <- xs) r =  (posrat_of_nat (size xs)) * r.
+  induction xs.
+  rewrite big_nil.
   simpl.
-  destruct (H0 _ H1).
-  unfold measScale.
-  repeat rewrite sumList_map.
+  destruct r.
+  apply/eqP; rewrite /eq_op //=; apply/eqP.
+  rewrite GRing.mul0r.
+  done.
+  rewrite big_cons.
+  rewrite IHxs.
   simpl.
-  etransitivity.
-  apply sumList_body_eq; intros; apply ratMult_assoc.
-  symmetry; etransitivity.
-  apply sumList_body_eq; intros; apply ratMult_assoc.
-  repeat rewrite sumList_factor_constant_l.
-  apply ratMult_eqRat_compat.
-  crush.
-  symmetry; apply (H3 f).
-Qed.
-*)
-
-
-(*
-Global Instance nz_length_app {A} (l1 l2 : list A) {H1 : nz (length l1)} {H2 : nz (length l2)} : nz (length (l1 ++ l2)).
-destruct H1.
-destruct H2.
-constructor.
-rewrite app_length.
-crush.
-Defined.
-
-Global Instance nz_allnatslt_length (n : nat) {H1 : nz n} : nz (length (allNatsLt n)).
-destruct n.
-destruct H1; crush.
-simpl.
-rewrite app_length.
-crush.
-constructor.
-crush.
-Defined.
-*)
-
-(* uniformity *)
-
-
-(* Proof irrelevent inverses *)
-
-Definition natpos (n : nat) :=
-  match n with | 0 => false | _ => true end = true.
-
-
-Global Instance natpos_nz (n : nat) {H : natpos n} : nz n.
-destruct n; crush.
-Defined.
-
-Definition natInverse (n : nat) {H : natpos n} : Rat.
-  apply RatIntro.
-  apply 1%nat.
-  eapply exist.
-  apply natpos_nz.
-  apply H.
-Defined.
-
-Notation "1 // n" := (match n with | 0 => 0 | S m => @natInverse (S m) eq_refl end) (at level 60).  
-
-Lemma natpos_irrel {n : nat} (H1 H2 : natpos n) : H1 = H2.
-  destruct n; crush.
-  unfold natpos in *.
-  apply eq_proofs_unicity.
-  decide equality.
+  destruct r.
+  apply/eqP; rewrite /eq_op //=; apply/eqP.
+  rewrite intS intrD GRing.mulrDl //=.
+  rewrite /intr //=.
+  rewrite GRing.mul1r.
+  done.
 Qed.
 
-Definition unif {A : Type} (xs : list A) : Meas A :=
-  match (length xs) with
-  | 0 => nil
-  | S n => 
-    map (fun x => (1 // (S n), x)) xs
-        end.
-
-Definition unifNats (n : nat) : Meas (nat) := unif (allNatsLt n).
-
-
-Lemma unif_cons {A : Type} (l1 : list A) (a : A) :
-  unif (a :: l1) = ((1 // S (length l1), a) :: (map (fun p => (1 // (S (length l1)), snd p)) (unif l1))).
-  unfold unif; simpl.
-  destruct l1.
-  crush.
-  simpl.
-  rewrite map_map.
-  simpl.
-  crush.
+Lemma unif_isDist {A : eqType} (xs : list A) : (size xs != 0%nat)-> isDist (unif xs).
+  intro; rewrite /isDist /measMass /unif big_map //= psumr_const /eq_op //=; apply /eqP.
+  rewrite GRing.mulrA.
+  rewrite GRing.mulrC.
+  rewrite GRing.mulr1.
+  rewrite GRing.mulVr.
+  done.
+  rewrite GRing.unitfE.
+  rewrite intr_eq0.
+  done.
 Qed.
 
-
-Lemma unif_app {A : Type} (l1 l2 : list A) :
-  unif (l1 ++ l2) = map (fun p => (1 // length (l1 ++ l2), snd p)) (unif l1 ++ unif l2).
-  unfold unif.
-  destruct l1; destruct l2; simpl.
-  crush.
-  rewrite map_map; crush.
-  repeat rewrite app_nil_r; simpl.
-  rewrite map_map; simpl.
-  crush.
-  repeat rewrite map_app.
-  repeat rewrite map_map.
-  simpl.
-  repeat rewrite map_map.
-  simpl.
-  crush.
-Qed.
-
-Lemma unifNats_in (n : nat) : forall p,
-    In p (measSupport (unifNats n)) -> p < n.
-  induction n.
-  crush.
-  crush.
-  unfold unifNats in H.
-  simpl in H.
-  rewrite unif_app in H.
-  unfold measSupport in H.
-  unfold measRed in H.
-  rewrite map_app in H; crush.
-  rewrite filter_app in H.
-  simpl in H.
-  rewrite map_app in H.
-  apply in_app_iff in H; crush.
-  assert (In p (measSupport (unifNats n))).
-  apply in_map_iff in H0; crush.
-  apply filter_In in H1; crush.
-  apply in_map_iff in H; crush.
-  apply in_map_iff; exists x0.
-  crush.
-  unfold measRed.
-  apply filter_In; crush.
-  clear H0.
-  clear IHn.
-  destruct n.
-  crush.
-  simpl in H2.
-  rewrite unif_app in H2.
-  rewrite map_app in H2; simpl in *.
-  destruct x0; apply in_app_iff in H2; crush.
-  apply in_map_iff in H; crush.
-  unfold natInverse.
-  rewrite app_length.
-  simpl.
-  remember (length (allNatsLt n) + 1)%nat.
-  destruct n0.
-  destruct (length (allNatsLt n)); crush.
-  crush.
-  unfold natInverse; rewrite app_length.
-  simpl.
-  remember (length (allNatsLt n0) + 1)%nat.
-  destruct n.
-  destruct (length (allNatsLt n0)); crush.
-  destruct (length (allNatsLt n0) + 1)%nat; crush.
-  apply Nat.lt_lt_succ_r.
-  crush.
-  apply in_map_iff in H0; crush.
-  destruct x; simpl.
-  remember (negb (beqRat (1 // length (allNatsLt n ++ [n])) 0)).
-  destruct b.
-  simpl in H1.
-  crush.
-  crush.
-Qed.
-
-Lemma in_concat_iff {A} : forall (x : A) (ls : list (list A)),
-      In x (concat ls) <-> exists l, In l ls /\ In x l.
-    intros.
-    split.
-    induction ls.
-    intros.
-    inversion H.
-    intros.
-    simpl in H.
-    apply in_app_or in H.
-    destruct H.
-    exists a.
-    crush.
-    destruct (IHls H).
-    exists x0.
-    crush.
-
-    intros.
-    destruct H.
-    induction ls.
-    crush.
-    simpl.
-    destruct H.
-    apply in_app_iff.
-    crush.
-  Qed.
-
-Lemma measBind_in {A B} (d : Meas A) (d' : A -> Meas B) :
-  forall y, In y (measSupport (measBind d d')) <-> exists x,
-      In x (measSupport d) /\ In y (measSupport (d' x)).
-  split; intros.
-  unfold measSupport, measBind, measRed, measJoin in H.
-  rewrite map_map in H; simpl in H.
-  unfold measSum in H.
-  apply in_map_iff in H; crush.
-  apply filter_In in H1; crush.
-
-  apply in_concat_iff in H; crush.
-  apply in_map_iff in H1; crush.
-  unfold measScale in H2.
-  apply in_map_iff in H2; crush.
-
-  destruct (eq_Rat_dec (fst x1) 0).
-  assert ((fst x1) * (fst x0) == 0).
-  rewrite e; ring.
-  rewrite H in H0.
-  crush.
-  destruct (eq_Rat_dec (fst x0) 0).
-  assert (fst x1 * fst x0 == 0). rewrite e; ring.
-  rewrite H in H0; crush.
-
-
-  exists (snd x1).
-  split.
-  unfold measSupport.
-  unfold measRed.
-  apply in_map_iff.
-  exists x1.
-  crush.
-  apply filter_In.
-  crush.
-  unfold measSupport.
-  unfold measRed.
-  apply in_map_iff; exists x0.
-  crush.
-  apply filter_In.
-  crush.
-
-  destruct H.
-  unfold measBind, measSupport.
-  crush.
-  unfold measSupport in *.
-  apply in_map_iff in H0; crush.
-  apply in_map_iff in H1; crush.
-  unfold measRed in *.
-  apply filter_In in H2; crush.
-  apply filter_In in H1; crush.
-  apply in_map_iff.
-
-  exists (fst x0 * fst x, snd x).
-  crush.
-  apply filter_In.
-  crush.
-  unfold measJoin.
-  unfold measSum.
-  rewrite map_map.
-  unfold measScale.
-  simpl.
-  apply in_concat_iff.
-  exists (measScale (fst x0) (d' (snd x0))).
-  crush.
-  apply in_map_iff.
-  exists x0.
-  crush.
-  apply in_map_iff.
-  exists x.
-  crush.
-
-  rewrite Bool.negb_true_iff in *.
-  assert (forall n, n = false <-> n <> true).
-  destruct n; crush.
-  apply H1.
-  apply ratMult_nz.
-  crush.
-Qed.
+Ltac drewr t :=
+  match goal with
+  | [ |- _ ~~ _ @ 0 ] => rewrite -(paddr0 0)
+  | _ => idtac
+           end;
+  eapply measEquiv_trans; [ eapply t | idtac].
 
   Ltac dsimp := repeat (simpl; 
     match goal with
-    | [ |- context[_ <- ret _; _] ] => rewrite bindRet
-    | [ |- context[_ <- (_ <- _; _); _] ] => rewrite bindAssoc
-    | [ |- context[_ <- _; ret _] ] => rewrite bindRet_r
-    | [ |- ?H ~~ ?H ] => apply measEquiv_refl
-                                            end; simpl).
+    | [ |- (_ <- ret _; _) ~~ _ @ _ ] => drewr @bindRet
+    | [ |- _ ~~ (_ <- ret _; _) @ _ ] => apply measEquiv_symm; drewr @bindRet; apply measEquiv_symm
+    | [ |- (_ <- (_ <- _; _); _) ~~ _ @ _ ] => drewr @bindAssoc
+    | [ |- _ ~~ (_ <- (_ <- _; _); _) @ _ ] => apply measEquiv_symm; drewr @bindAssoc; apply measEquiv_symm
+    | [ |- (_ <- _; ret _) ~~ _ @ _ ] => drewr @bindRet_r
+    | [ |- _ ~~ (_ <- _; ret _) @ _ ] => apply measEquiv_symm; drewr @bindRet_r; apply measEquiv_symm
+    | [ |- ?H ~~ ?H @ 0 ] => apply measEquiv_refl
+                                            end; simpl; rewrite ?paddr0 ?padd0r).
 
   Ltac dsimp_in_l := etransitivity; eapply measBind_cong_r; intros; dsimp; apply measEquiv_refl.
   Ltac dsimp_in_r := symmetry; etransitivity; eapply measBind_cong_r; intros; dsimp; apply measEquiv_refl; symmetry.
 
+
+Lemma measBind_in {A B : eqType} (d : Meas A) (d' : A -> Meas B) :
+  forall y, y \in (measSupport (measBind d d')) <-> exists x,
+      (x \in (measSupport d)) && (y \in (measSupport (d' x))).
+  split; intros.
+  rewrite /measSupport /measBind /measJoin /measRed /measSum in H.
+  move/mapP: H => [p H].
+  intro; subst.
+  rewrite mem_filter in H; move/andP: H => [H0 H1].
+  move/flattenP: H1; elim; intros; subst.
+  rewrite /measScale in H.
+  move/mapP: H; elim; intros; subst.
+  move/mapP: H; elim; intros; subst.
+  move/mapP: H1; elim; intros; subst.
+  simpl in *.
+  exists x.2.
+  have HC := pmul0 x.1 x0.1.
+  rewrite (negbTE H0) in HC.
+  apply Bool.orb_false_elim in HC; destruct HC.
+  apply/andP; split; rewrite /measSupport /measRed.
+  apply/mapP.
+  exists x.
+  rewrite mem_filter.
+  apply/andP; split.
+  rewrite H2.
+  done.
+  done.
+  done.
+  apply/mapP; exists x0.
+  rewrite mem_filter; apply/andP; split.
+  rewrite H3.
+  done.
+  done.
+  done.
+
+
+  destruct H.
+  move/andP: H => [H0 H1].
+  rewrite /measSupport /measBind /measJoin /measRed /measSum.
+  rewrite /measSupport /measBind /measJoin /measRed /measSum in H0.
+  rewrite /measSupport /measBind /measJoin /measRed /measSum in H1.
+  move/mapP: H0; elim; intros; subst.
+  rewrite mem_filter in H; move/andP: H; elim; intros; subst.
+  move/mapP: H1; elim; intros; subst.
+  rewrite mem_filter in H1; move/andP: H1; elim; intros; subst.
+  apply/mapP.
+
+  exists (x0.1 * x.1, x.2).
+  rewrite mem_filter; apply/andP; split.
+  rewrite -pmul0.
+  rewrite (negbTE H).
+  rewrite (negbTE H1).
+  done.
+  apply/flattenP.
+  simpl.
+  exists [seq (x0.1 * p.1, p.2) | p <- d' x0.2].
+  apply/mapP.
+  simpl.
+  exists (x0.1, d' x0.2).
+  apply/mapP.
+  exists x0.
+  done.
+  done.
+  rewrite /measScale.
+  simpl.
+  done.
+  apply/mapP.
+  exists x.
+  done.
+  done.
+  simpl; done.
+Qed.
+
+Lemma measBind_irr {A B : eqType} (d : Meas A) (h : A -> Meas B) (c : Meas B) :
+  isDist d ->
+  (forall x, h x ~~ c @ 0) ->
+  (x <- d; h x) ~~ c @ 0.
+
+  rewrite /isDist /measMass.
+  intros.
+  rewrite /measBind /measJoin /measEquiv /integ /measSum //=; intros.
+  rewrite pdist_le0; apply /eqP.
+  rewrite big_flatten //=.
+  rewrite big_map //=.
+  rewrite big_map //=.
+  rewrite /measScale //=.
+  etransitivity.
+  apply eq_bigr; intros.
+  rewrite big_map.
+  simpl.
+  etransitivity.
+  apply eq_bigr.
+  intro; rewrite -pmulrA; done.
+  simpl.
+  rewrite -big_distrr //=.
+  simpl.
+  etransitivity.
+  apply eq_bigr.
+  intros.
+  have Heq := H0 i.2 f H1.
+  rewrite pdist_le0 in Heq.
+  move/eqP: Heq => Heq.
+  rewrite /integ in Heq.
+  rewrite Heq.
+  apply pmulrC.
+  simpl.
+  etransitivity.
+  apply eq_bigr.
+  intros.
+  rewrite big_distrl //=.
+  simpl.
+  rewrite exchange_big //=.
+  apply eq_bigr.
+  intros.
+  rewrite -big_distrr //=.
+  rewrite (eqP H).
+  rewrite pmulr1.
+  done.
+Qed.
+
+Lemma isSubdist_bind {A B : eqType} (d : Meas A) (f : A -> Meas B) :
+  isSubdist d ->
+  (forall x, isSubdist (f x)) ->
+  isSubdist (measBind d f).
+  rewrite /isSubdist /measMass /measBind /measJoin /measSum; intros.
+  rewrite big_flatten //=.
+  rewrite !big_map.
+  rewrite /measScale //=.
+  have:  \big[padd/0]_(j <- d) \big[padd/0]_(i <- [seq (j.1 * p.1, p.2) | p <- f j.2]) i.1 =
+         \big[padd/0]_(j <- d) (j.1 * \big[padd/0]_(i <- f j.2) i.1). 
+  apply eq_bigr; intros.
+  rewrite big_map //=.
+  rewrite big_distrr //=.
+  intros.
+  rewrite x; clear x.
+  eapply ple_trans.
+  apply ple_sum; intros.
+  apply ple_mul_lr.
+  apply ple_refl.
+  apply H0.
+  simpl.
+  eapply ple_trans.
+  apply ple_sum; intros; rewrite pmulr1; apply ple_refl.
+  done.
+Qed.
+
+Lemma isSubdist_ret {A : eqType} (a : A) :
+  isSubdist (ret a).
+  rewrite /isSubdist /measMass /measRet.
+  rewrite big_cons big_nil.
+  done.
+Qed.
+
+Lemma isDist_isSubdist {A : eqType} (m : Meas A) :
+  isDist m -> isSubdist m.
+  rewrite /isDist /isSubdist.
+  move/eqP; intro H; rewrite H; done.
+Qed.
+
+Lemma fmap_cong {A B : eqType} (d1 d2 : Meas A) ( f : A -> B) e :
+  d1 ~~ d2 @ e ->
+  meas_fmap d1 f ~~ meas_fmap d2 f @ e.
+  rewrite /meas_fmap; intros; dsimp.
+  apply measBind_cong_l.
+  done.
+  intros; apply isSubdist_ret.
+Qed.  
