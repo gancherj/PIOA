@@ -1,6 +1,6 @@
 From mathcomp Require Import ssreflect ssrfun ssrbool ssrint eqtype ssrnat seq choice fintype rat finfun.
 From mathcomp Require Import bigop ssralg div ssrnum ssrint finset.
-Require Import PIOA Meas Posrat Expansion CpdtTactics.
+Require Import PIOA Meas Posrat Expansion.
 
 Set Implicit Arguments.
 Unset Strict Implicit.

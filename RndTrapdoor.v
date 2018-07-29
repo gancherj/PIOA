@@ -1,6 +1,6 @@
 From mathcomp Require Import ssreflect ssrfun ssrbool ssrint eqtype ssrnat seq choice fintype rat finfun.
 From mathcomp Require Import bigop ssralg div ssrnum ssrint finset.
-Require Import PIOA Meas Posrat Expansion CpdtTactics.
+Require Import PIOA Meas Posrat Expansion.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -464,16 +464,20 @@ Definition TrapTr (x : TrapQ) (a : Action n) : option (Meas TrapQ) :=
               end.
 
 Lemma TrapTr_subdist x a mu : TrapTr x a = Some mu -> isSubdist mu.
-destruct x,a. 
-destruct s; crush.
-dsubdist; [ apply uniford_subdist | intros; dsubdist ].
-destruct s; crush.
-destruct s; crush.
+destruct x,a.
+destruct s; simpl.
+try ltac:(intro Heq; injection Heq; intros; subst); dsubdist; [ apply uniford_subdist | intros; dsubdist ]; try congruence.
+congruence.
+destruct s; simpl; try congruence.
+destruct s; simpl; try congruence.
+intro Heq; injection Heq; intros; subst.
 dsubdist.
-destruct o; crush.
-rewrite /TrapTr.
-destruct (o == o0); crush; dsubdist.
-rewrite /TrapTr; crush.
+simpl; congruence.
+simpl.
+destruct (o == o0); simpl.
+intro Heq; injection Heq; intro; subst; dsubdist.
+congruence.
+simpl; congruence.
 Qed.
 
 Definition trappre := mkPrePIOA [finType of Action n] [finType of TrapQ] (inl (inl tt)) TrapTr TrapTr_subdist.
