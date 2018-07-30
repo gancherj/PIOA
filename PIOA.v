@@ -43,6 +43,9 @@ mkPIOA {
   actSetValid : forall s x, tr pP s x <> None -> x \in (pI :|: (pO :|: pH))
   }.
 
+Definition action {A} (P : @PIOA A) :=
+  (pI P) :|: (pO P) :|: (pH P).
+
 Lemma tr_subDist {A} (P : @PIOA A) s a mu :
   tr P s a = Some mu ->
   isSubdist mu.
