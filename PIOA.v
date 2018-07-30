@@ -46,6 +46,12 @@ mkPIOA {
 Definition action {A} (P : @PIOA A) :=
   (pI P) :|: (pO P) :|: (pH P).
 
+Lemma pActionDeterm {A} (P : @PIOA A) :
+  forall T, T \in (pTO P :|: pTH P) -> actionDeterm P T.
+  destruct P. destruct TS0; simpl in *.
+  done.
+Qed.
+
 Lemma tr_subDist {A} (P : @PIOA A) s a mu :
   tr P s a = Some mu ->
   isSubdist mu.
