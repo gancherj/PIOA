@@ -1,8 +1,8 @@
 
 From mathcomp Require Import ssreflect ssrfun ssrbool ssrint eqtype ssrnat seq choice fintype rat finfun.
-From mathcomp Require Import bigop ssralg div ssrnum ssrint finset.
+From mathcomp Require Import bigop ssralg div ssrnum ssrint finset ssrnum ssrnat.
 
-Require Import PIOA Meas Posrat.
+Require Import PIOA2 Meas Posrat.
 
 Definition prePIOA_comptrans {Act : finType} (P1 P2 : @PIOA Act) (s : [finType of (pQ P1 * pQ P2)]%type) (a : [finType of Act]) : option (Meas ([finType of pQ P1 * pQ P2])%type) :=
   match tr P1 s.1 a, tr P2 s.2 a with
@@ -36,9 +36,9 @@ Defined.
 
 Record Compatible {Act : finType} (P1 P2 : @PIOA Act) :=
   {
-    _ : [disjoint (pO P1) & (pO P2)];
-    _ : [disjoint (pH P1) & (action P2)];
-    _ : [disjoint (pH P2) & (action P1)];
+    _ : [disjoint (cover (pTO P1)) & (cover (pTO P2))];
+    _ : [disjoint (cover (pTH P1)) & (action P2)];
+    _ : [disjoint (cover (pTH P2)) & (action P1)];
     }.
 
 Lemma disjointP {T : finType} (P Q : {set T}) :
@@ -125,76 +125,51 @@ move/negP: H13; done.
 move/negP: H23; done.
 Qed.
 
+Lemma notsetU : forall {T : finType} {s1 s2 : {set T}} {x},
+                          (x \notin s1 :|: s2) = ((x \notin s1) && (x \notin s2)).
+intros.
+rewrite in_setU negb_or; done.
+Qed.
+
+  Lemma compPIOA_trivIset {A : finType} (P1 P2 : @PIOA A) (H : Compatible P1 P2) :
+    trivIset
+    ((pI P1 :|: pI P2) :\: (cover (pTO P1) :|: cover (pTO P2)) |: (pTO P1 :|: pTO P2)
+     :|: (pTH P1 :|: pTH P2)).
+    admit.
+    Admitted.
+
+  Lemma compPIOA_actionDeterm {A : finType} (P1 P2 : @PIOA A) T :T \in pTO P1 :|: pTO P2 :|: (pTH P1 :|: pTH P2) -> actionDeterm (comp_prePIOA P1 P2) T.
+    admit.
+    Admitted.
+
+  Lemma compPIOA_inputEnabled {A : finType} (P1 P2 : @PIOA A) (H : Compatible P1 P2) :
+  forall (s : pQ (comp_prePIOA P1 P2)) (x : A),
+  x \in (pI P1 :|: pI P2) :\: (cover (pTO P1) :|: cover (pTO P2)) ->
+  enabled (comp_prePIOA P1 P2) s x   .
+  Admitted.
+
+  Lemma compPIOA_actSetValid {Act : finType} (P1 P2 : @PIOA Act) :
+     forall (s : pQ (comp_prePIOA P1 P2)) (x : Act),
+  enabled (comp_prePIOA P1 P2) s x ->
+  x
+    \in (pI P1 :|: pI P2) :\: (cover (pTO P1) :|: cover (pTO P2))
+        :|: (cover (pTO P1 :|: pTO P2) :|: cover (pTH P1 :|: pTH P2)).
+    Admitted.
+
+
 Definition compPIOA {Act : finType} (P1 P2 : @PIOA Act) : Compatible P1 P2 -> @PIOA Act.
   intro; econstructor.
-  instantiate (5 := comp_prePIOA P1 P2).
-  instantiate (4 := pO P1 :|: pO P2).
-  instantiate (3 := pH P1 :|: pH P2).
+  instantiate (3 := (pI P1 :|: pI P2) :\: (cover (pTO P1) :|: cover (pTO P2))).
   instantiate (2 := pTO P1 :|: pTO P2).
   instantiate (1 := pTH P1 :|: pTH P2).
-  destruct H.
-
-  constructor.
-
-  apply partition_disjoint.
-  have: cover (pTO P1) = pO P1.
-    destruct P1.
-    destruct TS.
-    move: (and3P i0); elim; move/eqP; simpl; done.
-  intro Heq; rewrite Heq; clear Heq.
-
-  have: cover (pTO P2) = pO P2.
-    destruct P2.
-    destruct TS.
-    move: (and3P i0); elim; move/eqP; simpl; done.
-  intro Heq; rewrite Heq; clear Heq.
-
-  done.
-  done.
-  destruct P1; destruct TS; done.
-  destruct P2; destruct TS; done.
-
-  have: [disjoint pH P1 & pH P2].
-  apply/disjointP; move: (disjointP _ _ H0).
-  intros.
-  have H3 := (elimT _ H2).
-  rewrite/action in H3; move/setUP: H3 => H3.
-  apply Decidable.not_or in H3; destruct H3.
-  move/negP: H4; done.
-  intro.
-
-  apply partition_disjoint.
-
-
-  have: cover (pTH P1) = pH P1.
-    destruct P1.
-    destruct TS.
-    move: (and3P i1); elim; move/eqP; simpl; done.
-  intro Heq; rewrite Heq; clear Heq.
-
-  have: cover (pTH P2) = pH P2.
-    destruct P2.
-    destruct TS.
-    move: (and3P i1); elim; move/eqP; simpl; done.
-  intro Heq; rewrite Heq; clear Heq.
-  done.
+  apply compPIOA_trivIset.
   done.
 
+  apply compPIOA_actionDeterm.
 
-  destruct P1; destruct TS; done.
-  destruct P2; destruct TS; done.
+  apply compPIOA_inputEnabled; done.
 
-  intros.
-  rewrite /actionDeterm.
+  apply compPIOA_actSetValid.
+Defined.
 
-  intros.
-  rewrite /enabled.
-  simpl.
-  admit.
 
-  instantiate (1 := pI P1 :|: pI P2).
-  apply/trivIsetP; intros.
-  admit.
-  admit.
-  admit.
-Admitted.
