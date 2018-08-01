@@ -12,11 +12,9 @@ Definition prePIOA_comptrans {Act : finType} (P1 P2 : @PIOA Act) (s : [finType o
   | None, None => None
   end.
 
-Definition comp_prePIOA {Act : finType} (P1 P2 : @PIOA Act) : @prePIOA Act.
-  econstructor.
-  apply (start P1, start P2).
-  instantiate (1 := (prePIOA_comptrans P1 P2)).
-  simpl.
+Lemma prePIOA_comptrans_subdist {Act : finType} (P1 P2 : @PIOA Act) : forall s a mu,
+    prePIOA_comptrans P1 P2 s a = Some mu ->
+    isSubdist mu.
   intros.
   destruct s.
   rewrite /prePIOA_comptrans //= in H.
@@ -32,7 +30,11 @@ Definition comp_prePIOA {Act : finType} (P1 P2 : @PIOA Act) : @prePIOA Act.
   eapply isSubdist_bind; [eapply tr_subDist; apply Heqmu1 | intros; apply isSubdist_ret].
   eapply isSubdist_bind; [eapply tr_subDist; apply Heqmu2 | intros; apply isSubdist_ret].
   congruence.
-Defined.
+Qed.
+
+Check mkPrePIOA.
+
+Definition comp_prePIOA {Act : finType} (P1 P2 : @PIOA Act) := mkPrePIOA Act ([finType of (pQ P1 * pQ P2)%type]) (start P1, start P2) (prePIOA_comptrans P1 P2) (prePIOA_comptrans_subdist P1 P2).
 
 Record Compatible {Act : finType} (P1 P2 : @PIOA Act) :=
   {
@@ -58,12 +60,45 @@ Lemma disjoint_setD {T : finType} (s1 s2 s3 : {set T}) :
 Qed.
 
 Definition compPIOA {Act : finType} (P1 P2 : @PIOA Act) : Compatible P1 P2 -> @PIOA Act.
-  intro H; destruct H.
-  econstructor.
+
+
+  intro; econstructor.
+  (* *** input enabledness *** *)
+  2: {
+  instantiate (1 := comp_prePIOA P1 P2).
+  instantiate (1 := (pI P1 :|: pI P2) :\: (cover (pTO P1 :|: pTO P2))).
+  move=> s x; move/setDP; elim; move/setUP; elim; intros.
+  rewrite /enabled.
+
+  have Hi := inputEnabled P1 s.1 x H0.
+  simpl; rewrite /prePIOA_comptrans.
+  have: exists mu, tr P1 s.1 x = Some mu.
+  rewrite /enabled in Hi; destruct (tr P1 s.1 x).
+  eexists; done.
+  done.
+  elim; intros.
+  rewrite H2.
+  destruct (tr P2 s.2 x); done.
+
+  have Hi := inputEnabled P2 s.2 x H0.
+  simpl; rewrite /prePIOA_comptrans.
+  have: exists mu, tr P2 s.2 x = Some mu.
+  rewrite /enabled in Hi; destruct (tr P2 s.2 x).
+  eexists; done.
+  done.
+  rewrite /enabled //= /prePIOA_comptrans.
+  elim; intros.
+  rewrite H2.
+  destruct (tr P1 s.1 x); done.
+  }
+
+
   instantiate (1 := pTH P1 :|: pTH P2).
   instantiate (1 := pTO P1 :|: pTO P2).
-  instantiate (1 := (pI P1 :|: pI P2) :\: (cover (pTO P1 :|: pTO P2))).
-  econstructor.
+
+  destruct H.
+  constructor.
+
   move=> x Hx.
 
   intros; apply/disjointP; intros.
@@ -74,20 +109,20 @@ Definition compPIOA {Act : finType} (P1 P2 : @PIOA Act) : Compatible P1 P2 -> @P
   apply disjoint_setD.
 
   apply/disjointP; intros.
-  move/setUP: H2; elim.
-  move/setUP: H3; elim; intros.
+  move/setUP: H3; elim.
+  move/setUP: H2; elim; intros.
   destruct (actionDisjoint P1).
-  move/disjointP: (H5 _ H3).
+  move/disjointP: (H5 _ H2).
   intro He; apply He; done.
-  move: (H0 _ _ H3 (pI_in_action P2)); rewrite disjoint_sym; move/disjointP.
+  move: (H1 _ _ H2 (pI_in_action P1)); rewrite disjoint_sym; move/disjointP.
   intro Hd; apply Hd; done.
 
-  move/setUP: H3; elim; intros.
-  move: (H1 _ _ H3 (pI_in_action P1)); rewrite disjoint_sym; move/disjointP.
+  move/setUP: H2; elim; intros.
+  move: (H0 _ _ H2 (pI_in_action P2)); rewrite disjoint_sym; move/disjointP.
   intro Hd; apply Hd; done.
 
   destruct (actionDisjoint P2).
-  move/disjointP: (H5 _ H3); intro Hd; apply Hd; done.
+  move/disjointP: (H5 _ H2); intro Hd; apply Hd; done.
 
   move=> x y; move/setUP; elim; intro; move/setUP; elim; intro.
 
@@ -120,31 +155,76 @@ Definition compPIOA {Act : finType} (P1 P2 : @PIOA Act) : Compatible P1 P2 -> @P
   done.
   apply tH_in_action; done.
 
+
   destruct (actionDisjoint P2); apply H9; done.
 
-  instantiate (1 := comp_prePIOA P1 P2).
-  intros; rewrite /actionDeterm.
-  intros; rewrite /enabled //= /prePIOA_comptrans.
-  move/setUP: H2; elim; move/setUP; elim; intros.
-
-  remember (tr P1 s.1 x) as mu1; remember (tr P1 s.1 y) as mu2; destruct mu1; destruct mu2.
-
-  have Hc := pActionDeterm P1 T _ _.
+  (* *** Action determinism *** *)
 
 
-  exfalso.
-  apply/contraT.
 
-  Search "False" "false".
-  exfalso.
-  apply/negP.
-  admit.
+  (* action validity *)
 
-  exfalso; apply/negP. apply Hc.
-  apply Hc.
+  rewrite /enabled //= /prePIOA_comptrans.
+  intros.
+  remember (tr P1 s.1 x) as mu; destruct mu.
+  have: enabled P1 s.1 x.
+  rewrite /enabled -Heqmu; done.
+  intro.
+  Check actSetValid.
+  move/setUP: (actSetValid P1 s.1 x x0); elim. move/setUP; elim.
+  remember (x \in cover (pTO P2)); symmetry in Heqb; destruct b.
+  intro; apply/setUP; left; apply/setUP; right.
+  rewrite /cover.
+  rewrite bigcup_setU.
+  apply/setUP; right.
+  apply Heqb.
+  intro; apply/setUP; left; apply/setUP; left.
+  apply/setDP; split.
+  apply/setUP; left; done.
+  rewrite /cover bigcup_setU notsetU.
+  rewrite Heqb.
+  rewrite //= andbT.
+  apply/bigcupP; elim.
+  intros.
+  destruct (actionDisjoint P1).
+  move: (H4 _ H2).
+  move/disjointP.
+  intro Hc; move: (Hc _ H1).
+  move/negP.
+  intros Hcc; apply Hcc; done.
 
-  Check (pActionDeterm P1).
-  exfalso; apply (pActionDeterm P1 T).
+  intro; apply/setUP; left; apply/setUP; right.
+  rewrite /cover bigcup_setU; apply/setUP; left; done.
+  intro; apply/setUP; right.
+  rewrite /cover bigcup_setU; apply/setUP; left; done.
+  have: enabled P2 s.2 x.
+  rewrite /enabled; destruct (tr P2 s.2 x); done.
+  intro.
 
+  move/setUP: (actSetValid P2 s.2 x x0); elim. move/setUP; elim.
+  remember (x \in cover (pTO P1)); symmetry in Heqb; destruct b.
+  intro; apply/setUP; left; apply/setUP; right.
+  rewrite /cover.
+  rewrite bigcup_setU.
+  apply/setUP; left.
+  apply Heqb.
+  intro; apply/setUP; left; apply/setUP; left.
+  apply/setDP; split.
+  apply/setUP; right; done.
+  rewrite /cover bigcup_setU notsetU.
+  rewrite Heqb.
+  simpl.
+  apply/bigcupP; elim.
+  intros.
+  destruct (actionDisjoint P2).
+  move: (H4 _ H2).
+  move/disjointP.
+  intro Hc; move: (Hc _ H1).
+  move/negP.
+  intros Hcc; apply Hcc; done.
 
-  
+  intro; apply/setUP; left; apply/setUP; right.
+  rewrite /cover bigcup_setU; apply/setUP; right; done.
+  intro; apply/setUP; right.
+  rewrite /cover bigcup_setU; apply/setUP; right; done.
+Defined.

@@ -2,7 +2,7 @@
 From mathcomp Require Import ssreflect ssrfun ssrbool ssrint eqtype ssrnat seq choice fintype rat finfun.
 From mathcomp Require Import bigop ssralg div ssrnum ssrint finset ssrnum ssrnat.
 
-Require Import PIOA2 Meas Posrat CompPIOA.
+Require Import PIOA2 Meas Posrat CompPIOA Lems.
 
 Inductive Action : Type :=
   | Choose : Action 
@@ -82,47 +82,81 @@ Definition guesspre : prePIOA := mkPrePIOA [finType of Action] [finType of guess
 
 
 Definition guessPIOA : @PIOA [finType of Action].
-  eapply mkPIOA.
-
+  econstructor.
+  instantiate (3 := [set Input true; Input false]).
   instantiate (2 := [set [set Output true; Output false]]).
-  instantiate (1 := [set Input true; Input false]).
-  move=> x;
-  rewrite !in_set; move/eqP; intro; subst.
-  apply/disjointP.
+  instantiate (1 := [set [set Choose]]).
+
+  constructor.
+  move=> x; rewrite !in_set; intro; apply/disjointP; move=> y; rewrite !in_set.
+  rewrite (eqP H) !in_set.
+  move/orP; elim; move/eqP; intro; subst; done.
+
+  move=> x; rewrite !in_set; intro; apply/disjointP; move=> y; rewrite !in_set.
+  rewrite (eqP H) !in_set.
+  move/orP; elim; move/eqP; intro; subst; done.
+
+  move=> x y; rewrite !in_set; move/eqP; intro; subst; move/eqP; intro; subst; apply/disjointP.
   move=> x; rewrite !in_set; move/orP; elim; move/eqP; intro; subst; done.
 
-  instantiate (1 := [set [set Choose]]).
-  move=>x; rewrite !in_set; move/eqP; intro; subst.
-  apply/disjointP; move=> x; rewrite !in_set; move/orP; elim; move/eqP; intro; subst; done.
-  move=> x y; rewrite !in_set; move/eqP; intro; subst; move/eqP; intro; subst.
-  apply/disjointP; intro; rewrite !in_set; move/orP; elim; move/eqP; intro; subst; done.
-  move=>x y; rewrite !in_set; move/eqP; intro; subst; move/eqP; intro; subst; rewrite eq_refl; done.
-  move=>x y; rewrite !in_set; move/eqP; intro; subst; move/eqP; intro; subst; rewrite eq_refl; done.
+  move=> x y; rewrite !in_set; move/eqP; intro; subst; move/eqP; intros; subst.
+  rewrite eq_refl in H; done.
+  move=> x y; rewrite !in_set; move/eqP; intro; subst; move/eqP; intros; subst.
+  rewrite eq_refl in H; done.
 
   instantiate (1 := guesspre).
-  move=> T; rewrite !in_set; move/orP; elim; move/eqP; intro; subst; rewrite/actionDeterm; move=> s x y; rewrite !in_set.
-  move/orP; elim; move/eqP; intro; subst; move/orP; elim; move/eqP; intro; subst; rewrite ?eq_refl.
+  move=> s x; rewrite !in_set; move/orP; elim; move/eqP; intro; subst.
+  destruct s; destruct o; destruct b.
+  destruct b0; done.
+  destruct b0; done.
   done.
-  intro.
-  destruct s; destruct o; simpl; rewrite /enabled; simpl; destruct b; done.
-  destruct s; destruct o; simpl; rewrite /enabled; simpl; destruct b; done.
   done.
-  move/eqP; intro; subst; move/eqP; intro; subst; rewrite eq_refl; done.
-  move=> s x; rewrite !in_set; move/orP; elim; move/eqP => heq ; subst; rewrite /enabled; destruct s as [o b]; destruct o.
-  destruct b0; destruct b; done.
-  destruct b; done.
-  destruct b0; destruct b; done.
-  destruct b; done.
+  destruct s; destruct o; destruct b.
+  destruct b0; done.
+  destruct b0; done.
+  done.
+  done.
 
-  intros.
-  destruct x.
+
+  intros; destruct x.
   apply/setUP; right.
-  apply/bigcupP; exists [set Choose]; rewrite in_set; done.
+  rewrite /cover.
+  apply/bigcupP; exists [set Choose]; rewrite in_set //=.
   apply/setUP; left; apply/setUP; left.
-  destruct b; apply/setUP; [left | right]; rewrite in_set; done.
+  apply/setUP; destruct b; [left | right]; rewrite in_set //=.
   apply/setUP; left; apply/setUP; right.
   apply/bigcupP.
   exists [set Output true; Output false].
-  rewrite in_set; done.
-  destruct b; rewrite !in_set; rewrite ?eq_refl ?orbT ?orTb; done.
+  rewrite in_set //=.
+  destruct b; rewrite !in_set //=.
 Defined.
+
+Section GuessComp.
+  Context (A : @PIOA [finType of Action]).
+  Context (Hcompat : Compatible guessPIOA A).
+
+  Definition Guess := compPIOA guessPIOA A Hcompat.
+
+
+Inductive GuessSpec (ts : seq (Task Guess)) : Prop:=
+| GuessSpec1 : (exists (mu : Meas (pQ A)),
+                   runPIOA _ ts (startTr _) ~~ (y <- mu; ret ((start guessPIOA, y), nil)) @ 0) -> GuessSpec ts
+| GuessSpec2 : GuessSpec ts.
+
+Lemma guessSpec: forall ts, GuessSpec ts.
+  induction ts using last_ind.
+  apply GuessSpec1; exists (ret (start A)).
+  simpl.
+  rewrite /startTr.
+  dsimp.
+  reflexivity.
+  destruct x.
+  simpl in i.
+  rewrite /mkGuessQ.
+  
+  rewrite /Guess.
+  rewrite /compPIOA.
+  rewrite /start.
+
+
+

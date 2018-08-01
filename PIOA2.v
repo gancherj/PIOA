@@ -41,10 +41,28 @@ buildPIOA {
   pTH : {set {set Act}};
   pP :> @prePIOA Act;
   actionDisjoint : ActionDisjoint pI pTO pTH;
-  pActionDeterm : forall T, T \in (pTO :|: pTH) -> actionDeterm pP T;
+  (* problem with composition?
+  pActionDeterm : forall T, T \in (pTO :|: pTH) -> actionDeterm pP T; *)
   inputEnabled : forall s x, x \in pI -> enabled pP s x;
   actSetValid : forall s x, enabled pP s x -> x \in (pI :|: cover pTO :|: cover pTH)
   }.
+(*
+Lemma actionDetermCase {Act : finType} (P : @PIOA Act) :
+  forall s T x y, T \in (pTO P :|: pTH P) -> x \in T -> y \in T -> x != y ->
+                                                          (enabled P s x /\ ~~ enabled P s y) \/
+                                                          (enabled P s y /\ ~~ enabled P s x) \/
+                                                          (~~ enabled P s x /\ ~~ enabled P s y).
+  intros.
+  have Ha := pActionDeterm _ _ H s x y H0 H1 H2.
+  remember (enabled P s x) as b; destruct b.
+  remember (enabled P s y) as b'; destruct b'; simpl.
+  done.
+  left; done.
+  remember (enabled P s y) as b'; destruct b'; simpl.
+  right; left; done.
+  right; right; done.
+Qed.
+*)
 
 Lemma pIODisjoint {A}  (P : @PIOA A) :
   (forall x, x \in pTO P -> [disjoint (pI P) & x]).
