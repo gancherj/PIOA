@@ -23,20 +23,73 @@ Definition actionDeterm {Act : finType} (P : @prePIOA Act) (T : {set Act}) :=
   forall s x y,
     x \in T -> y \in T -> x != y -> ~~ (enabled P s x && enabled P s y).
 
+Record ActionDisjoint {Act : finType} (pI : {set Act}) (pTO pTH : {set {set Act}}) :=
+  {
+    _ : forall x, x \in pTO -> [disjoint pI & x];
+    _ : forall y, y \in pTH -> [disjoint pI & y];
+    _ : forall x y, x \in pTO -> y \in pTH -> [disjoint x & y];
+    _ : forall x y, x \in pTO -> y \in pTO -> x != y -> [disjoint x & y];
+    _ : forall x y, x \in pTH -> y \in pTH -> x != y -> [disjoint x & y];
+    }.
+    
+    
+
 Record PIOA {Act : finType} :=
-mkPIOA {
+buildPIOA {
   pI : {set Act};
   pTO : {set {set Act}};
   pTH : {set {set Act}};
   pP :> @prePIOA Act;
-  actionDisjoint : trivIset ([set pI] :|: pTO :|: pTH);
+  actionDisjoint : ActionDisjoint pI pTO pTH;
   pActionDeterm : forall T, T \in (pTO :|: pTH) -> actionDeterm pP T;
   inputEnabled : forall s x, x \in pI -> enabled pP s x;
-  actSetValid : forall s x, enabled pP s x -> x \in (pI :|: (cover pTO :|: cover pTH))
+  actSetValid : forall s x, enabled pP s x -> x \in (pI :|: cover pTO :|: cover pTH)
   }.
 
-Definition action {A} (P : @PIOA A) :=
-  (pI P) :|: (cover (pTO P)) :|: (cover (pTH P)).
+Lemma pIODisjoint {A}  (P : @PIOA A) :
+  (forall x, x \in pTO P -> [disjoint (pI P) & x]).
+  destruct P; destruct actionDisjoint0; done.
+Qed.
+
+Lemma pIHDisjoint {A} (P : @PIOA A) :
+  (forall x, x \in pTH P -> [disjoint (pI P) & x]).
+  destruct P; destruct actionDisjoint0; done.
+Qed.
+
+Lemma pOHDisjoint {A} (P : @PIOA A):
+  forall x y, x \in pTO P -> y \in pTH P -> [disjoint x & y].
+  destruct P; destruct actionDisjoint0; done.
+Qed.
+
+Lemma pOODisjoint {A} (P : @PIOA A):
+  forall x y, x \in pTO P -> y \in pTO P -> x != y -> [disjoint x & y].
+  destruct P; destruct actionDisjoint0; done.
+Qed.
+
+Lemma pHHDisjoint {A} (P : @PIOA A):
+  forall x y, x \in pTH P -> y \in pTH P -> x != y -> [disjoint x & y].
+  destruct P; destruct actionDisjoint0; done.
+Qed.
+
+
+Definition action {A : finType} (P : @PIOA A) :=
+  [set (pI P)] :|: (pTO P) :|: (pTH P).
+
+Lemma pI_in_action {A : finType} (P : @PIOA A) :
+  pI P \in action P.
+  rewrite/action; apply/setUP; left; apply/setUP; left; rewrite in_set; done.
+Qed.
+
+Lemma tO_in_action {A : finType} (P : @PIOA A) :
+  forall x, x \in pTO P -> x \in action P.
+  intros; rewrite/action; apply/setUP; left; apply/setUP; right; done.
+Qed.
+
+Lemma tH_in_action {A : finType} (P : @PIOA A) :
+  forall x, x \in pTH P -> x \in action P.
+  intros; rewrite/action; apply/setUP; right; done.
+Qed.
+
 
 
 Lemma tr_subDist {A} (P : @PIOA A) s a mu :
