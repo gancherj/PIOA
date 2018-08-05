@@ -84,3 +84,9 @@ apply/setUP; elim; intros.
 move/negP: H13; done.
 move/negP: H23; done.
 Qed.
+
+Lemma EM (b : bool) : forall (P : Type), (b -> P) -> (~~ b -> P) -> P.
+  destruct b; intros P H H0; [apply H | apply H0]; done.
+Qed.
+
+Ltac caseOn b := apply (EM b).

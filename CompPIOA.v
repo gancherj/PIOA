@@ -7,32 +7,28 @@ Require Import PIOA2 Meas Posrat Lems.
 Definition prePIOA_comptrans {Act : finType} (P1 P2 : @PIOA Act) (s : [finType of (pQ P1 * pQ P2)]%type) (a : [finType of Act]) : option (Meas ([finType of pQ P1 * pQ P2])%type) :=
   match tr P1 s.1 a, tr P2 s.2 a with
   | Some mu1, Some mu2 => Some (x <- mu1; y <- mu2; ret (x,y))
-  | None, Some mu2 => Some (y <- mu2; ret (s.1, y))
-  | Some mu1, None => Some (x <- mu1; ret (x, s.2))
+  | None, Some mu2 => if a \notin (cover (action P1)) then Some (y <- mu2; ret (s.1, y)) else None
+  | Some mu1, None => if a \notin (cover (action P2)) then Some (x <- mu1; ret (x, s.2)) else None
   | None, None => None
   end.
 
-Lemma prePIOA_comptrans_subdist {Act : finType} (P1 P2 : @PIOA Act) : forall s a mu,
-    prePIOA_comptrans P1 P2 s a = Some mu ->
-    isSubdist mu.
+Lemma prePIOA_comptrans_subdist {Act : finType} (P1 P2 : @PIOA Act) s a mu : prePIOA_comptrans P1 P2 s a = Some mu -> isSubdist mu.
+  simpl.
   intros.
   destruct s.
   rewrite /prePIOA_comptrans //= in H.
   remember (tr P1 s a) as mu1; remember (tr P2 s0 a) as mu2; symmetry in Heqmu1; symmetry in Heqmu2.
-  destruct mu1; destruct mu2; try injection H; try intro; subst.
-  eapply isSubdist_bind.
-  eapply tr_subDist.
-  apply Heqmu1.
-  intros; eapply isSubdist_bind.
-  eapply tr_subDist.
-  apply Heqmu2.
-  intros; eapply isSubdist_ret.
-  eapply isSubdist_bind; [eapply tr_subDist; apply Heqmu1 | intros; apply isSubdist_ret].
-  eapply isSubdist_bind; [eapply tr_subDist; apply Heqmu2 | intros; apply isSubdist_ret].
-  congruence.
+  destruct mu1; destruct mu2; intros; subst.
+  injection H; intros; subst; dsubdist; intros; dsubdist; intros; dsubdist.
+  caseOn (a \notin cover (action P2)); intro Hc; [rewrite Hc in H | rewrite (negbTE Hc) in H].
+  injection H; intros; subst; dsubdist; intros; dsubdist; intros; dsubdist.
+  done.
+  caseOn (a \notin cover (action P1)); intro Hc; [rewrite Hc in H | rewrite (negbTE Hc) in H].
+  injection H; intros; subst; dsubdist; intros; dsubdist; intros; dsubdist.
+  done.
+  done.
 Qed.
 
-Check mkPrePIOA.
 
 Definition comp_prePIOA {Act : finType} (P1 P2 : @PIOA Act) := mkPrePIOA Act ([finType of (pQ P1 * pQ P2)%type]) (start P1, start P2) (prePIOA_comptrans P1 P2) (prePIOA_comptrans_subdist P1 P2).
 
@@ -44,11 +40,41 @@ Record Compatible {Act : finType} (P1 P2 : @PIOA Act) :=
     }.
 
 
+Lemma compatible_sym {A : finType} (P1 P2 : @PIOA A) :
+  Compatible P1 P2 -> Compatible P2 P1.
+  intros.
+  destruct H.
+  constructor.
+  intros; rewrite disjoint_sym; apply H; done.
+  intros; apply H1; done.
+  intros; apply H0; done.
+Qed.
 
 Lemma notsetU : forall {T : finType} {s1 s2 : {set T}} {x},
                           (x \notin s1 :|: s2) = ((x \notin s1) && (x \notin s2)).
 intros.
 rewrite in_setU negb_or; done.
+Qed.
+
+Lemma notincover : forall {T : finType} (x : T) (s : {set {set T}}), 
+                            (x \notin (cover s)) =
+                            [forall t, (t \in s) ==> (x \notin t)].
+  intros; caseOn (x \in cover s); intros.
+  rewrite H //=.
+  symmetry; apply/forallP.
+  intro.
+  move/bigcupP: H; elim; intros.
+  move/implyP: (H0 x0).
+  intro Hc; rewrite (negbTE (Hc H)) in H1; done.
+  rewrite H; symmetry.
+  apply/forallP; intros.
+  move/bigcupP: H.
+  intros.
+  apply/implyP; intro.
+  caseOn (x \in x0).
+  intro; exfalso; apply H.
+  exists x0; done.
+  done.
 Qed.
 
 Lemma disjoint_setD {T : finType} (s1 s2 s3 : {set T}) :
@@ -63,35 +89,77 @@ Definition compPIOA {Act : finType} (P1 P2 : @PIOA Act) : Compatible P1 P2 -> @P
 
 
   intro; econstructor.
+
   (* *** input enabledness *** *)
-  2: {
+  3: {
   instantiate (1 := comp_prePIOA P1 P2).
   instantiate (1 := (pI P1 :|: pI P2) :\: (cover (pTO P1 :|: pTO P2))).
   move=> s x; move/setDP; elim; move/setUP; elim; intros.
   rewrite /enabled.
 
-  have Hi := inputEnabled P1 s.1 x H0.
-  simpl; rewrite /prePIOA_comptrans.
-  have: exists mu, tr P1 s.1 x = Some mu.
-  rewrite /enabled in Hi; destruct (tr P1 s.1 x).
-  eexists; done.
-  done.
-  elim; intros.
+  move/enabledP: (inputEnabled P1 s.1 x H0); elim.
+  simpl; rewrite /prePIOA_comptrans; intros.
   rewrite H2.
-  destruct (tr P2 s.2 x); done.
+  caseOn (x \in cover (action P2)); intro.
+  rewrite/action /cover !bigcup_setU in H3.
+  move/setUP: H3; elim; intros.
+  move/setUP: H3; elim; intros.
+  move/bigcupP: H3; elim; intros.
+  rewrite in_set in H3.
+  rewrite (eqP H3) in H4.
+  move/enabledP: (inputEnabled P2 s.2 x H4).
+  elim; intros.
+  rewrite H5; done.
+  rewrite notincover in H1.
+  move/forallP: H1; intros.
+  move/bigcupP: H3; elim; intros.
+  move/implyP: (H1 x1).
+  intros.
+  rewrite H4 in H5.
+  simpl in H5.
+  have: false.
+  apply H5.
+  apply/setUP; right; done.
+  done.
 
-  have Hi := inputEnabled P2 s.2 x H0.
-  simpl; rewrite /prePIOA_comptrans.
-  have: exists mu, tr P2 s.2 x = Some mu.
-  rewrite /enabled in Hi; destruct (tr P2 s.2 x).
-  eexists; done.
+  destruct H.
+  have: false.
+  move/bigcupP: H3; elim; intros.
+  move/disjointP: (H5 _ _ H3 (pI_in_action P1)); intros.
+  move: (H7 _ H6) => Hc.
+  rewrite H0 in Hc; done.
   done.
-  rewrite /enabled //= /prePIOA_comptrans.
-  elim; intros.
+  rewrite H3; destruct (tr P2 s.2 x); done.
+
+  simpl; rewrite /enabled //= /prePIOA_comptrans.
+  move/enabledP: (inputEnabled P2 s.2 x H0); elim; intros.
   rewrite H2.
+  caseOn (x \in cover (action P1)).
+  rewrite /cover /action !bigcup_setU.
+  move/setUP; elim.
+  move/setUP; elim.
+  move/bigcupP; elim; intro; rewrite in_set.
+  move/eqP; intro; subst.
+  intro HPi; move/enabledP: (inputEnabled P1 s.1 x HPi).
+  elim; intros mu Hmu; rewrite Hmu.
+  done.
+  move/bigcupP.
+  elim; intros.
+  move/bigcupP: H1.
+  elim.
+  exists x1.
+  apply/setUP; left; done.
+  done.
+  intro.
+  destruct H.
+  move/bigcupP: H3; elim; intros.
+  move/disjointP: (H4 _ _ H3 (pI_in_action P2)).
+  intros.
+  rewrite (negbTE (H7 _ H6)) in H0; done.
+  intro Hc; rewrite Hc.
   destruct (tr P1 s.1 x); done.
-  }
 
+  }
 
   instantiate (1 := pTH P1 :|: pTH P2).
   instantiate (1 := pTO P1 :|: pTO P2).
@@ -159,7 +227,124 @@ Definition compPIOA {Act : finType} (P1 P2 : @PIOA Act) : Compatible P1 P2 -> @P
   destruct (actionDisjoint P2); apply H9; done.
 
   (* *** Action determinism *** *)
+  intros; rewrite /actionDeterm.
+  intros.
+  apply/andP.
+  intro.
+  destruct H4.
+  move/setUP: H0; elim; move/setUP; elim.
 
+
+  move/enabledP: H4; elim; intros.
+  move/enabledP: H5; elim; intros.
+  rewrite //= in H0; rewrite /comp_prePIOA /prePIOA_comptrans in H0.
+  rewrite //= in H5; rewrite /comp_prePIOA /prePIOA_comptrans in H5.
+  have tin : T \in pTO P1 :|: pTH P1.
+  apply/setUP; left;done.
+
+  have Hc:= pActionDeterm P1 T tin s.1 x y H1 H2 H3.
+
+  have: x \in cover (action P1).
+  apply/bigcupP; exists T; rewrite /action. apply/setUP; left; apply/setUP; right; done.
+  done.
+  intro xincov.
+
+  have: y \in cover (action P1).
+  apply/bigcupP; exists T; rewrite /action. apply/setUP; left; apply/setUP; right; done.
+  done.
+  intro yincov.
+
+  remember (tr P1 s.1 x) as mu1; symmetry in Heqmu1; destruct mu1;
+  remember (tr P1 s.1 y) as mu2; symmetry in Heqmu2; destruct mu2.
+  rewrite /enabled Heqmu1 Heqmu2 in Hc; done.
+
+  rewrite yincov //= in H5; destruct (tr P2 s.2 y); done.
+  rewrite xincov //= in H0; destruct (tr P2 s.2 x); done.
+  rewrite yincov //= in H5; destruct (tr P2 s.2 y); done.
+
+
+  move/enabledP: H4; elim; intros.
+  move/enabledP: H5; elim; intros.
+  rewrite //= in H0; rewrite /comp_prePIOA /prePIOA_comptrans in H0.
+  rewrite //= in H5; rewrite /comp_prePIOA /prePIOA_comptrans in H5.
+  have tin : T \in pTO P2 :|: pTH P2.
+  apply/setUP; left; done.
+
+  have Hc:= pActionDeterm P2 T tin s.2 x y H1 H2 H3.
+
+  have: x \in cover (action P2).
+  apply/bigcupP; exists T; rewrite /action. apply/setUP; left; apply/setUP; right; done.
+  done.
+  intro xincov.
+
+  have: y \in cover (action P2).
+  apply/bigcupP; exists T; rewrite /action. apply/setUP; left; apply/setUP; right; done.
+  done.
+  intro yincov.
+
+  remember (tr P2 s.2 x) as eta1; symmetry in Heqeta1; destruct eta1;
+  remember (tr P2 s.2 y) as eta2; symmetry in Heqeta2; destruct eta2.
+  rewrite /enabled Heqeta1 Heqeta2 in Hc; done.
+
+  rewrite yincov //= in H5; destruct (tr P1 s.1 y); done.
+  rewrite xincov //= in H0; destruct (tr P1 s.1 x); done.
+  rewrite yincov //= in H5; destruct (tr P1 s.1 y); done.
+
+
+  move/enabledP: H4; elim; intros.
+  move/enabledP: H5; elim; intros.
+  rewrite //= in H0; rewrite /comp_prePIOA /prePIOA_comptrans in H0.
+  rewrite //= in H5; rewrite /comp_prePIOA /prePIOA_comptrans in H5.
+  have tin : T \in pTO P1 :|: pTH P1.
+  apply/setUP; right;done.
+
+  have Hc:= pActionDeterm P1 T tin s.1 x y H1 H2 H3.
+
+  have: x \in cover (action P1).
+  apply/bigcupP; exists T; rewrite /action. apply/setUP; right. done.
+  done.
+  intro xincov.
+
+  have: y \in cover (action P1).
+  apply/bigcupP; exists T; rewrite /action. apply/setUP; right; done.
+  done.
+  intro yincov.
+
+  remember (tr P1 s.1 x) as mu1; symmetry in Heqmu1; destruct mu1;
+  remember (tr P1 s.1 y) as mu2; symmetry in Heqmu2; destruct mu2.
+  rewrite /enabled Heqmu1 Heqmu2 in Hc; done.
+
+  rewrite yincov //= in H5; destruct (tr P2 s.2 y); done.
+  rewrite xincov //= in H0; destruct (tr P2 s.2 x); done.
+  rewrite yincov //= in H5; destruct (tr P2 s.2 y); done.
+
+
+  move/enabledP: H4; elim; intros.
+  move/enabledP: H5; elim; intros.
+  rewrite //= in H0; rewrite /comp_prePIOA /prePIOA_comptrans in H0.
+  rewrite //= in H5; rewrite /comp_prePIOA /prePIOA_comptrans in H5.
+  have tin : T \in pTO P2 :|: pTH P2.
+  apply/setUP; right;done.
+
+  have Hc:= pActionDeterm P2 T tin s.2 x y H1 H2 H3.
+
+  have: x \in cover (action P2).
+  apply/bigcupP; exists T; rewrite /action. apply/setUP; right. done.
+  done.
+  intro xincov.
+
+  have: y \in cover (action P2).
+  apply/bigcupP; exists T; rewrite /action. apply/setUP; right; done.
+  done.
+  intro yincov.
+
+  remember (tr P2 s.2 x) as eta1; symmetry in Heqeta1; destruct eta1;
+  remember (tr P2 s.2 y) as eta2; symmetry in Heqeta2; destruct eta2.
+  rewrite /enabled Heqeta1 Heqeta2 in Hc; done.
+
+  rewrite yincov //= in H5; destruct (tr P1 s.1 y); done.
+  rewrite xincov //= in H0; destruct (tr P1 s.1 x); done.
+  rewrite yincov //= in H5; destruct (tr P1 s.1 y); done.
 
 
   (* action validity *)

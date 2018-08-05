@@ -18,6 +18,16 @@ Definition enabled {Act : finType} (P : @prePIOA Act) (s : pQ P) :=
   fun a =>
     match (tr P s a) with | Some _ => true | None => false end.
 
+Lemma enabledP {Act : finType} (P : @prePIOA Act) s a : reflect (exists mu, tr P s a = Some mu) (enabled P s a).
+apply/(iffP idP).
+rewrite/enabled.
+remember (tr P s a) as o; symmetry in Heqo; destruct o.
+intro; exists m; done.
+done.
+elim.
+intros; rewrite /enabled.
+rewrite H; done.
+Qed.
 
 Definition actionDeterm {Act : finType} (P : @prePIOA Act) (T : {set Act}) :=
   forall s x y,
@@ -41,8 +51,7 @@ buildPIOA {
   pTH : {set {set Act}};
   pP :> @prePIOA Act;
   actionDisjoint : ActionDisjoint pI pTO pTH;
-  (* problem with composition?
-  pActionDeterm : forall T, T \in (pTO :|: pTH) -> actionDeterm pP T; *)
+  pActionDeterm : forall T, T \in (pTO :|: pTH) -> actionDeterm pP T; 
   inputEnabled : forall s x, x \in pI -> enabled pP s x;
   actSetValid : forall s x, enabled pP s x -> x \in (pI :|: cover pTO :|: cover pTH)
   }.
