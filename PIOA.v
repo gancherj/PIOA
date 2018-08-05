@@ -18,39 +18,106 @@ Definition enabled {Act : finType} (P : @prePIOA Act) (s : pQ P) :=
   fun a =>
     match (tr P s a) with | Some _ => true | None => false end.
 
+Lemma enabledP {Act : finType} (P : @prePIOA Act) s a : reflect (exists mu, tr P s a = Some mu) (enabled P s a).
+apply/(iffP idP).
+rewrite/enabled.
+remember (tr P s a) as o; symmetry in Heqo; destruct o.
+intro; exists m; done.
+done.
+elim.
+intros; rewrite /enabled.
+rewrite H; done.
+Qed.
 
 Definition actionDeterm {Act : finType} (P : @prePIOA Act) (T : {set Act}) :=
-  forall s, (#|[set x in T | enabled P s x]| == 0%nat) || (#|[set x in T | enabled P s x]| == 1%nat).
+  forall s x y,
+    x \in T -> y \in T -> x != y -> ~~ (enabled P s x && enabled P s y).
 
-Record TaskStructure {Act : finType} (P : @prePIOA Act) (O H : {set Act} ) (TO TH : {set {set Act}}) :=
+Record ActionDisjoint {Act : finType} (pI : {set Act}) (pTO pTH : {set {set Act}}) :=
   {
-    _ : partition TO O;
-    _ : partition TH H;
-    _ : forall T, T \in (TO :|: TH) -> actionDeterm P T
-                                                    }.
+    _ : forall x, x \in pTO -> [disjoint pI & x];
+    _ : forall y, y \in pTH -> [disjoint pI & y];
+    _ : forall x y, x \in pTO -> y \in pTH -> [disjoint x & y];
+    _ : forall x y, x \in pTO -> y \in pTO -> x != y -> [disjoint x & y];
+    _ : forall x y, x \in pTH -> y \in pTH -> x != y -> [disjoint x & y];
+    }.
+    
+    
 
 Record PIOA {Act : finType} :=
-mkPIOA {
+buildPIOA {
   pI : {set Act};
-  pO : {set Act};
-  pH : {set Act};
-  pP :> @prePIOA Act;
   pTO : {set {set Act}};
   pTH : {set {set Act}};
-  TS :> @TaskStructure Act pP pO pH pTO pTH;
-  _ : trivIset ((pI |: (pO |: (pH |: set0))));
-  inputEnabled : forall s x, x \in pI -> tr pP s x <> None;
-  actSetValid : forall s x, tr pP s x <> None -> x \in (pI :|: (pO :|: pH))
+  pP :> @prePIOA Act;
+  actionDisjoint : ActionDisjoint pI pTO pTH;
+  pActionDeterm : forall T, T \in (pTO :|: pTH) -> actionDeterm pP T; 
+  inputEnabled : forall s x, x \in pI -> enabled pP s x;
+  actSetValid : forall s x, enabled pP s x -> x \in (pI :|: cover pTO :|: cover pTH)
   }.
-
-Definition action {A} (P : @PIOA A) :=
-  (pI P) :|: (pO P) :|: (pH P).
-
-Lemma pActionDeterm {A} (P : @PIOA A) :
-  forall T, T \in (pTO P :|: pTH P) -> actionDeterm P T.
-  destruct P. destruct TS0; simpl in *.
+(*
+Lemma actionDetermCase {Act : finType} (P : @PIOA Act) :
+  forall s T x y, T \in (pTO P :|: pTH P) -> x \in T -> y \in T -> x != y ->
+                                                          (enabled P s x /\ ~~ enabled P s y) \/
+                                                          (enabled P s y /\ ~~ enabled P s x) \/
+                                                          (~~ enabled P s x /\ ~~ enabled P s y).
+  intros.
+  have Ha := pActionDeterm _ _ H s x y H0 H1 H2.
+  remember (enabled P s x) as b; destruct b.
+  remember (enabled P s y) as b'; destruct b'; simpl.
   done.
+  left; done.
+  remember (enabled P s y) as b'; destruct b'; simpl.
+  right; left; done.
+  right; right; done.
 Qed.
+*)
+
+Lemma pIODisjoint {A}  (P : @PIOA A) :
+  (forall x, x \in pTO P -> [disjoint (pI P) & x]).
+  destruct P; destruct actionDisjoint0; done.
+Qed.
+
+Lemma pIHDisjoint {A} (P : @PIOA A) :
+  (forall x, x \in pTH P -> [disjoint (pI P) & x]).
+  destruct P; destruct actionDisjoint0; done.
+Qed.
+
+Lemma pOHDisjoint {A} (P : @PIOA A):
+  forall x y, x \in pTO P -> y \in pTH P -> [disjoint x & y].
+  destruct P; destruct actionDisjoint0; done.
+Qed.
+
+Lemma pOODisjoint {A} (P : @PIOA A):
+  forall x y, x \in pTO P -> y \in pTO P -> x != y -> [disjoint x & y].
+  destruct P; destruct actionDisjoint0; done.
+Qed.
+
+Lemma pHHDisjoint {A} (P : @PIOA A):
+  forall x y, x \in pTH P -> y \in pTH P -> x != y -> [disjoint x & y].
+  destruct P; destruct actionDisjoint0; done.
+Qed.
+
+
+Definition action {A : finType} (P : @PIOA A) :=
+  [set (pI P)] :|: (pTO P) :|: (pTH P).
+
+Lemma pI_in_action {A : finType} (P : @PIOA A) :
+  pI P \in action P.
+  rewrite/action; apply/setUP; left; apply/setUP; left; rewrite in_set; done.
+Qed.
+
+Lemma tO_in_action {A : finType} (P : @PIOA A) :
+  forall x, x \in pTO P -> x \in action P.
+  intros; rewrite/action; apply/setUP; left; apply/setUP; right; done.
+Qed.
+
+Lemma tH_in_action {A : finType} (P : @PIOA A) :
+  forall x, x \in pTH P -> x \in action P.
+  intros; rewrite/action; apply/setUP; right; done.
+Qed.
+
+
 
 Lemma tr_subDist {A} (P : @PIOA A) s a mu :
   tr P s a = Some mu ->
@@ -58,14 +125,14 @@ Lemma tr_subDist {A} (P : @PIOA A) s a mu :
 intros.
 destruct P.
 destruct pP0.
-eapply i0.
+eapply i.
 apply H.
 Qed.
 
 Definition Task {Act : finType} (P : @PIOA Act) := {x : {set Act} | x \in (pTO P) :|: (pTH P)}.
 
 Definition external {A} (P : @PIOA A) :=
-  (pI P) :|: (pO P).
+  (pI P) :|: (cover (pTO P)).
   
 Definition Trace {ActSpace} (P : @PIOA ActSpace) :=
   [eqType of ((pQ P) * (list ActSpace))%type].

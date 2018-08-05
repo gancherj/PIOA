@@ -2,7 +2,7 @@
 From mathcomp Require Import ssreflect ssrfun ssrbool ssrint eqtype ssrnat seq choice fintype rat finfun.
 From mathcomp Require Import bigop ssralg div ssrnum ssrint finset ssrnum ssrnat.
 
-Require Import PIOA2 Meas Posrat Lems.
+Require Import PIOA Meas Posrat Lems.
 
 Definition prePIOA_comptrans {Act : finType} (P1 P2 : @PIOA Act) (s : [finType of (pQ P1 * pQ P2)]%type) (a : [finType of Act]) : option (Meas ([finType of pQ P1 * pQ P2])%type) :=
   match tr P1 s.1 a, tr P2 s.2 a with
