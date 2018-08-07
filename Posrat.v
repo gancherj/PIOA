@@ -183,7 +183,33 @@ Definition pdiv (a b : posrat) : posrat.
   done.
 Defined.
 
+Definition pexp (a : posrat) (n : nat) : posrat.
+  destruct a.
+  econstructor.
+  instantiate (1 := mprat0 ^+ n).
+  rewrite Qnneg_def.
+  apply exprn_ge0.
+  done.
+Defined.
+
+
 Notation "x / y" := (pdiv x y) : posrat_scope.
+
+Notation "x ^+ n" := (pexp x n) : posrat_scope.
+
+Lemma pexp_S (a : posrat) (n : nat) :
+  a ^+ (S n) =
+  a * (a ^+ n).
+  destruct a; simpl.
+  apply/eqP; rewrite /eq_op //=; apply/eqP.
+  rewrite exprS.
+  done.
+Qed.
+
+Lemma pexp1 (x  :posrat) : x ^+ 1 = x.
+destruct x.
+apply/eqP; rewrite /eq_op //=.
+Qed.
 
 Definition posrat_of_nat (x : nat) : posrat.
   econstructor.
@@ -197,7 +223,24 @@ Definition ple (a b : posrat) : bool.
   exact (mprat0 <= mprat1).
 Defined.
 
+Definition plt (a b : posrat) : bool.
+  destruct a,b.
+  exact (mprat0 < mprat1).
+Defined.
+
 Notation "x <= y" := (ple x y) : posrat_scope.
+Notation "x < y" := (plt x y) : posrat_scope.
+
+Definition plt_def (a b : posrat) : (a < b) = ((a != b) && (a <= b)).
+  destruct a,b.
+  rewrite /plt.
+  rewrite /ple.
+  rewrite /eq_op //=.
+  rewrite ltr_def //=.
+  rewrite eq_sym.
+  done.
+Qed.
+
 
 Lemma ple_le0 a : (a <= 0) = (a == 0).
   have: (a <= 0) <-> (a == 0).
