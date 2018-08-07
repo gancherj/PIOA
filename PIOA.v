@@ -4,6 +4,7 @@ Require Import Meas.
 Require Import Program.
 Require Import Expansion.
 Require Import Posrat.
+Require Import Lems.
 
 Record prePIOA {Act : finType} :=
   mkPrePIOA {
@@ -55,23 +56,6 @@ buildPIOA {
   inputEnabled : forall s x, x \in pI -> enabled pP s x;
   actSetValid : forall s x, enabled pP s x -> x \in (pI :|: cover pTO :|: cover pTH)
   }.
-(*
-Lemma actionDetermCase {Act : finType} (P : @PIOA Act) :
-  forall s T x y, T \in (pTO P :|: pTH P) -> x \in T -> y \in T -> x != y ->
-                                                          (enabled P s x /\ ~~ enabled P s y) \/
-                                                          (enabled P s y /\ ~~ enabled P s x) \/
-                                                          (~~ enabled P s x /\ ~~ enabled P s y).
-  intros.
-  have Ha := pActionDeterm _ _ H s x y H0 H1 H2.
-  remember (enabled P s x) as b; destruct b.
-  remember (enabled P s y) as b'; destruct b'; simpl.
-  done.
-  left; done.
-  remember (enabled P s y) as b'; destruct b'; simpl.
-  right; left; done.
-  right; right; done.
-Qed.
-*)
 
 Lemma pIODisjoint {A}  (P : @PIOA A) :
   (forall x, x \in pTO P -> [disjoint (pI P) & x]).
@@ -130,6 +114,16 @@ apply H.
 Qed.
 
 Definition Task {Act : finType} (P : @PIOA Act) := {x : {set Act} | x \in (pTO P) :|: (pTH P)}.
+
+Definition isHiddenTask {A} {P : @PIOA A} (t : Task P) : bool.
+destruct t.
+exact (x \in pTH P).
+Defined.
+
+Definition isOutputTask {A} {P : @PIOA A} (t : Task P) : bool.
+  destruct t.
+  exact (x \in pTO P).
+Defined.
 
 Definition external {A} (P : @PIOA A) :=
   (pI P) :|: (cover (pTO P)).
@@ -253,6 +247,46 @@ Definition inputEquiv {A} (P1 P2 : @PIOA A) :=
 Definition refinement {A} (P1 P2 : @PIOA A)  `{inputClosed P1} `{inputClosed P2} e :=
   forall ts, exists ts',
       traceOf (runPIOA P1 ts (startTr P1)) ~~ traceOf (runPIOA P2 ts' (startTr P2)) @ e.
+
+Check appTask.
+
+Lemma hiddenE {A} {P : @PIOA A} (T : Task P) mu :
+  isHiddenTask T -> isSubdist mu -> exists (eta : pQ P -> Meas (pQ P)),
+      appTask _ T mu ~~ (t <- mu; x <- eta (fst t); ret (x, snd t)) @ 0. 
+  destruct T as [Tx HT]; simpl.
+  intros.
+  exists ( fun s =>
+             match [pick x in Tx | enabled P s x] with
+             | Some a => match tr P s a with | Some mu => mu | None => ret s end
+             | None => ret s
+                           end).
+  rewrite /appTask.
+  apply measBind_cong_r; intros.
+  destruct x; simpl.
+  case:pickP.
+  move=> x /andP; elim; move=> xin Henabled.
+  remember (tr P s x) as muP.
+  destruct muP.
+  have: x \notin external P.
+  apply/setUP.
+  elim; intros.
+  move/disjointP: (pIHDisjoint _ _ H).
+  move/(_ _ H2).
+  rewrite xin; done.
+  move/bigcupP: H2; elim; intros.
+  move/disjointP: (pOHDisjoint _ _ _ H2 H).
+  move/(_ _ H3).
+  rewrite xin; done.
+  intro Hni; rewrite (negbTE Hni).
+  apply measBind_cong_r; intros. reflexivity.
+  eapply tr_subDist.
+  symmetry; apply HeqmuP.
+  dsimp; reflexivity.
+  intro; dsimp; reflexivity.
+  done.
+Qed.
+
+
 
 (*
 Definition consistent {A} {P : @PIOA A} (d1 : Meas (Trace P)) (ts : seq (Task P)) (d2 : Meas (Trace P)) :=

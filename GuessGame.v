@@ -2,7 +2,7 @@
 From mathcomp Require Import ssreflect ssrfun ssrbool ssrint eqtype ssrnat seq choice fintype rat finfun.
 From mathcomp Require Import bigop ssralg div ssrnum ssrint finset ssrnum ssrnat.
 
-Require Import PIOA2 Meas Posrat CompPIOA Lems.
+Require Import PIOA Meas Posrat CompPIOA Lems.
 
 Inductive Action : Type :=
   | Choose : Action 
@@ -37,15 +37,15 @@ Canonical action_countType := CountType Action action_countmix.
 Definition action_finmix := CanFinMixin action_cancel.
 Canonical action_finType := FinType Action action_finmix.
 
-Definition guessQ := [eqType of option bool * bool].
+Definition guessQ := [eqType of option bool * option bool].
 
 Definition guessTr (x : guessQ) (a : Action) : option (Meas guessQ) :=
   match x, a with
-  | (None, _), Choose => Some (b <- 
+  | (None, None) => Choose => Some (b <- 
                             unif (true :: false :: nil); ret (Some b, false))
-  | (Some x, _), Input y => if x == y then Some (ret (Some x, true)) else Some (ret (Some x, false))
-  | (None, _), Input y => Some (ret x)
-  | (_, b), Output b' => if b == b' then Some (ret x) else None
+  | (Some x, None), Input y => if x == y then Some (ret (Some x, Some true)) else Some (ret (Some x, Some false))
+  | (_, Some b), Output b' => if b == b' then Some (ret x) else None
+  | _, Input _ => Some (ret x)
   | _, _ => None
                 end.
 
