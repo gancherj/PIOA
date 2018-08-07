@@ -550,9 +550,11 @@ Lemma trapChoose : runPIOA _ (TrapChoose :: nil) (startTr _) ~~
   rewrite in_set; elim; move/eqP => Heq Henab; subst.
   dsimp.
   apply measBind_cong_r; intros; dsimp.
-  rewrite /external //= /TrapI /TrapO set0U.
-  case:imsetP.
-  elim; done.
+  rewrite /external //= /TrapI /TrapTO set0U.
+  case:bigcupP.
+  elim; intros.
+  rewrite in_set in H1; rewrite (eqP H1) in H2.
+  move/imsetP: H2; elim; done.
   reflexivity.
   apply uniford_subdist.
   move: ((y (Choose n))).
@@ -573,9 +575,17 @@ Lemma trapChooseComputeOutput : forall n,
   case: pickP => y.
   move/andP; elim; rewrite in_set; move/eqP; intro; subst.
   rewrite /external //= set0U.
-  case: imsetP.
-  elim; congruence.
-  intros; dsimp; reflexivity.
+
+  case: bigcupP.
+  elim; rewrite /TrapTO; intro z; rewrite in_set; move/eqP; intro; subst.
+  case:imsetP.
+  elim.
+  intros; done.
+  done.
+  intros;
+  dsimp.
+  reflexivity.
+
   move: (y (Compute n)).
   move/negP; elim; apply/andP; split.
   rewrite in_set //=.
@@ -589,17 +599,19 @@ Lemma trapChooseComputeOutput : forall n,
   dsimp.
   case:pickP; intros.
   move/andP: i => [i1 i2].
-  rewrite /RndO in i1.
+  rewrite /RndTO in i1.
   move/imsetP: i1; elim; intros; subst.
   case (eqVneq (f x) x1).
   intro; subst; rewrite eq_refl; dsimp.
   rewrite /external //= set0U.
-  case: imsetP; elim; intros.
-  injection H3; intros; subst.
+  case: bigcupP; elim; intros.
   reflexivity.
-  eexists; rewrite //=.
-  intro; rewrite /enabled //= in i2.
-  rewrite (negbTE i) in i2; done.
+  rewrite /TrapTO.
+  exists ([set Output x | x : 'I_(S n)]).
+  rewrite in_set //=.
+  apply/imsetP; eexists; rewrite //=.
+  intro Hneq; rewrite /enabled //= in i2.
+  rewrite (negbTE Hneq) in i2; done.
   move: (e (Output (f x))). 
   move/negP; elim; apply/andP.
   rewrite /enabled //= eq_refl //=.
@@ -619,7 +631,7 @@ Lemma trapSpec : forall ts, TrapSpec ts.
   rewrite in_set.
   elim.
   move/eqP.
-  rewrite /RndO.
+  rewrite /RndTO.
   intro; subst; apply TrapSpec1.
   rewrite runPIOA_rcons.
   rewrite (appTask_cong _ _ _ _ H0).
@@ -690,11 +702,14 @@ Lemma trapSpec : forall ts, TrapSpec ts.
   case:pickP => y.
   move/andP; rewrite in_set; elim; move/eqP; intros; subst; dsimp.
 
-  rewrite /external //= /TrapI /TrapO set0U.
+  rewrite /external //= /TrapI /TrapTO set0U.
 
-  case: imsetP.
+  case: bigcupP.
+  elim => i0; rewrite in_set; move/eqP; intro; subst; case:imsetP.
   elim; done.
+  done.
   reflexivity.
+
 
   move: (y (Compute n)).
   move/negP.
@@ -719,7 +734,7 @@ Lemma trapSpec : forall ts, TrapSpec ts.
   rewrite /appTask.
   dsimp.
   apply measBind_cong_r; intros; dsimp. case:pickP => y.
-  move/andP; rewrite /RndO; elim; move/imsetP; elim; intros; subst.
+  move/andP; rewrite /RndTO; elim; move/imsetP; elim; intros; subst.
   have: (f x0) == x1.
   rewrite /enabled in H4.
   simpl in H4.
@@ -727,18 +742,16 @@ Lemma trapSpec : forall ts, TrapSpec ts.
   intro He; rewrite (negbTE He) in H4; done.
   intro He; rewrite He.
   dsimp.
-  rewrite /external //= /TrapI /TrapO set0U.
-  case:imsetP.
-  elim.
-  intros.
-  injection H5.
-  intro; subst.
-  rewrite (eqP He).
+  rewrite /external //= /TrapI /TrapTO set0U.
+  case:bigcupP.
   instantiate (1 := S x).
-  simpl.
+  elim; intros; simpl.
+  rewrite (eqP He).
   reflexivity.
   elim.
-  eexists; rewrite //=.
+  exists ([set Output x | x : 'I_(S n)]).
+  rewrite in_set //=.
+  apply/imsetP; eexists; rewrite //=.
   move: (y (Output (f x0))).
   move/negP.
   elim.
@@ -802,9 +815,11 @@ Lemma TRRefine : @refinement _ (TrapPIOA f) (RndPIOA n) (trapInputClosed f) (Rnd
   apply unif_isDist.
   rewrite -cardE card_ord; done.
   intro; dsimp.
-  rewrite /external //= /TrapI /TrapO set0U.
-  case:imsetP.
+  rewrite /external //= /TrapI /TrapTO set0U.
+  case:bigcupP.
+  elim => i; rewrite in_set; move/eqP; intro; subst; case:imsetP.
   elim; done.
+  done.
   intro; dsimp.
   intro; dsimp.
 

@@ -1,6 +1,6 @@
 From mathcomp Require Import ssreflect ssrfun ssrbool ssrint eqtype ssrnat seq choice fintype rat finfun.
 From mathcomp Require Import bigop ssralg div ssrnum ssrint finset.
-Require Import PIOA Meas Posrat Expansion.
+Require Import PIOA Meas Posrat Lems.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -170,144 +170,95 @@ Qed.
 Definition rndpre : prePIOA := mkPrePIOA [finType of Action] [finType of RndQ] None RndTr RndTr_subDist.
 
 
-Definition RndH := set1 Choose.
+Definition RndTH := [set [set Choose] ].
 Definition RndI : {set Action} := set0.
-SearchAbout (seq _ -> {set _}).
-Definition RndO : {set Action} := Output @: A.
-
-Lemma rnd_taskStructure : TaskStructure (rndpre) (RndO ) (RndH ) (set1 (RndO )) (set1 (RndH )).
-
-constructor.
-
-
-apply partition_set1; apply /eqP /set0Pn; exists (Output defA); apply mem_imset; done.
-apply partition_set1; apply /eqP /set0Pn; exists (Choose ); by rewrite in_set.
-
-intros.
-rewrite /actionDeterm; intros.
-
-rewrite in_setU in H; move/orP: H => [H | H]; rewrite in_set in H; rewrite (eqP H).
-destruct s.
-rewrite /enabled.
-
-simpl.
-apply/orP; right.
-apply/cards1P; exists (Output s); apply setP; move=>x; rewrite !in_set; destruct x; rewrite //=.
-rewrite andbF; symmetry; apply/eqP; done.
-destruct (eqVneq s s0).
-rewrite /RndO.
-subst; rewrite !eq_refl andbT.
-apply/ imsetP; exists s0; done.
-rewrite (negbTE i) andbF; symmetry; apply/eqP.
-move/eqP: i; simpl.
-congruence.
-rewrite andbF; symmetry; apply/eqP; congruence.
-apply/orP; left.
-rewrite cards_eq0; apply /eqP/setP; move=> x; rewrite in_set0.
-destruct x.
-rewrite in_set.
-rewrite /enabled andbT.
-rewrite /RndO.
-apply/imsetP; elim; congruence.
-rewrite in_set; rewrite /enabled //= andbF //=.
-rewrite in_set; rewrite /enabled //= andbF //=.
-destruct s.
-apply/orP; left.
-rewrite cards_eq0; apply/eqP/setP => x; rewrite /RndH in_set in_set0 /enabled //=; elim x.
-apply andbF.
-intros; rewrite in_set.
-apply/andP; elim; move/eqP; congruence.
-apply andbF.
-
-apply/orP; right.
-rewrite /RndH.
-apply/cards1P; exists (Choose).
-apply/setP => x.
-rewrite !in_set.
-destruct x; rewrite /enabled //=.
-Qed.
-
-
+Definition RndTO : {set {set Action}} := [set Output @: A].
 
 
 Definition RndPIOA : @PIOA [finType of Action].
-econstructor.
-apply rnd_taskStructure.
-instantiate (1 := RndI).
-rewrite /trivIset /cover.
-rewrite /RndI /RndO /RndH.
-rewrite !bigcup_setU !big_setU1 //=.
-rewrite cards0 !big_set1 set0U !cardsU //=.
-rewrite !cards1 !big_set0.
-rewrite add0n addn0 cards0.
-rewrite setI0 setU0 cards0 addn0 subn0.
+  econstructor.
+  instantiate (1 := RndTH).
+  instantiate (1 := RndTO).
+  instantiate (1 := RndI).
+  constructor.
+  intros.
+  rewrite /RndI.
+  rewrite -setI_eq0.
+  rewrite set0I; done.
+  intros.
+  rewrite /RndI.
+  rewrite -setI_eq0.
+  rewrite set0I; done.
+  rewrite /RndTO /RndTH.
+  move=> x y;
+  rewrite !in_set.
+  move/eqP; intro; subst.
+  move/eqP; intro; subst.
+  apply/disjointP.
+  intro; move/imsetP; elim.
+  rewrite in_set.
+  intros; subst; done.
+  rewrite /RndTO.
+  move => x y; rewrite !in_set; move/eqP; intro; subst; move/eqP; intro; subst.
+  rewrite eq_refl; done.
+  rewrite /RndTH.
+  move => x y; rewrite !in_set; move/eqP; intro; subst; move/eqP; intro; subst.
+  rewrite eq_refl; done.
+  instantiate (1 := rndpre).
 
+  move=> T /setUP; elim.
+  rewrite /RndTO in_set.
+  move/eqP; intro; subst.
 
-have : ((@Output ) @: A) :&: [set Choose] = set0.
+  rewrite /actionDeterm.
+  move=> s x y; move/imsetP; elim; intros; subst.
+  move/imsetP: H1; elim; intros; subst.
+  destruct s.
+  rewrite /enabled.
+  simpl.
+  caseOn (s == x0); caseOn (s == x); intros Hx0 Hx.
+  rewrite -(eqP Hx0) (eqP Hx) eq_refl //= in H2.
+  rewrite Hx (negbTE Hx0); done.
+  rewrite (negbTE Hx) Hx0; done.
+  rewrite (negbTE Hx) (negbTE Hx0); done.
+  rewrite /enabled; done.
 
-apply /setP => x; rewrite in_set0; apply/setIP; elim; rewrite !in_set.
-intros.
-move/imsetP: H; elim; intros.
-subst.
-move/eqP: H0; congruence.
-intro H; rewrite H cards0 subn0.
-done.
+  rewrite /RndTH in_set; move/eqP; intro; subst; rewrite /actionDeterm.
+  intro.
+  move=> x y; rewrite !in_set; move/eqP; intro; subst; move/eqP; intro; subst; done.
+  rewrite /RndI.
+  move=> s x; rewrite in_set0; done.
+  intros; destruct x.
+  apply/setUP; right.
+  apply/bigcupP; eexists.
+  rewrite in_set //=.
+  rewrite in_set //=.
 
-by rewrite in_set.
-rewrite setU0 !in_set.
-apply/eqP/setP. 
-intro.
-have HC := H (Choose).
-rewrite in_set eq_refl in HC.
-move/imsetP: HC.
-elim; congruence.
-rewrite setU0 in_set //=.
-rewrite negb_or; apply/andP; split; rewrite in_set.
-apply/eqP/setP; intro H; have HC := H (Output defA). 
-rewrite in_set0 in HC.
-symmetry in HC;
-move/imsetP: HC.
-elim.
-exists defA; done.
-
-apply/eqP/setP; intro H; have HC := H (Choose).
-rewrite in_set0 in_set eq_refl in HC; done.
-intros; rewrite /RndI in H.
-rewrite in_set0 in H.
-done.
-
-intros.
-rewrite !in_setU.
-destruct x.
-apply/orP; right.
-apply/orP; right.
-rewrite /RndH in_set; done.
-apply/orP; right; apply/orP; left.
-rewrite /RndO.
-apply/imsetP.
-exists s0; done.
-destruct s; simpl in H.
-done.
-done.
+  apply/setUP; left; apply/setUP; right.
+  apply/bigcupP; eexists.
+  rewrite in_set //=.
+  apply/imsetP; eexists; rewrite //=.
+  destruct s.
+  rewrite /enabled //= in H.
+  rewrite /enabled //= in H.
 Defined.
+
 
 Definition RndChoose : Task RndPIOA.
   econstructor.
   instantiate (1 := [set Choose]).
   simpl.
-  apply/setUP; right; rewrite /RndH.
+  apply/setUP; right; rewrite /RndTH.
   rewrite in_set.
   done.
 Defined.
 
 Definition RndOutput : Task RndPIOA.
   econstructor.
-  simpl; rewrite /RndO.
+  simpl; rewrite /RndTO.
   instantiate (1 := [set Output x | x : A]).
   apply/setUP; left; rewrite in_set; done.
 Defined.
-
-Check runPIOA.
 
 
 Inductive RndSpec (ts : seq (Task RndPIOA)) : Prop:=
@@ -320,20 +271,24 @@ Lemma rndChooseOutput : forall n, runPIOA RndPIOA (RndChoose :: nseq n RndOutput
   simpl; rewrite /appTask /startTr; dsimp.
   case:pickP => x.
   move/andP => [i1 i2]; rewrite in_set in i1; rewrite (eqP i1).
-  rewrite /external //= set0U /RndO.
-  case:imsetP.
-  elim; done.
-  intro; dsimp.
+  rewrite /external //= set0U.
+  dsimp.
   apply measBind_cong_r; intros; dsimp.
-  apply measEquiv_refl.
+  dsimp. 
+  case: bigcupP.
+  elim=>i; rewrite in_set; move/eqP; intro; subst; case: imsetP.
+  elim; done.
   done.
-  have HC := ((x Choose)).
-  move/andP: HC; elim.
+  intro; reflexivity.
+  done.
+          
+  move/andP: (x Choose); elim.
   rewrite in_set /enabled //=.
+
   simpl.
   rewrite runPIOA_appTask_nseq.
-  drewr (appTask_cong RndPIOA).
-  apply IHn0.
+  rewrite (appTask_cong RndPIOA); last by apply IHn0.
+
   rewrite /appTask; dsimp.
   apply measBind_cong_r; intros; dsimp.
   case:pickP => y.
@@ -345,18 +300,18 @@ Lemma rndChooseOutput : forall n, runPIOA RndPIOA (RndChoose :: nseq n RndOutput
   intros; subst.
   rewrite eq_refl.
   dsimp.
-  rewrite /external //= /RndI /RndO set0U.
-  case: imsetP.
-  elim; intros; subst; apply measEquiv_refl. 
+  case: setUP.
+  intro; reflexivity.
   elim.
-  eexists; rewrite //=.
-  intro HC; rewrite (negbTE HC) in y1; done.
-  have HC := y (Output x).
-  move/andP: HC.
-  elim.
-  rewrite /enabled //= eq_refl //=.
-  split.
-  apply/imsetP; eexists; done.
+  right; apply/bigcupP.
+
+  exists [set Output x | x : A].
+  rewrite //= /RndTO in_set //=.
+  apply/imsetP; eexists; rewrite //=.
+  intro Hneq; rewrite (negbTE Hneq) in y1; done.
+
+  move/andP: (y (Output x)); elim; rewrite /enabled //= eq_refl //=; split.
+  apply/imsetP; eexists; rewrite //=.
   done.
   done.
 Qed.
@@ -383,7 +338,7 @@ Lemma rndSpec : forall ts, RndSpec ts.
   rewrite mem_seq1 in H0; move/eqP: H0 => H0; injection H0; intros; subst.
   simpl.
   case: pickP.
-  rewrite //= /RndO.
+  rewrite //= /RndTO.
   move=>x /andP; elim.
   move/imsetP; elim.
   intros; subst.
@@ -394,7 +349,7 @@ Lemma rndSpec : forall ts, RndSpec ts.
   apply RndSpec2; exists 0%nat.
   simpl.
   rewrite runPIOA_rcons.
-  rewrite /RndH.
+  rewrite /RndTH.
   rewrite (appTask_cong _ _ _ _ H).
   simpl.
   reflexivity.
@@ -432,7 +387,7 @@ Lemma rndSpec : forall ts, RndSpec ts.
   apply measBind_cong_r; intros.
   dsimp.
   case:pickP => x1.
-  move/andP; elim; rewrite /RndH in_set; move/eqP; intro; subst.
+  move/andP; elim; rewrite /RndTH in_set; move/eqP; intro; subst.
   rewrite /enabled.
   simpl.
   done.
@@ -458,7 +413,7 @@ Section RandCloseProof.
   Check RndPIOA.
 
   Lemma RndCloseRefine :
-    @refinement _ (RndPIOA defA HD1) (RndPIOA defA HD2) (RndInputClosed _ _) (RndInputClosed _ _) e.
+    @refinement _ (RndPIOA HD1) (RndPIOA HD2) (RndInputClosed  _) (RndInputClosed  _) e.
     intro.
     destruct (rndSpec ts).
     exists nil.
@@ -470,7 +425,7 @@ Section RandCloseProof.
     reflexivity.
 
     destruct H.
-    exists (RndChoose defA HD2 :: nseq x (RndOutput defA HD2)).
+    exists (RndChoose HD2 :: nseq x (RndOutput HD2)).
     rewrite /traceOf.
     rewrite -(padd0r e); eapply measEquiv_trans.
     apply fmap_cong.
@@ -493,6 +448,4 @@ Section RandCloseProof.
     intros; dsubdist.
     intros; dsubdist.
 Qed.
-
-
 End RandCloseProof.
