@@ -37,55 +37,31 @@ Canonical action_countType := CountType Action action_countmix.
 Definition action_finmix := CanFinMixin action_cancel.
 Canonical action_finType := FinType Action action_finmix.
 
-Definition guessQ := [eqType of option bool * option bool].
+Definition guessQ := [eqType of option bool * option bool * bool].
 
 Definition guessTr (x : guessQ) (a : Action) : option (Meas guessQ) :=
   match x, a with
-  | (None, None), Choose => Some (b <- 
-                            unif (true :: false :: nil); ret (Some b, None))
-  | (Some x, None), Input y => if x == y then Some (ret (Some x, Some true)) else Some (ret (Some x, Some false))
-  | (_, Some b), Output b' => if b == b' then Some (ret x) else None
+  | (None, None, false), Choose => Some (b <- 
+                            unif (true :: false :: nil); ret (Some b, None, false))
+  | (Some x, None, false), Input y => if x == y then Some (ret (Some x, Some true, true)) else Some (ret (Some x, Some false, true))
+  | (_, Some b, true), Output b' => if b == b' then Some (ret x) else None
   | _, Input _ => Some (ret x)
   | _, _ => None
                 end.
 
 Lemma guessTr_subDist x a m : guessTr x a = Some m -> isSubdist m.
-destruct x, a; simpl.
-destruct o; simpl.
-destruct o0; congruence.
-destruct o0; first by congruence.
-intro H; injection H; subst; clear H; intro; subst.
-dsubdist.
-apply isDist_isSubdist.
-apply unif_isDist.
-done.
-intros; dsubdist.
-destruct o.
-destruct o0.
-intro H; injection H; subst; clear H; intro; subst.
-dsubdist.
-case (eqVneq b0 b); intros; subst.
-rewrite eq_refl in H; injection H; intro; subst; dsubdist.
-rewrite (negbTE i) in H.
-injection H; intro; subst.
-dsubdist.
-destruct o0; intro H; injection H; subst; clear H; intro; subst; dsubdist.
-destruct o.
-destruct o0.
-destruct (b1 == b).
-intro H; injection H; subst; clear H; intro; subst.
-dsubdist.
-congruence.
-congruence.
-destruct o0.
-destruct (b0 == b).
-intro H; injection H; subst; clear H; intro; subst.
-dsubdist.
-congruence.
-congruence.
-Qed.
-
-Definition guesspre : prePIOA := mkPrePIOA [finType of Action] [finType of guessQ] (None, None) guessTr guessTr_subDist.
+  destruct x as [ [u v] w];
+  destruct u as [ [ | ] | ];
+  destruct v as [ [ | ] | ];
+  destruct w as [ | ];
+  destruct a as [ | [ | ] | [ | ] ];
+  simpl; try congruence;
+    try ltac:(intro H; injection H; intro; subst); dsubdist.
+  apply isDist_isSubdist; apply unif_isDist; done.
+  intros; dsubdist.
+Qed.   
+ 
+Definition guesspre : prePIOA := mkPrePIOA [finType of Action] [finType of guessQ] (None, None, false) guessTr guessTr_subDist.
 
 
 
@@ -118,16 +94,16 @@ Definition guessPIOA : @PIOA [finType of Action].
   move/orP; elim.
   move/eqP; intro; subst; done.
   move/eqP; intro; subst.
-  destruct s as [ [ [| ] | ]  [ [|] | ] ]; rewrite /enabled //=.
+  destruct s as [ [ [ [| ] | ]  [ [|] | ] ] [ | ] ]; rewrite /enabled //=.
   move/orP; elim.
   move/eqP; intro; subst.
-  destruct s as [ [ [| ] | ]  [ [|] | ] ]; rewrite /enabled //=.
+  destruct s as [ [ [ [| ] | ]  [ [|] | ] ] [ | ] ]; rewrite /enabled //=.
   move/eqP; intro; subst; done.
   move=> s x y; rewrite !in_set.
   move/eqP; intro; subst; move/eqP; intro; subst; done.
   move=> s x; rewrite !in_set; move/orP; elim; move/eqP; intro; subst.
-  destruct s as [ [ [| ] | ]  [ [|] | ] ]; rewrite /enabled //=.
-  destruct s as [ [ [| ] | ]  [ [|] | ] ]; rewrite /enabled //=.
+  destruct s as [ [ [ [| ] | ]  [ [|] | ] ] [ | ] ]; rewrite /enabled //=.
+  destruct s as [ [ [ [| ] | ]  [ [|] | ] ] [ | ] ]; rewrite /enabled //=.
   destruct x; intros.
   apply/setUP; right.
   apply/bigcupP.
