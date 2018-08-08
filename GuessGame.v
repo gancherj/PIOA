@@ -43,8 +43,8 @@ Definition guessTr (x : guessQ) (a : Action) : option (Meas guessQ) :=
   match x, a with
   | (None, None, false), Choose => Some (b <- 
                             unif (true :: false :: nil); ret (Some b, None, false))
-  | (Some x, None, false), Input y => if x == y then Some (ret (Some x, Some true, true)) else Some (ret (Some x, Some false, true))
-  | (_, Some b, true), Output b' => if b == b' then Some (ret x) else None
+  | (Some x, None, false), Input y => if x == y then Some (ret (Some x, Some true, false)) else Some (ret (Some x, Some false, false))
+  | (Some x, Some b, false), Output b' => if b == b' then Some (ret (Some x, Some b, true)) else None
   | _, Input _ => Some (ret x)
   | _, _ => None
                 end.
