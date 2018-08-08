@@ -41,8 +41,8 @@ Definition guessQ := [eqType of option bool * option bool].
 
 Definition guessTr (x : guessQ) (a : Action) : option (Meas guessQ) :=
   match x, a with
-  | (None, None) => Choose => Some (b <- 
-                            unif (true :: false :: nil); ret (Some b, false))
+  | (None, None), Choose => Some (b <- 
+                            unif (true :: false :: nil); ret (Some b, None))
   | (Some x, None), Input y => if x == y then Some (ret (Some x, Some true)) else Some (ret (Some x, Some false))
   | (_, Some b), Output b' => if b == b' then Some (ret x) else None
   | _, Input _ => Some (ret x)
@@ -52,32 +52,40 @@ Definition guessTr (x : guessQ) (a : Action) : option (Meas guessQ) :=
 Lemma guessTr_subDist x a m : guessTr x a = Some m -> isSubdist m.
 destruct x, a; simpl.
 destruct o; simpl.
-congruence.
-intro H; injection H; intro; subst.
+destruct o0; congruence.
+destruct o0; first by congruence.
+intro H; injection H; subst; clear H; intro; subst.
 dsubdist.
 apply isDist_isSubdist.
 apply unif_isDist.
 done.
 intros; dsubdist.
-destruct o; simpl.
-case (eqVneq b1 b0).
-intro; subst; rewrite eq_refl.
-intro H; injection H; intro; subst.
-dsubdist.
-intro H; rewrite (negbTE H).
-intro H2; injection H2; intro; subst.
-dsubdist.
-intro H2; injection H2; intro; subst; dsubdist.
 destruct o.
-case (eqVneq b b0).
-intro; subst; rewrite eq_refl; intro H2; injection H2; subst; intro; subst; dsubdist.
-intro H; rewrite (negbTE H); congruence.
-case (eqVneq b b0).
-intro; subst; rewrite eq_refl; intro H2; injection H2; subst; intro; subst; dsubdist.
-intro H; rewrite (negbTE H); congruence.
+destruct o0.
+intro H; injection H; subst; clear H; intro; subst.
+dsubdist.
+case (eqVneq b0 b); intros; subst.
+rewrite eq_refl in H; injection H; intro; subst; dsubdist.
+rewrite (negbTE i) in H.
+injection H; intro; subst.
+dsubdist.
+destruct o0; intro H; injection H; subst; clear H; intro; subst; dsubdist.
+destruct o.
+destruct o0.
+destruct (b1 == b).
+intro H; injection H; subst; clear H; intro; subst.
+dsubdist.
+congruence.
+congruence.
+destruct o0.
+destruct (b0 == b).
+intro H; injection H; subst; clear H; intro; subst.
+dsubdist.
+congruence.
+congruence.
 Qed.
 
-Definition guesspre : prePIOA := mkPrePIOA [finType of Action] [finType of guessQ] (None, false) guessTr guessTr_subDist.
+Definition guesspre : prePIOA := mkPrePIOA [finType of Action] [finType of guessQ] (None, None) guessTr guessTr_subDist.
 
 
 
@@ -105,30 +113,30 @@ Definition guessPIOA : @PIOA [finType of Action].
   rewrite eq_refl in H; done.
 
   instantiate (1 := guesspre).
+  move=> T; rewrite in_set; move/orP; elim; rewrite in_set; move/eqP; intro; subst.
+  move=> s x y; rewrite !in_set; move/orP; elim; move/eqP; intro; subst.
+  move/orP; elim.
+  move/eqP; intro; subst; done.
+  move/eqP; intro; subst.
+  destruct s as [ [ [| ] | ]  [ [|] | ] ]; rewrite /enabled //=.
+  move/orP; elim.
+  move/eqP; intro; subst.
+  destruct s as [ [ [| ] | ]  [ [|] | ] ]; rewrite /enabled //=.
+  move/eqP; intro; subst; done.
+  move=> s x y; rewrite !in_set.
+  move/eqP; intro; subst; move/eqP; intro; subst; done.
   move=> s x; rewrite !in_set; move/orP; elim; move/eqP; intro; subst.
-  destruct s; destruct o; destruct b.
-  destruct b0; done.
-  destruct b0; done.
-  done.
-  done.
-  destruct s; destruct o; destruct b.
-  destruct b0; done.
-  destruct b0; done.
-  done.
-  done.
-
-
-  intros; destruct x.
+  destruct s as [ [ [| ] | ]  [ [|] | ] ]; rewrite /enabled //=.
+  destruct s as [ [ [| ] | ]  [ [|] | ] ]; rewrite /enabled //=.
+  destruct x; intros.
   apply/setUP; right.
-  rewrite /cover.
-  apply/bigcupP; exists [set Choose]; rewrite in_set //=.
-  apply/setUP; left; apply/setUP; left.
-  apply/setUP; destruct b; [left | right]; rewrite in_set //=.
-  apply/setUP; left; apply/setUP; right.
   apply/bigcupP.
-  exists [set Output true; Output false].
-  rewrite in_set //=.
-  destruct b; rewrite !in_set //=.
+  exists [set Choose]; rewrite in_set //=.
+  apply/setUP; left; apply/setUP; left.
+  destruct b; apply/setUP; [left | right]; rewrite in_set //=.
+  apply/setUP; left; apply/setUP; right.
+  apply/bigcupP; exists [set Output true; Output false]; rewrite in_set //=.
+  destruct b; apply/orP; [left | right]; rewrite in_set //=.
 Defined.
 
 Section GuessComp.
