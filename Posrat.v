@@ -173,15 +173,17 @@ Lemma padd0 (x y : posrat) : (x == 0) && (y == 0) = (x + y == 0).
   done.
 Qed.
 
-Definition pdiv (a b : posrat) : posrat.
-  destruct a,b.
+Definition pinv (a : posrat) : posrat.
+  destruct a.
   econstructor.
-  instantiate (1 := mprat0 / mprat1).
+  instantiate (1 := mprat0^-1).
   rewrite Qnneg_def.
-  apply divr_ge0.
-  done.
-  done.
+  rewrite invr_ge0.
+  rewrite -Qnneg_def; done.
 Defined.
+
+
+
 
 Definition pexp (a : posrat) (n : nat) : posrat.
   destruct a.
@@ -193,7 +195,7 @@ Definition pexp (a : posrat) (n : nat) : posrat.
 Defined.
 
 
-Notation "x / y" := (pdiv x y) : posrat_scope.
+Notation "x / y" := (x * (pinv y)) : posrat_scope.
 
 Notation "x ^+ n" := (pexp x n) : posrat_scope.
 
@@ -241,6 +243,29 @@ Definition plt_def (a b : posrat) : (a < b) = ((a != b) && (a <= b)).
   done.
 Qed.
 
+Lemma plt_trans (a b c : posrat) : a < b -> b < c -> a < c.
+  destruct a,b,c; rewrite /plt.
+  apply ltr_trans.
+Qed.
+
+Lemma plt_add (a b c d : posrat) : a < b -> c < d -> a + c < b + d.
+  destruct a,b,c,d; rewrite /plt.
+  apply ltr_add.
+Qed.
+
+Lemma plt_mulr (a  c d : posrat) : a != 0 -> c < d -> a * c < a * d.
+  destruct a,c,d; rewrite /plt.
+  simpl.
+  intros.
+
+  rewrite (mulrC mprat0).
+  rewrite (mulrC mprat0).
+  rewrite ltr_pmul2r.
+  done.
+  rewrite ltr_def.
+  rewrite H.
+  rewrite -Qnneg_def; done.
+Qed.
 
 Lemma ple_le0 a : (a <= 0) = (a == 0).
   have: (a <= 0) <-> (a == 0).
@@ -283,6 +308,61 @@ Lemma ple_total a b : (a <= b) || (b <= a).
   apply ger_leVge.
   rewrite Qnneg_def in i; done.
   rewrite Qnneg_def in i0; done.
+Qed.
+
+Lemma ple_add_is_le a b c : a + b <= c -> (a <= c) && (b <= c).
+  destruct a,b,c.
+  unfold ple.
+  simpl.
+
+  intro; apply/andP; split.
+  apply/contraT.
+  rewrite -real_ltrNge.
+  rewrite real_lerNgt in H.
+  intro.
+
+  have: (mprat2 < mprat0 + mprat1)%R.
+  remember (mprat1 == 0) as b; symmetry in Heqb; destruct b.
+  rewrite (eqP Heqb) addr0; done.
+  rewrite -(addr0 mprat2).
+  apply ltr_add.
+  done.
+  rewrite ltr_def.
+  rewrite Heqb.
+  rewrite Qnneg_def in i0.
+  rewrite i0.
+  done.
+  rewrite (negbTE H); done.
+  rewrite realE; apply/orP; left.
+  apply addr_ge0.
+  rewrite Qnneg_def in i; done.
+  rewrite Qnneg_def in i0; done.
+  rewrite realE; apply/orP; left; rewrite Qnneg_def in i1; done.
+  rewrite realE; apply/orP; left; rewrite Qnneg_def in i1; done.
+  rewrite realE; apply/orP; left; rewrite Qnneg_def in i; done.
+
+  apply/contraT.
+  rewrite -real_ltrNge.
+  rewrite real_lerNgt in H.
+  intro.
+
+  have: (mprat2 < mprat0 + mprat1)%R.
+  remember (mprat0 == 0) as b; symmetry in Heqb; destruct b.
+  rewrite (eqP Heqb) add0r; done.
+  rewrite -(addr0 mprat2) -(addrC 0%R mprat2).
+  apply ltr_add.
+  rewrite ltr_def Heqb.
+  rewrite Qnneg_def in i; rewrite i; done.
+  done.
+  rewrite (negbTE H); done.
+
+  rewrite realE; apply/orP; left.
+  apply addr_ge0.
+  rewrite Qnneg_def in i; done.
+  rewrite Qnneg_def in i0; done.
+  rewrite realE; apply/orP; left; rewrite Qnneg_def in i1; done.
+  rewrite realE; apply/orP; left; rewrite Qnneg_def in i1; done.
+  rewrite realE; apply/orP; left; rewrite Qnneg_def in i; done.
 Qed.
 
 Lemma ple_add_r a b c : a <= b -> a + c <= b + c.
@@ -456,3 +536,90 @@ Lemma ple_sum {A} (c : seq A) (F1 F2 : A -> posrat) :
   done.
   done.
 Qed.  
+
+Check Posrat.
+
+  
+Lemma padd2 (a : posrat) :
+  a + a = (Posrat 2%:Q is_true_true) * a.
+  destruct a; apply/eqP; rewrite /eq_op //=; apply/eqP.
+  have: intr 2 = (intr 1 + intr 1)%R.
+  done.
+  intro.
+  rewrite x.
+  rewrite mulrDl.
+  rewrite (mulrC (intr 1)).
+  rewrite !mulr1z.
+  rewrite mulr1.
+  done.
+Qed.
+
+Lemma pinv_neq0 a :
+  a != 0 -> pinv a != 0.
+  destruct a; rewrite /pinv; intro; rewrite /eq_op //=.
+  apply invr_neq0.
+  done.
+Qed.
+
+Definition pdiv_neq0 a b :
+  a != 0 -> b != 0 -> a / b != 0.
+  intros; rewrite -pmul0.
+  rewrite negb_or.
+  apply/andP; split.
+  done.
+  apply pinv_neq0; done.
+Qed.
+
+
+Definition pexp_neq0 a c :
+  a != 0 -> (a ^+ c != 0).
+  destruct a; rewrite /pexp; simpl.
+  intro; rewrite /eq_op //=.
+  apply expf_neq0.
+  done.
+Qed.
+
+Definition pdiv_lt1 a b :
+  b != 0 -> a < b -> a / b < 1.
+  destruct a,b.
+  unfold plt; simpl.
+  intros.
+
+  rewrite ltr_pdivr_mulr.
+  rewrite mul1r. done.
+  rewrite ltr_def.
+  rewrite -Qnneg_def i0.
+  rewrite /eq_op //= in H.
+  rewrite H; done.
+Qed.
+
+Lemma pmul_div a b c d:
+  (a / b) * (c / d) = (a * c) / (b * d).
+  destruct a,b,c,d; apply/eqP; rewrite /eq_op //=; apply/eqP.
+  apply mulf_div.
+Qed.
+
+
+Lemma pinv_1 :
+  pinv 1 = 1.
+  rewrite /pinv.
+  apply/eqP; rewrite /eq_op //=; apply/eqP.
+Qed.
+
+Lemma pdiv_pmul_num a b c :
+  (a * b) / c = a * (b / c).
+  rewrite -(pmul1r c).
+  rewrite -pmul_div.
+  rewrite pinv_1.
+  rewrite pmulr1.
+  rewrite pmul1r.
+  done.
+Qed.
+
+Lemma pdiv_pmul_denom a b c:
+  a / (b * c) = a / b * (1 / c).
+  rewrite pmul_div.
+  rewrite pmulr1.
+  done.
+Qed.
+
