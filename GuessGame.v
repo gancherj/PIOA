@@ -50,6 +50,7 @@ Definition guessTr (x : guessQ) (a : Action) : option (Meas guessQ) :=
                 end.
 
 Lemma guessTr_subDist x a m : guessTr x a = Some m -> isSubdist m.
+<<<<<<< HEAD
   destruct x as [ [u v] w];
   destruct u as [ [ | ] | ];
   destruct v as [ [ | ] | ];
@@ -63,6 +64,17 @@ Qed.
  
 Definition guesspre : prePIOA := mkPrePIOA [finType of Action] [finType of guessQ] (None, None, false) guessTr guessTr_subDist.
 
+=======
+  destruct x as [ [ [ [ ] | ] [ [ | ] | ] ] [ | ] ];
+    destruct a as [ | [ | ] | [ | ] ];
+    simpl; try congruence;
+      try ltac:(intro H; injection H; intro; subst; dsubdist).
+  apply isDist_isSubdist; apply unif_isDist; done.
+  intros; dsubdist.
+Qed.
+
+Definition guesspre : prePIOA := mkPrePIOA [finType of Action] [finType of guessQ] (None, None, false) guessTr guessTr_subDist.
+>>>>>>> e7d6cf2c04a86eb376d860b91d3e688dfb3560c3
 
 
 Definition guessPIOA : @PIOA [finType of Action].
@@ -94,16 +106,28 @@ Definition guessPIOA : @PIOA [finType of Action].
   move/orP; elim.
   move/eqP; intro; subst; done.
   move/eqP; intro; subst.
+<<<<<<< HEAD
   destruct s as [ [ [ [| ] | ]  [ [|] | ] ] [ | ] ]; rewrite /enabled //=.
   move/orP; elim.
   move/eqP; intro; subst.
   destruct s as [ [ [ [| ] | ]  [ [|] | ] ] [ | ] ]; rewrite /enabled //=.
+=======
+  destruct s as [ [ [ [ ] | ] [ [ | ] | ] ] [ | ] ]; rewrite /enabled //=.
+  move/orP; elim.
+  move/eqP; intro; subst.
+  destruct s as [ [ [ [ ] | ] [ [ | ] | ] ] [ | ] ]; rewrite /enabled //=.
+>>>>>>> e7d6cf2c04a86eb376d860b91d3e688dfb3560c3
   move/eqP; intro; subst; done.
   move=> s x y; rewrite !in_set.
   move/eqP; intro; subst; move/eqP; intro; subst; done.
   move=> s x; rewrite !in_set; move/orP; elim; move/eqP; intro; subst.
+<<<<<<< HEAD
   destruct s as [ [ [ [| ] | ]  [ [|] | ] ] [ | ] ]; rewrite /enabled //=.
   destruct s as [ [ [ [| ] | ]  [ [|] | ] ] [ | ] ]; rewrite /enabled //=.
+=======
+  destruct s as [ [ [ [ ] | ] [ [ | ] | ] ] [ | ] ]; rewrite /enabled //=.
+  destruct s as [ [ [ [ ] | ] [ [ | ] | ] ] [ | ] ]; rewrite /enabled //=.
+>>>>>>> e7d6cf2c04a86eb376d860b91d3e688dfb3560c3
   destruct x; intros.
   apply/setUP; right.
   apply/bigcupP.
