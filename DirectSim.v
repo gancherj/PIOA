@@ -25,7 +25,7 @@ Section DirectSim.
       drelStart : R (startTr P1) (startTr P2);
       drelObs :
         forall mu eta, R mu eta -> meas_fmap mu snd ~~ meas_fmap eta snd @ 0;
-      drelStep : forall mu eta T, R mu eta -> exists ts, R (appTask P1 T mu) (runPIOA P2 ts eta)
+      drelStep : forall mu eta T, R mu eta -> exists ts, R (appTask T mu) (runPIOA P2 ts eta)
                                                            }.
 
   Lemma DCSimP R : DCSim R -> @refinement _ P1 P2 HC1 HC2 0.
@@ -50,18 +50,3 @@ Section DirectSim.
   Qed.
 End DirectSim.
 
-  Definition traceProj1 {Act : finType} {P1 P2 : @PIOA Act} {H} : Trace (compPIOA P1 P2 H) -> Trace P1.
-    elim.
-    intros.
-    constructor.
-    apply (fst a).
-    apply (filter (fun x => x \in cover (action P1)) b).
-  Defined.
-
-  Definition traceProj2 {Act : finType} {P1 P2 : @PIOA Act} {H} : Trace (compPIOA P1 P2 H) -> Trace P2.
-    elim.
-    intros.
-    constructor.
-    apply (snd a).
-    apply (filter (fun x => x \in cover (action P2)) b).
-  Defined.

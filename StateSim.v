@@ -19,7 +19,7 @@ Section StateInj.
       siStep : forall T mu eta,
           meas_fmap mu (fun p => (R p.1, p.2)) ~~ eta @ 0 ->
           exists ts,
-            meas_fmap (appTask _ T mu) (fun p => (R p.1, p.2)) ~~
+            meas_fmap (appTask T mu) (fun p => (R p.1, p.2)) ~~
                       runPIOA _ ts eta @ 0
       }.
 
@@ -58,55 +58,4 @@ Section StateInj.
 End StateInj.
 
 
-Definition taskProj {A} (P1 P2 : @PIOA A) (H : Compatible P1 P2) (s : list (Task (compPIOA P1 P2 H))) : list (Task P1) * list (Task P2).
-  induction s.
-  exact (nil, nil).
-  destruct a.
-  simpl in i.
-  caseOn (x \in pTO P1 :|: pTH P1).
-  intro; have: Task P1. 
-  econstructor.
-  apply H0.
-  intro tn.
-  exact (tn :: IHs.1, IHs.2).
-  caseOn (x \in pTO P2 :|: pTH P2).
-  intros; have: Task P2.
-  econstructor; apply H0.
-  intro tn; exact (IHs.1, tn :: IHs.2).
-  move/setUP.
-  move/orP.
-  rewrite negb_or.
-  move/andP; elim.
-  intros Hc1 Hc2.
-  move/setUP; move/orP; rewrite negb_or; move/andP; elim.
-  intros.
-  move/setUP: i.
-  move/
-  rewrite Hc1 Hc2 H0 H1 in i.
 
-  move/
-  SearchAbout (_ \notin _ :|: _).
-  
-  move/setUP: i.
-  move/orP.
-
-  case.
-  split.
-  move/orP; elim.
-
-Section StateInj_comp.
-  Context {A : finType}.
-  Context (P1 P2 Adv : @PIOA A).
-  Context (Hc1 : Compatible P1 Adv).
-  Context (Hc2 : Compatible P2 Adv).
-  Definition p1a := compPIOA P1 Adv Hc1.
-  Definition p2a := compPIOA P2 Adv Hc2.
-
-  Lemma stateInj_comp (R : pQ P1 -> pQ P2) : StateInj P1 P2 R -> StateInj p1a p2a (fun p => (R p.1, p.2)).
-    intros.
-    destruct H; constructor.
-    simpl.
-    rewrite siStart0; done.
-    intros.
-    
-  
