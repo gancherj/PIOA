@@ -413,3 +413,4 @@ Definition compPIOA {Act : finType} (P1 P2 : @PIOA Act) : Compatible P1 P2 -> @P
   intro; apply/setUP; right.
   rewrite /cover bigcup_setU; apply/setUP; right; done.
 Defined.
+

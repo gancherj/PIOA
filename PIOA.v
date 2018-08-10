@@ -128,13 +128,13 @@ Defined.
 Definition external {A} (P : @PIOA A) :=
   (pI P) :|: (cover (pTO P)).
   
-Definition Trace {ActSpace} (P : @PIOA ActSpace) :=
-  [eqType of ((pQ P) * (list ActSpace))%type].
+Definition Trace {ActSpace : finType} (P : @PIOA ActSpace) :=
+  ((pQ P) * (list ActSpace))%type.
 
-Definition startTr {A} (P : @PIOA A) : Meas (Trace P) :=
+Definition startTr {A} (P : @PIOA A) : Meas ([eqType of Trace P]) :=
   ret (start P, nil).
 
-Definition appTask {Act : finType} (P : @PIOA Act) (T : Task P) (mu : Meas (Trace P)) : Meas (Trace P) := 
+Definition appTask {Act : finType} (P : @PIOA Act) (T : Task P) (mu : Meas ([eqType of Trace P])) : Meas ([eqType of Trace P]) := 
   t <- mu;
   let (s, actions) := t in
   match [pick x in (sval T) | enabled P s x] with
@@ -174,7 +174,7 @@ Lemma appTask_cong {A} (P : @PIOA A) : forall (T : Task P),
   dsimp.
 Qed.
 
-Definition runPIOA {A} (P : @PIOA A) (ts : seq (Task P)) (d : Meas (Trace P)) : Meas (Trace P) :=
+Definition runPIOA {A} (P : @PIOA A) (ts : seq (Task P)) (d : Meas ([eqType of Trace P])) : Meas ([eqType of Trace P]) :=
   foldl (fun acc t => appTask P t acc) d ts.
 
 Lemma runPIOA_cons {A} (P : @PIOA A) (t : Task P) (ts : seq (Task P)) d :
@@ -195,6 +195,7 @@ Lemma runPIOA_rcons {A} (P : @PIOA A) (t : Task P) ts d :
   rewrite IHts.
   done.
 Qed.
+
 
 Lemma runPIOA_app {A} (P : @PIOA A) (ts ts' : seq (Task P)) d :
   runPIOA P (ts ++ ts') d = runPIOA P ts' (runPIOA P ts d).
@@ -234,6 +235,39 @@ Lemma runPIOA_distrib {A} {P : @PIOA A} ts :
   apply measEquiv_refl.
   done.
 Qed.
+
+Lemma appTask_subDist {A} {P : @PIOA A} {T} {mu} : isSubdist mu -> isSubdist (appTask P T mu).
+intros.
+rewrite /appTask.
+dsubdist.
+done.
+destruct x.
+case: pickP.
+intros.
+remember (tr P s x).
+destruct o.
+dsubdist.
+eapply tr_subDist.
+symmetry; apply Heqo.
+destruct (x \in external P).
+intro; dsubdist.
+intro; dsubdist.
+dsubdist.
+intro; dsubdist.
+Qed.
+
+Lemma runPIOA_subDist {A} {P : @PIOA A} {ts} {mu} : isSubdist mu -> isSubdist (runPIOA P ts mu).
+  revert mu.
+induction ts.
+simpl.
+done.
+simpl.
+intros.
+apply IHts.
+apply appTask_subDist.
+done.
+Qed.
+
 
 Definition traceOf {Q act : eqType} (D : Meas ([eqType of Q * list act])%type) :=
   meas_fmap D snd.

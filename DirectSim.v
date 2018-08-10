@@ -20,7 +20,7 @@ Section DirectSim.
   Context (HC1 : inputClosed P1).
   Context (HC2 : inputClosed P2).
 
-  Record DCSim (R : Meas (Trace P1) -> Meas (Trace P2) -> Prop) :=
+  Record DCSim (R : Meas ([eqType of Trace P1]) -> Meas ([eqType of Trace P2]) -> Prop) :=
     {
       drelStart : R (startTr P1) (startTr P2);
       drelObs :
@@ -50,7 +50,7 @@ Section DirectSim.
   Qed.
 End DirectSim.
 
-  Definition traceProj1 {Act : finType} (P1 P2 : @PIOA Act) H : Trace (compPIOA P1 P2 H) -> Trace P1.
+  Definition traceProj1 {Act : finType} {P1 P2 : @PIOA Act} {H} : Trace (compPIOA P1 P2 H) -> Trace P1.
     elim.
     intros.
     constructor.
@@ -58,49 +58,10 @@ End DirectSim.
     apply (filter (fun x => x \in cover (action P1)) b).
   Defined.
 
-  Definition traceProj2 {Act : finType} (P1 P2 : @PIOA Act) H : Trace (compPIOA P1 P2 H) -> Trace P2.
+  Definition traceProj2 {Act : finType} {P1 P2 : @PIOA Act} {H} : Trace (compPIOA P1 P2 H) -> Trace P2.
     elim.
     intros.
     constructor.
     apply (snd a).
     apply (filter (fun x => x \in cover (action P2)) b).
   Defined.
-
-Section DirectOpenSim.
-  Context {A : finType}.
-  Context (P1 P2 : @PIOA A).
-  Context (Hequiv : inputEquiv P1 P2).
-
-  Record DOSim (R : Meas (Trace P1) -> Meas (Trace P2) -> Prop) :=
-    {
-      dcrelStart : R (startTr P1) (startTr P2);
-      dcrelObs :
-        forall mu eta, R mu eta -> meas_fmap mu snd ~~ meas_fmap eta snd @ 0;
-      dcrelStep : forall mu eta T, R mu eta -> exists ts, R (appTask P1 T mu) (runPIOA P2 ts eta);
-      dcrelInput : forall mu eta i,
-          R mu eta -> exists C, coupling mu (fun x y => enabled P1 x.1 i == enabled P2 y.1 i) eta C
-                                         }.
-
-                                    
-  Context (Adv : @PIOA A).
-  Context (HC1 : Compatible P1 Adv).
-  Context (HC2 : Compatible P2 Adv).
-  Context (IC1 : inputClosed (compPIOA P1 Adv HC1)).
-  Context (IC2 : inputClosed (compPIOA P2 Adv HC2)).
-
-
-  Lemma DOSimP R : DOSim R -> exists R', DCSim (compPIOA P1 Adv HC1) (compPIOA P2 Adv HC2) R'.
-    intro.
-    exists (fun mu eta => 
-              
-    refine (fun mu eta =>
-              
-
-
-                               
-       
-
-
-                                          
-                   }.
-  
