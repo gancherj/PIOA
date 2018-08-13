@@ -365,58 +365,61 @@ Section CompPIOA_symm.
   Context (Hc : Compatible P1 P2).
   Context (ic : inputClosed (compPIOA P1 P2 Hc)).
 
-  Lemma ic2 : inputClosed (compPIOA P2 P1 (compatible_sym _ _ Hc)).
+  Lemma inputClosed_sym : inputClosed (compPIOA P2 P1 (compatible_sym _ _ Hc)).
     rewrite /inputClosed.
     rewrite compPIOA_pI_sym; done.
   Qed.
 
-  Lemma compPIOA_sym : @refinement _ (compPIOA P1 P2 Hc) (compPIOA P2 P1 (compatible_sym _ _ Hc)) ic ic2 0.
+  Lemma compPIOA_sym : @refinement _ (compPIOA P1 P2 Hc) (compPIOA P2 P1 (compatible_sym _ _ Hc)) ic inputClosed_sym 0.
     eapply stateSimSound.
-    instantiate (1 := (fun p => (p.2, p.1))).
-    constructor.
-    done.
-    simpl.
-    intros.
-    exists ((compPIOA_task_sym P1 P2 _ _ T) :: nil).
-    simpl.
-    Check compPIOA_appTask_sym.
-    symmetry.
-    rewrite compPIOA_appTask_sym.
-    simpl.
-    rewrite /meas_fmap.
-    rewrite /appTask !bindAssoc.
-    symmetry in H; rewrite (measBind_cong_l H).
-    rewrite /meas_fmap bindAssoc.
-    apply measBind_cong_r; intros.
-    rewrite !bindRet.
-    simpl.
-
-    instantiate (1 := Hc).
-    destruct T.
-    simpl.
-    rewrite /runTask.
-    simpl.
-    remember x.1 as p; destruct p.
-    rewrite -Heqp.
-    simpl.
-    case: pickP.
-    intros.
-    destruct (prePIOA_comptrans P1 P2 (s, s0) x0).
-    simpl.
-    rewrite !bindAssoc.
-    reflexivity.
-    rewrite !bindRet.
-    simpl.
-    rewrite -Heqp; simpl;
-    reflexivity.
-    intros; rewrite !bindRet //=.
-    rewrite -Heqp; simpl; reflexivity.
     admit.
-    intros; dsubdist.
-    intros.
-    dsubdist.
-    admit.
-    intros; dsubdist.
-    admit.
-Admitted.
+  Admitted.
 End CompPIOA_symm.
+
+Section CompPIOA_assoc.
+  Context {A : finType}.
+  Context (P1 P2 P3 : @PIOA A).
+  Context (Hc1 : Compatible P2 P3).
+  Context (Hc2 : Compatible P1 (compPIOA P2 P3 Hc1)).
+  Context (Hc3 : Compatible P1 P2).
+  Context (Hc4 : Compatible (compPIOA P1 P2 Hc3) P3).
+  Context (ic : inputClosed (compPIOA (compPIOA P1 P2 Hc3) P3 Hc4)).
+
+  Definition Q1 := compPIOA P1 (compPIOA P2 P3 Hc1) Hc2.
+  Definition Q2 := compPIOA (compPIOA P1 P2 Hc3) P3 Hc4.
+
+  Lemma coverU {X : finType} (F G : {set {set X}}) :
+    cover (F :|: G) = cover F :|: cover G.
+    rewrite /cover bigcup_setU //=.
+  Qed.
+
+  Lemma pI_comp_assoc : pI Q1 = pI Q2.
+    simpl.
+    rewrite !setUA.
+    rewrite !setDUl //=.
+    rewrite !setUA.
+    congr (_ :|: _ :|: _).
+    rewrite !coverU.
+    rewrite !setDDl.
+    congr (_ :\: _).
+    admit.
+    rewrite !coverU.
+    rewrite !setDDl.
+    congr (_ :\: _).
+    admit.
+    rewrite !coverU.
+    rewrite !setDDl.
+    congr (_ :\: _).
+    admit.
+  Admitted.
+
+  Lemma inputClosed_assoc : inputClosed (compPIOA P1 (compPIOA P2 P3 Hc1) Hc2).
+    rewrite /inputClosed.
+    rewrite pI_comp_assoc.
+    apply ic.
+  Qed.
+
+  Lemma compPIOA_assoc : @refinement _ Q2 Q1 ic inputClosed_assoc 0.
+    admit.
+  Admitted.
+End CompPIOA_assoc.
