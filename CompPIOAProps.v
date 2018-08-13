@@ -146,6 +146,219 @@ Lemma enabled_hiddenE {A} (P1 P2 : @PIOA A) H (T : Task P1) x s :
   destruct (tr P1 s.1 x); done.
 Qed.
 
+Lemma compPIOA_pI_sym {A} (P1 P2 : @PIOA A) H H2 :
+  pI (compPIOA P1 P2 H) = pI (compPIOA P2 P1 H2).
+  simpl.
+  rewrite (setUC (pI P1) (pI P2)).
+  rewrite (setUC (pTO P1) (pTO P2)).
+  done.
+Qed.
+
+Lemma compPIOA_pTO_sym {A} (P1 P2 : @PIOA A) H H2 :
+  pTO (compPIOA P1 P2 H) = pTO (compPIOA P2 P1 H2).
+  by rewrite //= setUC.
+Qed.
+
+Lemma compPIOA_pTH_sym {A} (P1 P2 : @PIOA A) H H2 :
+  pTH (compPIOA P1 P2 H) = pTH (compPIOA P2 P1 H2).
+  by rewrite //= setUC.
+Qed.
+
+Check enabled.
+
+Check tr.
+
+Lemma measBind_swap {A B C : eqType} (D1 : Meas A) (D2 : Meas B) (D3 : A -> B -> Meas C) :
+  (x <- D1; y <- D2; D3 x y) ~~ (y <- D2; x <- D1; D3 x y) @ 0.
+  rewrite /measEquiv; intros.
+  rewrite pdist_le0.
+  rewrite /integ /measBind /measJoin /measSum //=.
+  rewrite !big_flatten !big_map.
+  simpl.
+  rewrite /measScale.
+  apply/eqP.
+  etransitivity.
+  apply eq_bigr; intros.
+  rewrite big_map big_flatten !big_map //.
+  simpl.
+  rewrite exchange_big.
+  apply eq_bigr; intros.
+  rewrite big_map big_flatten !big_map //.
+  apply eq_bigr; intros.
+  rewrite !big_map.
+  simpl.
+  apply eq_bigr; intros.
+  rewrite !pmulrA.
+  rewrite (pmulrC i0.1 i.1).
+  done.
+Qed.
+
+Lemma compPIOA_tr_sym {A} (P1 P2 : @PIOA A) x s :
+  (tr (comp_prePIOA P2 P1) s x = None <-> (tr (comp_prePIOA P1 P2) (s.2, s.1) x = None)) /\
+  (forall mu eta, tr (comp_prePIOA P2 P1) s x = Some mu -> tr (comp_prePIOA P1 P2) (s.2, s.1) x = Some eta ->
+   mu ~~ meas_fmap eta (fun p => (p.2, p.1)) @ 0).
+
+  simpl.
+  rewrite /prePIOA_comptrans.
+  simpl.
+  split; [idtac | intros mu eta];
+  remember (tr P1 s.2 x) as D; destruct D;
+  remember (tr P2 s.1 x) as D'; destruct D'.
+  split; congruence.
+  destruct (x \notin cover (action P2)); split; try congruence.
+  done.
+  done.
+  destruct (x \notin cover (action P1)); split; try congruence.
+  done.
+  done.
+  done.
+  simpl.
+  intros H1 H2; injection H1; injection H2; intros; subst.
+  rewrite /meas_fmap.
+  dsimp.
+  rewrite measBind_swap.
+  apply measBind_cong_r; intros.
+  rewrite bindAssoc.
+  apply measBind_cong_r; intros.
+  rewrite bindRet //=.
+  reflexivity.
+  eapply tr_subDist; symmetry in HeqD'; apply HeqD'.
+  eapply tr_subDist; symmetry in HeqD; apply HeqD.
+  destruct (x \notin cover (action P2)).
+  intros H1 H2; injection H1; injection H2; intros; subst.
+  rewrite /meas_fmap.
+  rewrite bindAssoc.
+  apply measBind_cong_r; intros; dsimp.
+  eapply tr_subDist; symmetry in HeqD; apply HeqD.
+  congruence.
+  destruct (x \notin cover (action P1)).
+  intros H1 H2; injection H1; injection H2; intros; subst.
+  rewrite /meas_fmap.
+  rewrite bindAssoc.
+  apply measBind_cong_r; intros; dsimp.
+  eapply tr_subDist; symmetry in HeqD'; apply HeqD'.
+  congruence.
+  congruence.
+Qed.
+
+
+Lemma compPIOA_enabled_symm {A} (P1 P2 : @PIOA A) H H2 x s:
+  enabled (compPIOA P1 P2 H) s x =
+  enabled (compPIOA P2 P1 H2) (s.2, s.1) x.
+  rewrite /enabled.
+  destruct (compPIOA_tr_sym P2 P1 x s).
+  remember (tr (compPIOA P1 P2 H) s x) as mu; destruct mu.
+  remember (tr (compPIOA P2 P1 H2) (s.2,s.1) x) as eta; destruct eta.
+  done.
+  symmetry in Heqeta;
+  apply H0 in Heqeta.
+  rewrite Heqeta in Heqmu; done.
+  destruct H0.
+  symmetry in Heqmu; rewrite (H0 Heqmu); done.
+Qed.
+
+Definition compPIOA_task_sym {A} (P1 P2 : @PIOA A) H H2 :
+  Task (compPIOA P1 P2 H) ->
+  Task (compPIOA P2 P1 H2).
+  intro T; destruct T.
+  econstructor.
+  rewrite compPIOA_pTO_sym.
+  rewrite compPIOA_pTH_sym.
+  apply i.
+Defined.
+
+
+Definition compPIOA_appTask_sym {A} (P1 P2 : @PIOA A) H H2 T mu : isSubdist mu ->
+  appTask T mu ~~
+  meas_fmap (appTask (compPIOA_task_sym P1 P2 H H2 T) (x <- mu; ret ((x.1.2, x.1.1), x.2))) (fun x => ((x.1.2, x.1.1), x.2)) @ 0.
+  intro Hsubmu.
+  rewrite /appTask.
+  rewrite /meas_fmap.
+  rewrite !bindAssoc.
+  apply measBind_cong_r; intros.
+  rewrite bindRet; simpl.
+  rewrite /runTask.
+  have:  [pick x0 in T  | enabled (compPIOA P1 P2 H) x.1 x0] =
+         [pick x0 in compPIOA_task_sym P1 P2 H H2 T  | enabled (compPIOA P2 P1 H2) (x.1.2, x.1.1) x0].  
+  
+  {
+    apply eq_pick.
+    move=> z.
+    rewrite /compPIOA_task_sym; simpl.
+    rewrite compPIOA_enabled_symm.
+    destruct T; simpl.
+    done.
+    done.
+  }
+
+  intros.
+  rewrite -x0.
+  case: pickP; intros.
+
+  destruct (compPIOA_tr_sym P1 P2  x1 (x.1.2, x.1.1)).
+
+
+  remember (tr (compPIOA P1 P2 H) x.1 x1) as D; destruct D; symmetry in HeqD.
+  remember (tr (compPIOA P2 P1 H2) (x.1.2, x.1.1) x1) as D'; destruct D'; symmetry in HeqD'.
+  have Heq := H3 _ _ HeqD' HeqD.
+  rewrite HeqD HeqD'.
+  simpl.
+  rewrite bindAssoc (measBind_cong_l Heq).
+  rewrite /external.
+  rewrite compPIOA_pI_sym compPIOA_pTO_sym.
+  destruct (x1 \in pI (compPIOA P2 P1 H2) :|: cover (pTO (compPIOA P2 P1 H2))).
+  rewrite /meas_fmap bindAssoc.
+  apply measBind_cong_r; intros.
+  rewrite !bindRet.
+  simpl.
+  destruct x2;
+  reflexivity.
+
+  eapply (@tr_subDist _ (compPIOA P1 P2 H) _ _).
+  apply HeqD.
+  rewrite /meas_fmap bindAssoc.
+  apply measBind_cong_r; intros.
+  rewrite !bindRet //=.
+  destruct x2; reflexivity.
+  eapply (@tr_subDist _ (compPIOA P1 P2 H) _ _).
+  apply HeqD.
+  intros.
+  destruct (x1 \in external (compPIOA P2 P1 H2)).
+  dsubdist.
+  intros; dsubdist.
+  dsubdist.
+  intros; dsubdist.
+  destruct H1.
+  simpl in H1.
+  have Hq := H1 HeqD'.
+  simpl in HeqD.
+  destruct x.1.
+  remember x.1 as p; destruct p.
+  rewrite -Heqp in HeqD.
+  rewrite -Heqp in Hq.
+  simpl in Hq.
+  rewrite Hq in HeqD; done.
+  destruct H1.
+  simpl in H4.
+  simpl in HeqD.
+  have Hq := H4 HeqD.
+  simpl.
+  rewrite HeqD.
+  rewrite Hq.
+  rewrite bindRet.
+  simpl.
+  destruct x; simpl.
+  destruct s; simpl.
+  reflexivity.
+  rewrite bindRet.
+  simpl.
+  destruct x; simpl.
+  destruct s; simpl.
+  reflexivity.
+  done.
+Qed.
+
+
 Section CompPIOA_symm.
   Context {A : finType}.
   Context (P1 P2 : @PIOA A).
@@ -154,35 +367,7 @@ Section CompPIOA_symm.
 
   Lemma ic2 : inputClosed (compPIOA P2 P1 (compatible_sym _ _ Hc)).
     rewrite /inputClosed.
-    simpl.
-    have ic2 := ic.
-    rewrite /inputClosed in ic2.
-    simpl in ic2.
-    apply setP => x.
-    rewrite in_set0.
-    apply/setDP.
-    elim.
-    intros.
-    apply setP in ic2.
-    move/setDP: (ic2 x).
-    rewrite in_set0 //=.
-    elim.
-    split.
-    move/setUP: H.
-    elim.
-
-    intro; apply/setUP; right; done.
-    intro; apply/setUP; left; done.
-    move/bigcupP: H0; intros.
-    apply/bigcupP.
-    elim.
-    intros.
-    apply H0.
-    exists x0.
-    move/setUP: H1; elim.
-    intro; apply/setUP; right; done.
-    intro; apply/setUP; left; done.
-    done.
+    rewrite compPIOA_pI_sym; done.
   Qed.
 
   Lemma compPIOA_sym : @refinement _ (compPIOA P1 P2 Hc) (compPIOA P2 P1 (compatible_sym _ _ Hc)) ic ic2 0.
@@ -192,62 +377,46 @@ Section CompPIOA_symm.
     done.
     simpl.
     intros.
-    destruct T.
-    have: tT \in pTO (compPIOA P2 P1 (compatible_sym _ _ Hc)) :|: pTH (compPIOA P2 P1 (compatible_sym _ _ Hc)).
-    admit.
-    intro.
-    Check Build_Task.
-    exists ((Build_Task _ _ tT x) :: nil).
+    exists ((compPIOA_task_sym P1 P2 _ _ T) :: nil).
     simpl.
-    rewrite /meas_fmap /appTask.
-    dsimp.
-    symmetry in H; symmetry; rewrite (measBind_cong_l H).
-    rewrite /meas_fmap; dsimp.
+    Check compPIOA_appTask_sym.
+    symmetry.
+    rewrite compPIOA_appTask_sym.
+    simpl.
+    rewrite /meas_fmap.
+    rewrite /appTask !bindAssoc.
+    symmetry in H; rewrite (measBind_cong_l H).
+    rewrite /meas_fmap bindAssoc.
     apply measBind_cong_r; intros.
-    dsimp.
+    rewrite !bindRet.
+    simpl.
+
+    instantiate (1 := Hc).
+    destruct T.
+    simpl.
     rewrite /runTask.
     simpl.
-
-
-
-        
-(*
-Lemma appTaskLeftHidden {A} (P1 P2 : @PIOA A) H t mu : isSubdist mu ->
-  hiddenTask t -> appTask P1 t (meas_fmap mu traceProj1) ~~ meas_fmap (appTaskLeft _ P2 H t mu) traceProj1 @ 0. 
-  intros.
-  have: hiddenTask  (taskInjl _ P2 H t).
-  rewrite /hiddenTask /taskInjl.
-  destruct t.
-  simpl.
-  rewrite /hiddenTask //= in H1.
-  apply/setUP; left; done.
-  intro.
-  rewrite /appTaskLeft /meas_fmap /appTask.
-  dsimp.
-  apply measBind_cong_r; intros.
-  dsimp.
-  destruct x0.
-  simpl.
-
-  destruct t.
-  rewrite /taskInjl.
-  simpl.
-  have: [pick x1 in x0 | enabled P1 s.1 x1] = [pick x1 in x0 | enabled (comp_prePIOA P1 P2) s x1].
-  case:pickP.
-  case:pickP.
-  intros.
-  rewrite /enabled in i0.
-  simpl in i0.
-  destruct (hiddenP t (meas_fmap mu traceProj1) H1 (meas_fmap_isSubdist mu traceProj1 H0)).
-  destruct (hiddenP (taskInjl P1 P2 H t) mu x H0).
-  rewrite H2.
-  rewrite /appTaskLeft /meas_fmap; symmetry; rewrite (measBind_cong_l H3).
-  dsimp.
-  apply measBind_cong_r; intros.
-  dsimp.
-
-  symmetry; rewrite (meas_fmap_conH3.
-  
-  rewrite /appTask
-  
-*)
+    remember x.1 as p; destruct p.
+    rewrite -Heqp.
+    simpl.
+    case: pickP.
+    intros.
+    destruct (prePIOA_comptrans P1 P2 (s, s0) x0).
+    simpl.
+    rewrite !bindAssoc.
+    reflexivity.
+    rewrite !bindRet.
+    simpl.
+    rewrite -Heqp; simpl;
+    reflexivity.
+    intros; rewrite !bindRet //=.
+    rewrite -Heqp; simpl; reflexivity.
+    admit.
+    intros; dsubdist.
+    intros.
+    dsubdist.
+    admit.
+    intros; dsubdist.
+    admit.
+Admitted.
+End CompPIOA_symm.
