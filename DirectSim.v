@@ -4,16 +4,6 @@ From mathcomp Require Import bigop ssralg div ssrnum ssrint finset ssrnum ssrnat
 
 Require Import PIOA Meas Posrat CompPIOA Lems.
 
-Definition inputEquiv {A} (P1 P2 : @PIOA A) := pI P1 = pI P2.
-
-
-Record coupling {A B : eqType} (D : Meas A) (R : A -> B -> bool) (D' : Meas B) C :=
-  {
-    _ : D ~~ meas_fmap C fst @ 0;
-    _ : D' ~~ meas_fmap C snd @ 0;
-    _ : forall p, p \in measSupport C -> R p.1 p.2
-                                           }.
-
 Section DirectSim.
   Context {A : finType}.
   Context (P1 P2 : @PIOA A).
@@ -25,28 +15,37 @@ Section DirectSim.
       drelStart : R (startTr P1) (startTr P2);
       drelObs :
         forall mu eta, R mu eta -> meas_fmap mu snd ~~ meas_fmap eta snd @ 0;
-      drelStep : forall mu eta T, R mu eta -> exists ts, R (appTask T mu) (runPIOA P2 ts eta)
+      drelStep : forall mu eta T, T \in Tasks P1 -> R mu eta -> exists ts, all (isTask P2) ts /\ R (appTask P1 T mu) (runPIOA P2 ts eta)
                                                            }.
 
   Lemma DCSimP R : DCSim R -> @refinement _ P1 P2 HC1 HC2 0.
     case.
     intros.
-    intros ts.
-    have: exists ts',
+    intros ts Hts.
+    have: exists ts', all (isTask P2) ts' /\
         R (runPIOA _ ts (startTr P1)) (runPIOA _ ts' (startTr P2)).
     induction ts using last_ind.
+    
     exists nil.
     done.
-    destruct IHts.
-
-    destruct (drelStep0 _ _ x H).
+    rewrite all_rcons in Hts; move/andP: Hts => [h1 h2].
+    destruct (IHts h2); clear IHts.
+    destruct H.
+    destruct (drelStep0 (runPIOA P1 ts (startTr P1)) (runPIOA P2 x0 (startTr P2)) x h1 H0).
+    destruct H1.
     exists (x0 ++ x1).
-    rewrite runPIOA_app.
-    rewrite runPIOA_rcons.
+    split.
+    rewrite all_cat.
+    rewrite H H1; done.
+    rewrite runPIOA_app runPIOA_rcons.
     done.
     elim; intros.
     exists x.
-    apply drelObs0; done.
+    destruct H; split.
+    done.
+    apply drelObs0.
+    done.
   Qed.
+
 End DirectSim.
 

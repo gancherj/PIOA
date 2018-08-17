@@ -818,3 +818,44 @@ Lemma fmap_cong {A B : eqType} (d1 d2 : Meas A) ( f : A -> B) e :
   done.
   intros; apply isSubdist_ret.
 Qed.  
+
+Lemma meas_fmap_isSubdist {A B : eqType} (mu : Meas A) (f : A -> B) : isSubdist mu -> isSubdist (meas_fmap mu f).
+  rewrite /isSubdist.
+  rewrite /measMass.
+  rewrite /meas_fmap.
+  rewrite /measBind /measJoin /measSum.
+  rewrite big_flatten !big_map.
+  simpl.
+  intros.
+  have:  \big[padd/0]_(j <- mu) \big[padd/0]_(i <- [:: (j.1 * 1, f j.2)]) i.1 =
+         \big[padd/0]_(j <- mu) j.1.
+  apply eq_bigr; intros; rewrite big_cons big_nil.
+  simpl.
+  rewrite paddr0 pmulr1; done.
+  intro He; rewrite He; done.
+Qed.
+
+Lemma measBind_swap {A B C : eqType} (D1 : Meas A) (D2 : Meas B) (D3 : A -> B -> Meas C) :
+  (x <- D1; y <- D2; D3 x y) ~~ (y <- D2; x <- D1; D3 x y) @ 0.
+  rewrite /measEquiv; intros.
+  rewrite pdist_le0.
+  rewrite /integ /measBind /measJoin /measSum //=.
+  rewrite !big_flatten !big_map.
+  simpl.
+  rewrite /measScale.
+  apply/eqP.
+  etransitivity.
+  apply eq_bigr; intros.
+  rewrite big_map big_flatten !big_map //.
+  simpl.
+  rewrite exchange_big.
+  apply eq_bigr; intros.
+  rewrite big_map big_flatten !big_map //.
+  apply eq_bigr; intros.
+  rewrite !big_map.
+  simpl.
+  apply eq_bigr; intros.
+  rewrite !pmulrA.
+  rewrite (pmulrC i0.1 i.1).
+  done.
+Qed.

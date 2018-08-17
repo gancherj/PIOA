@@ -113,19 +113,11 @@ eapply i.
 apply H.
 Qed.
 
-Record Task {Act : finType} (P : @PIOA Act) :=
-  {tT :> {set Act};
-   _ : tT \in (pTO P) :|: (pTH P)
-                      }.
+Definition Tasks {Act : finType} (P : @PIOA Act) := (pTO P) :|: (pTH P).
 
-Arguments tT {Act} {P}.
+Definition Task (Act : finType) := {set Act}.
 
-Canonical Structure taskSub {Act : finType} (P : @PIOA Act) := [subType for (@tT Act P)].
-
-Definition taskEqmix {A} (P : @PIOA A) := [eqMixin of (Task P) by <:].
-Canonical Structure taskEqt {A} (P : @PIOA A) := EqType (Task P) (taskEqmix P).
-
-Definition runTask {A} {P : @PIOA A} (T : Task P) (s : pQ P) : option (Meas (pQ P) * A) :=
+Definition runTask {A} {P : @PIOA A} (T : Task A) (s : pQ P) : option (Meas (pQ P) * A) :=
   match [pick x in T | enabled P s x] with
   | Some a =>
     match (tr P s a) with
@@ -141,7 +133,7 @@ Definition external {A} (P : @PIOA A) :=
 Definition Trace {ActSpace : finType} (P : @PIOA ActSpace) :=
   ((pQ P) * (list ActSpace))%type.
 
-Definition appTask {A} {P : @PIOA A} (T : Task P) (mu : Meas [eqType of Trace P]) : Meas [eqType of Trace P] :=
+Definition appTask {A} (P : @PIOA A) (T : Task A) (mu : Meas [eqType of Trace P]) : Meas [eqType of Trace P] :=
   t <- mu;
     match (runTask T t.1) with
     | Some p => s <- p.1; if (p.2 \in (external P)) then ret (s, p.2 :: t.2) else ret (s, t.2)
@@ -152,8 +144,8 @@ Definition startTr {A} (P : @PIOA A) : Meas ([eqType of Trace P]) :=
   ret (start P, nil).
 
 
-Lemma appTask_distrib {A} (P : @PIOA A) (T : Task P) :
-  joinDistrib (appTask T).
+Lemma appTask_distrib {A} (P : @PIOA A) (T : Task A) :
+  joinDistrib (appTask P T).
   unfold joinDistrib, appTask; intros; dsimp.
   apply measEquiv_refl.
 Qed.
@@ -165,8 +157,8 @@ Ltac dsubdist := repeat (
   | [ H : tr _ _ _ = Some ?m |- is_true (isSubdist ?m) ] => eapply tr_subDist; apply H
  end).
 
-Lemma appTask_cong {A} (P : @PIOA A) : forall (T : Task P),
-  measCong (appTask T).
+Lemma appTask_cong {A} (P : @PIOA A) : forall (T : Task A),
+  measCong (appTask P T).
   unfold measCong, appTask; intros; dsimp.
   drewr (measBind_cong_l H).
   intros.
@@ -180,18 +172,18 @@ Lemma appTask_cong {A} (P : @PIOA A) : forall (T : Task P),
   dsimp.
 Qed.
 
-Definition runPIOA {A} (P : @PIOA A) (ts : seq (Task P)) (d : Meas ([eqType of Trace P])) : Meas ([eqType of Trace P]) :=
-  foldl (fun acc t => appTask t acc) d ts.
+Definition runPIOA {A} (P : @PIOA A) (ts : seq (Task A)) (d : Meas ([eqType of Trace P])) : Meas ([eqType of Trace P]) :=
+  foldl (fun acc t => appTask P t acc) d ts.
 
-Lemma runPIOA_cons {A} (P : @PIOA A) (t : Task P) (ts : seq (Task P)) d :
-  runPIOA P (t :: ts) d = (runPIOA P ts (appTask t d)).
+Lemma runPIOA_cons {A} (P : @PIOA A) (t : Task A) (ts : seq (Task A)) d :
+  runPIOA P (t :: ts) d = (runPIOA P ts (appTask P t d)).
   unfold runPIOA.
   simpl.
   auto.
 Qed.
 
-Lemma runPIOA_rcons {A} (P : @PIOA A) (t : Task P) ts d :
-  runPIOA P (rcons ts t) d = appTask t (runPIOA P ts d).
+Lemma runPIOA_rcons {A} (P : @PIOA A) (t : Task A) ts d :
+  runPIOA P (rcons ts t) d = appTask P t (runPIOA P ts d).
   move: d.
   induction ts.
   simpl.
@@ -203,7 +195,7 @@ Lemma runPIOA_rcons {A} (P : @PIOA A) (t : Task P) ts d :
 Qed.
 
 
-Lemma runPIOA_app {A} (P : @PIOA A) (ts ts' : seq (Task P)) d :
+Lemma runPIOA_app {A} (P : @PIOA A) (ts ts' : seq (Task A)) d :
   runPIOA P (ts ++ ts') d = runPIOA P ts' (runPIOA P ts d).
   unfold runPIOA; rewrite foldl_cat.
   done.
@@ -242,7 +234,7 @@ Lemma runPIOA_distrib {A} {P : @PIOA A} ts :
   done.
 Qed.
 
-Lemma appTask_subDist {A} {P : @PIOA A} {T : Task P} {mu} : isSubdist mu -> isSubdist (appTask T mu).
+Lemma appTask_subDist {A} {P : @PIOA A} {T : Task A} {mu} : isSubdist mu -> isSubdist (appTask P T mu).
 intros.
 rewrite /appTask.
 dsubdist.
@@ -285,21 +277,27 @@ Definition inputClosed {A} (P : @PIOA A) :=
 Definition inputEquiv {A} (P1 P2 : @PIOA A) :=
   (pI P1) = (pI P2).
 
+Definition hiddenTask {A} (P : @PIOA A) : Task A -> bool := fun T => (T) \in pTH P.
+
+Definition outputTask {A} (P : @PIOA A) : Task A -> bool := fun T => (T) \in pTO P.
+
+Definition isTask {A} (P : @PIOA A) : Task A -> bool := fun T => T \in Tasks P.
+
 Definition refinement {A} (P1 P2 : @PIOA A)  `{inputClosed P1} `{inputClosed P2} e :=
-  forall ts, exists ts',
+  forall ts, all (isTask P1) ts -> exists ts',
+      all (isTask P2) ts' /\
       traceOf (runPIOA P1 ts (startTr P1)) ~~ traceOf (runPIOA P2 ts' (startTr P2)) @ e.
 
-Definition hiddenTask {A} {P : @PIOA A} : Task P -> bool := fun T => (tT T) \in pTH P.
 
-Definition outputTask {A} {P : @PIOA A} : Task P -> bool := fun T => (tT T) \in pTO P.
 
-Lemma hiddenP {A} {P : @PIOA A} (T : Task P) mu :
-  hiddenTask T -> isSubdist mu -> exists (eta : pQ P -> Meas (pQ P)),
-      appTask T mu ~~ (t <- mu; x <- eta (fst t); ret (x, snd t)) @ 0. 
-  destruct T as [Tx HT]; simpl.
+
+Lemma hiddenP {A} {P : @PIOA A} (T : Task A) mu :
+  hiddenTask P T -> isSubdist mu -> exists (eta : pQ P -> Meas (pQ P)),
+      appTask P T mu ~~ (t <- mu; x <- eta (fst t); ret (x, snd t)) @ 0. 
+
   intros.
   exists ( fun s =>
-             match [pick x in Tx | enabled P s x] with
+             match [pick x in T | enabled P s x] with
              | Some a => match tr P s a with | Some mu => mu | None => ret s end
              | None => ret s
                            end).
