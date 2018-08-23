@@ -2,14 +2,17 @@
 From mathcomp Require Import ssreflect ssrfun ssrbool ssrint eqtype ssrnat seq choice fintype rat finfun.
 From mathcomp Require Import bigop ssralg div ssrnum ssrint finset ssrnum ssrnat.
 
-Require Import PIOA Meas Posrat CompPIOA Lems.
+Require Import PIOA Meas Posrat CompPIOA Lems StateSim.
+
+Section compPIOAProps.
+  Context {A : finType} (P1 P2 : @PIOA A) (p1p2 : P1 ||| P2).
 
   Lemma coverU {X : finType} (F G : {set {set X}}) :
     cover (F :|: G) = cover F :|: cover G.
     rewrite /cover bigcup_setU //=.
   Qed.
 
-  Definition tracePil {Act : finType} {P1 P2 : @PIOA Act} {H} : Trace (compPIOA P1 P2 H) -> Trace P1.
+  Definition tracePil {Act : finType} : Trace p1p2 -> Trace P1.
     elim.
     intros.
     constructor.
@@ -17,7 +20,7 @@ Require Import PIOA Meas Posrat CompPIOA Lems.
     apply (filter (fun x => x \in cover (action P1)) b).
   Defined.
 
-  Definition tracePir {Act : finType} {P1 P2 : @PIOA Act} {H} : Trace (compPIOA P1 P2 H) -> Trace P2.
+  Definition tracePir {Act : finType} : Trace p1p2 -> Trace P2.
     elim.
     intros.
     constructor.
@@ -25,48 +28,48 @@ Require Import PIOA Meas Posrat CompPIOA Lems.
     apply (filter (fun x => x \in cover (action P2)) b).
   Defined.
 
-  Definition traceInl {Act : finType} {P1 P2 : @PIOA Act} {H} : pQ P2 -> Trace P1 -> Trace (compPIOA P1 P2 H).
+  Definition traceInl {Act : finType} : pQ P2 -> Trace P1 -> Trace p1p2.
     intro; elim; intros; constructor.
     apply (a, X).
     apply b.
   Defined.
 
-  Definition traceInr {Act : finType} {P1 P2 : @PIOA Act} {H} : pQ P1 -> Trace P2 -> Trace (compPIOA P1 P2 H).
+  Definition traceInr {Act : finType} : pQ P1 -> Trace P2 -> Trace p1p2.
     intro; elim; intros; constructor.
     apply (X ,a ).
     apply b.
   Defined.
 
-  Check tr.
 
-Inductive comp_tr_specI {A} (P1 P2 : @PIOA A) H s x (Hx : x \in cover (action (compPIOA P1 P2 H))) : Prop :=
-  | enabled_hidden_l : forall mu, x \in cover (pTH P1) -> tr P2 s.2 x = None -> tr P1 s.1 x = Some mu -> tr (compPIOA P1 P2 H) s x = Some (a <- mu; ret (a, s.2)) -> comp_tr_specI P1 P2 H s x Hx
+Inductive comp_tr_specI s x (Hx : x \in cover (action p1p2)) : Prop :=
+  | enabled_hidden_l : forall mu, x \in cover (pTH P1) -> tr P2 s.2 x = None -> tr P1 s.1 x = Some mu -> tr p1p2 s x = Some (a <- mu; ret (a, s.2)) -> comp_tr_specI s x Hx
 
-  | enabled_hidden_r : forall mu, x \in cover (pTH P2) -> tr P1 s.1 x = None -> tr P2 s.2 x = Some mu -> tr (compPIOA P1 P2 H) s x = Some (a <- mu; ret (s.1, a)) -> comp_tr_specI P1 P2 H s x Hx
+  | enabled_hidden_r : forall mu, x \in cover (pTH P2) -> tr P1 s.1 x = None -> tr P2 s.2 x = Some mu -> tr p1p2 s x = Some (a <- mu; ret (s.1, a)) -> comp_tr_specI s x Hx
 
-  | enabled_input_l : forall mu, x \in pI P1 -> x \notin pI P2 -> tr P1 s.1 x = Some mu -> tr P2 s.2 x = None -> tr (compPIOA P1 P2 H) s x = Some (a <- mu; ret (a, s.2)) -> comp_tr_specI P1 P2 H s x Hx                         
+  | enabled_input_l : forall mu, x \in pI P1 -> x \notin pI P2 -> tr P1 s.1 x = Some mu -> tr P2 s.2 x = None -> tr p1p2 s x = Some (a <- mu; ret (a, s.2)) -> comp_tr_specI s x Hx                         
 
-  | enabled_input_r : forall mu, x \in (pI P2) -> x \notin pI P1 -> tr P1 s.1 x = None -> tr P2 s.2 x = Some mu -> tr (compPIOA P1 P2 H) s x = Some (a <- mu; ret (s.1, a)) -> comp_tr_specI P1 P2 H s x Hx  
+  | enabled_input_r : forall mu, x \in (pI P2) -> x \notin pI P1 -> tr P1 s.1 x = None -> tr P2 s.2 x = Some mu -> tr p1p2 s x = Some (a <- mu; ret (s.1, a)) -> comp_tr_specI s x Hx  
 
-  | enabled_input_lr : forall mu eta, x \in (pI P1) -> x \in (pI P2) -> tr P1 s.1 x = Some mu -> tr P2 s.2 x = Some eta -> tr (compPIOA P1 P2 H) s x = Some (a <- mu; b <- eta; ret (a,b)) -> comp_tr_specI P1 P2 H s x Hx
+  | enabled_input_lr : forall mu eta, x \in (pI P1) -> x \in (pI P2) -> tr P1 s.1 x = Some mu -> tr P2 s.2 x = Some eta -> tr p1p2 s x = Some (a <- mu; b <- eta; ret (a,b)) -> comp_tr_specI s x Hx
 
-  | enabled_output_ext_l : forall mu, x \in cover (pTO P1) -> x \notin pI P2 -> tr P2 s.2 x = None -> tr P1 s.1 x = Some mu -> tr (compPIOA P1 P2 H) s x = Some (a <- mu; ret (a, s.2)) -> comp_tr_specI P1 P2 H s x Hx
+  | enabled_output_ext_l : forall mu, x \in cover (pTO P1) -> x \notin pI P2 -> tr P2 s.2 x = None -> tr P1 s.1 x = Some mu -> tr p1p2 s x = Some (a <- mu; ret (a, s.2)) -> comp_tr_specI s x Hx
 
-  | enabled_output_ext_r : forall mu, x \in cover (pTO P2) -> x \notin pI P1 -> tr P1 s.1 x = None -> tr P2 s.2 x = Some mu -> tr (compPIOA P1 P2 H) s x = Some (a <- mu; ret (s.1, a)) -> comp_tr_specI P1 P2 H s x Hx
+  | enabled_output_ext_r : forall mu, x \in cover (pTO P2) -> x \notin pI P1 -> tr P1 s.1 x = None -> tr P2 s.2 x = Some mu -> tr p1p2 s x = Some (a <- mu; ret (s.1, a)) -> comp_tr_specI s x Hx
 
-  | enabled_comm_l : forall mu eta, x \in cover (pTO P1) -> x \in pI P2 -> tr P1 s.1 x = Some mu -> tr P2 s.2 x = Some eta -> tr (compPIOA P1 P2 H) s x = Some (a <- mu; b <- eta; ret (a,b)) -> comp_tr_specI P1 P2 H s x Hx  
+  | enabled_comm_l : forall mu eta, x \in cover (pTO P1) -> x \in pI P2 -> tr P1 s.1 x = Some mu -> tr P2 s.2 x = Some eta -> tr p1p2 s x = Some (a <- mu; b <- eta; ret (a,b)) -> comp_tr_specI s x Hx  
 
-  | enabled_comm_r : forall mu eta, x \in cover (pTO P2) -> x \in pI P1 -> tr P1 s.1 x = Some mu -> tr P2 s.2 x = Some eta -> tr (compPIOA P1 P2 H) s x = Some (a <- mu; b <- eta; ret (a,b)) -> comp_tr_specI P1 P2 H s x Hx                                                                                    
-                                                                                                                                                                                                               | disabled_lr : tr P1 s.1 x = None -> tr P2 s.2 x = None -> tr (compPIOA P1 P2 H) s x = None -> comp_tr_specI P1 P2 H s x Hx
+  | enabled_comm_r : forall mu eta, x \in cover (pTO P2) -> x \in pI P1 -> tr P1 s.1 x = Some mu -> tr P2 s.2 x = Some eta -> tr p1p2 s x = Some (a <- mu; b <- eta; ret (a,b)) -> comp_tr_specI s x Hx                                                                                    
+                                                                                                                                                                                                               | disabled_lr : tr P1 s.1 x = None -> tr P2 s.2 x = None -> tr p1p2 s x = None -> comp_tr_specI s x Hx
 
-  | disabled_l : forall mu, tr P1 s.1 x = Some mu -> tr P2 s.2 x = None -> x \in cover (action P2) -> tr (compPIOA P1 P2 H) s x = None -> comp_tr_specI P1 P2 H s x Hx
+  | disabled_l : forall mu, tr P1 s.1 x = Some mu -> tr P2 s.2 x = None -> x \in cover (action P2) -> tr p1p2 s x = None -> comp_tr_specI s x Hx
 
-  | disabled_r : forall mu, tr P2 s.2 x = Some mu -> tr P1 s.1 x = None -> x \in cover (action P1) -> tr (compPIOA P1 P2 H) s x = None -> comp_tr_specI P1 P2 H s x Hx.
+  | disabled_r : forall mu, tr P2 s.2 x = Some mu -> tr P1 s.1 x = None -> x \in cover (action P1) -> tr p1p2 s x = None -> comp_tr_specI s x Hx.
 
-Lemma comp_tr_spec {A} (P1 P2 : @PIOA A) (H : Compatible P1 P2) s x Hx :
-  comp_tr_specI P1 P2 H s x Hx.
-  remember (tr (compPIOA P1 P2 H) s x) as nu.
+Lemma comp_tr_spec s x Hx :
+  comp_tr_specI s x Hx.
+  remember (tr p1p2 s x) as nu.
   destruct nu.
+  set H := 0.
  simpl in Heqnu.
  rewrite /prePIOA_comptrans in Heqnu.
 
@@ -96,10 +99,10 @@ Lemma comp_tr_spec {A} (P1 P2 : @PIOA A) (H : Compatible P1 P2) s x Hx :
  apply Heqmu.
  apply Heqeta.
  rewrite //= /prePIOA_comptrans  Heqmu Heqeta //=.
- 
+
  move/bigcupP: H1; elim; intros.
- destruct H.
- move/disjointP: (i1 _ _ H1 (pI_in_action P1)).
+ destruct p1p2.
+ move/disjointP: (forall_inP (forall_inP i1 _ H1) _ (pI_in_action P1)).
  move/(_ _ H2); rewrite H0; done.
 
  move/setUP: AV2; elim; [ move/setUP; elim | idtac]; intros.
@@ -110,33 +113,33 @@ Lemma comp_tr_spec {A} (P1 P2 : @PIOA A) (H : Compatible P1 P2) s x Hx :
  apply Heqmu.
  apply Heqeta.
  rewrite //= /prePIOA_comptrans Heqmu Heqeta //=.
- destruct H.
+ destruct p1p2.
  move/bigcupP: H0; elim; intros.
  move/bigcupP: H1; elim; intros.
- move/disjointP: (i _ _ H H1).
- move/(_ _ H0); rewrite H2; done.
+ move/disjointP: (forall_inP (forall_inP i _ H0) _ H1).
+ move/(_ _ H2); rewrite H3; done.
 
  move/bigcupP: H0; elim; intros.
  move/bigcupP: H1; elim; intros.
 
- destruct H.
- move/disjointP: (i1 _ _ H1 (tO_in_action P1 _ H0)).
+ destruct p1p2.
+ move/disjointP: (forall_inP (forall_inP i1 _ H1) _ (tO_in_action P1 _ H0)).
  move/(_ _ H3); rewrite H2; done.
 
- destruct H.
+ destruct p1p2.
  move/setUP: AV2; elim.
  move/setUP; elim; intros.
  move/bigcupP: H0; elim; intros.
- move/disjointP: (i0 _ _ H0 (pI_in_action P2)).
- move/(_ _ H1); rewrite H; done.
- move/bigcupP: H0; elim; intros; move/bigcupP: H; elim; intros.
- move/disjointP: (i0 _ _ H0 (tO_in_action P2 _ H)).
- move/(_ _ H1); rewrite H2; done.
+ move/disjointP: (forall_inP (forall_inP i0 _ H0) _ (pI_in_action P2)).
+ move/(_ _ H2); rewrite H1; done.
+ move/bigcupP: H0; elim; intros; move/bigcupP: H1; elim; intros.
+ move/disjointP: (forall_inP (forall_inP i0 _ H0) _ (tO_in_action P2 _ H1)).
+ move/(_ _ H2); rewrite H3; done.
 
  move/bigcupP; elim; intros.
  move/bigcupP: H0; elim; intros.
- move/disjointP: (i0 _ _ H0 (tH_in_action P2 _ H)).
- move/(_ _ H2); rewrite H1; done.
+ move/disjointP: (forall_inP (forall_inP i0 _ H0) _ (tH_in_action P2 _ H1)).
+ move/(_ _ H3); rewrite H2; done.
 
 
  (* left enabled, not right *)
@@ -262,21 +265,21 @@ Lemma comp_tr_spec {A} (P1 P2 : @PIOA A) (H : Compatible P1 P2) s x Hx :
  done.
  rewrite //= /prePIOA_comptrans Heqeta Heqmu in Heqnu.
  apply/contraT; intros.
- rewrite H0 in Heqnu; done.
+ rewrite H in Heqnu; done.
  done.
  eapply disabled_r.
  apply Heqmu.
  done.
  rewrite //= /prePIOA_comptrans Heqeta Heqmu in Heqnu.
  apply/contraT; intros.
- rewrite H0 in Heqnu; done.
+ rewrite H in Heqnu; done.
  done.
  apply disabled_lr; done.
 Qed.
 
-Lemma compPIOA_tr_sym {A} (P1 P2 : @PIOA A) H x s : x \in cover (action (compPIOA P1 P2 H)) ->
+Lemma compPIOA_tr_sym x s : x \in cover (action p1p2) ->
   (tr (comp_prePIOA P1 P2) s x = None <-> (tr (comp_prePIOA P2 P1) (s.2, s.1) x = None)) /\
-  (forall mu eta, tr (comp_prePIOA P1 P2) s x = Some mu -> tr (comp_prePIOA P2 P1) (s.2, s.1) x = Some eta ->
+  (forall mu, tr (comp_prePIOA P1 P2) s x = Some mu -> exists eta, tr (comp_prePIOA P2 P1) (s.2, s.1) x = Some eta /\ 
    mu ~~ meas_fmap eta (fun p => (p.2, p.1)) @ 0).
   intros; split.
   rewrite //= /prePIOA_comptrans //=.
@@ -289,7 +292,10 @@ Lemma compPIOA_tr_sym {A} (P1 P2 : @PIOA A) H x s : x \in cover (action (compPIO
   rewrite //= /prePIOA_comptrans //=.
   remember (tr P1 s.1 x) as mu; remember (tr P2 s.2 x) as eta; destruct mu; destruct eta.
   intros.
-  inversion H1; inversion H2; subst.
+  exists (x0 <- m0; y <- m; ret (x0, y)).
+  split.
+  done.
+  inversion H0; subst.
   rewrite /meas_fmap; dsimp.
   rewrite measBind_swap.
   apply measBind_cong_r; intros.
@@ -297,33 +303,45 @@ Lemma compPIOA_tr_sym {A} (P1 P2 : @PIOA A) H x s : x \in cover (action (compPIO
   rewrite bindRet; reflexivity.
   eapply tr_subDist; symmetry; apply Heqmu.
   eapply tr_subDist; symmetry; apply Heqeta.
-  intros.
-  caseOn (x \in cover (action P2)).
-  intro Hc; rewrite Hc in H1; done.
-  intro Hc; rewrite Hc in H1; rewrite Hc in H2.
-  inversion H1; inversion H2; subst.
 
-  rewrite /meas_fmap bindAssoc; apply measBind_cong_r; intros.
-  rewrite bindRet; reflexivity.
+
+  intros.
+  have: x \notin cover (action P2).
+  destruct (x \notin cover (action P2)); done.
+
+  intro Hx.
+  rewrite Hx in H0; inversion H0; subst.
+  exists (x0 <- m; ret (s.2, x0)).
+  rewrite Hx.
+  split.
+  done.
+  rewrite /meas_fmap.
+  rewrite bindAssoc.
+  apply measBind_cong_r; intros.
+  rewrite bindRet; simpl; reflexivity.
   eapply tr_subDist; symmetry; apply Heqmu.
 
   intros.
-  caseOn (x \in cover (action P1)).
-  intro Hc; rewrite Hc in H1; done.
-  intro Hc; rewrite Hc in H1; rewrite Hc in H2.
-  inversion H1; inversion H2; subst.
+  have: x \notin cover (action P1).
+  destruct (x \notin cover (action P1)); done.
 
-  rewrite /meas_fmap bindAssoc; apply measBind_cong_r; intros.
-  rewrite bindRet; reflexivity.
+  intro Hx.
+  rewrite Hx in H0; inversion H0; subst.
+  exists (y <- m; ret (y, s.1)).
+  rewrite Hx.
+  split.
+  done.
+  rewrite /meas_fmap.
+  rewrite bindAssoc.
+  apply measBind_cong_r; intros.
+  rewrite bindRet; simpl; reflexivity.
   eapply tr_subDist; symmetry; apply Heqeta.
+
   done.
 Qed.
 
-
-  Lemma compTaskP {A} {P1 P2 : @PIOA A} {H : Compatible P1 P2} (t : Task A) :
-    t \in (Tasks (compPIOA P1 P2 H)) -> (t \in Tasks P1) || (t \in Tasks P2).
-    rewrite /Tasks //=.
-
+  Lemma compTaskP (t : Task A) :
+    reflect (t \in Tasks P1 \/ t \in Tasks P2) (t \in (Tasks p1p2)).
   have: pTO P1 :|: pTO P2 :|: (pTH P1 :|: pTH P2) =
         (pTO P1 :|: pTH P1) :|: (pTO P2 :|: pTH P2).
   rewrite !setUA.
@@ -332,54 +350,63 @@ Qed.
   rewrite -setUA.
   congr (_ :|: _).
   rewrite setUC; done.
-  intro.
+  intros.
+  apply/(iffP idP).
+  rewrite /Tasks //=.
   rewrite x.
-  move/setUP/orP; done.
+  move/setUP.
+  elim.
+  intro; left; done.
+  intro; right; done.
+  rewrite /Tasks //= x.
+  elim.
+  intro; apply/setUP; left; done.
+  intro; apply/setUP; right; done.
   Qed.
 
-Definition taskInjl {A} {P1 P2 : @PIOA A} {H : Compatible P1 P2} (t : Task A) :
-  t \in Tasks P1 -> t \in Tasks (compPIOA P1 P2 H).
+Definition taskInjl (t : Task A) :
+  t \in Tasks P1 -> t \in Tasks p1p2.
   rewrite /Tasks //=.
   move/setUP; elim.
   intro; apply/setUP; left; apply/setUP; left; done.
   intro; apply/setUP; right; apply/setUP; left; done.
 Defined.
 
-Definition taskInjr {A} {P1 P2 : @PIOA A} {H : Compatible P1 P2} (t : Task A) :
-  t \in Tasks P2 -> t \in Tasks (compPIOA P1 P2 H).
+Definition taskInjr (t : Task A) :
+  t \in Tasks P2 -> t \in Tasks p1p2.
   rewrite /Tasks //=.
   move/setUP; elim.
   intro; apply/setUP; left; apply/setUP; right; done.
   intro; apply/setUP; right; apply/setUP; right; done.
 Defined.
 
-Lemma compat_hidden_disabled {A} (P1 P2 : @PIOA A) (H : Compatible P1 P2) (T : Task A) x s:
+Lemma compat_hidden_disabled (T : Task A) x s:
   T \in (pTH P1) -> x \in T -> ~~ enabled P2 s x.
   intros; apply/contraT; rewrite negbK; intros.
 
-  have HC := actSetValid P2 s x H2.
-  destruct H.
+  have HC := actSetValid P2 s x H1.
+  destruct p1p2.
   move/setUP: HC; elim.
   move/setUP; elim; intros.
 
-  move/disjointP: (H3 _ _ H0 (pI_in_action P2)).
-  move/(_ _ H1).
+  move/disjointP: (forall_inP (forall_inP H3 _ H) _ (pI_in_action P2)).
+  move/(_ _ H0).
   rewrite H5; done.
 
   move/bigcupP: H5; elim; intros.
-  move/disjointP: (H3 _ _ H0 (tO_in_action P2 _ H5)).
-  move/(_ _ H1); rewrite H6; done.
+  move/disjointP: (forall_inP (forall_inP H3 _ H) _ (tO_in_action P2 _ H5)).
+  move/(_ _ H0); rewrite H6; done.
 
   move/bigcupP; elim; intros.
-  move/disjointP: (H3 _ _ H0 (tH_in_action P2 _ H5)).
-  move/(_ _ H1).
+  move/disjointP: (forall_inP (forall_inP H3 _ H) _ (tH_in_action P2 _ H5)).
+  move/(_ _ H0).
   rewrite H6; done.
 Qed.  
 
 
-Lemma enabled_hidden_compE {A} (P1 P2 : @PIOA A) H (T : Task A) x s :
+Lemma enabled_hidden_compE (T : Task A) x s :
   T \in (pTH P1) -> x \in T -> enabled P1 s.1 x =
-                             enabled (compPIOA P1 P2 H) s x.
+                             enabled p1p2 s x.
   intros.
 
   simpl.
@@ -388,44 +415,45 @@ Lemma enabled_hidden_compE {A} (P1 P2 : @PIOA A) H (T : Task A) x s :
   exfalso; apply/negP. eapply compat_hidden_disabled.
   apply H.
   apply H0.
-  apply H1.
   instantiate (1 := s.2); rewrite /enabled -Heqeta //=.
   done.
   intros.
   rewrite /enabled //= /prePIOA_comptrans.
   rewrite x0.
   have: x \notin cover (action P2).
-  destruct H.
+  destruct p1p2.
   apply/contraT; rewrite negbK; intros.
   move/bigcupP: H4; elim; intros.
-  move/disjointP: (H2 _ _ H0 H4).
-  move/(_ _ H1).
+  move/disjointP: (forall_inP (forall_inP H2 _ H) _ H4).
+  move/(_ _ H0).
   rewrite H5; done.
   intro.
   rewrite x1.
   destruct (tr P1 s.1 x); done.
 Qed.
 
-Lemma compPIOA_pI_sym {A} (P1 P2 : @PIOA A) H H2 :
-  pI (compPIOA P1 P2 H) = pI (compPIOA P2 P1 H2).
+Context (p2p1 : P2 ||| P1).
+
+Lemma compPIOA_pI_sym :
+  pI p1p2 = pI p2p1.
   simpl.
   rewrite (setUC (pI P1) (pI P2)).
   rewrite (setUC (pTO P1) (pTO P2)).
   done.
 Qed.
 
-Lemma compPIOA_pTO_sym {A} (P1 P2 : @PIOA A) H H2 :
-  pTO (compPIOA P1 P2 H) = pTO (compPIOA P2 P1 H2).
+Lemma compPIOA_pTO_sym :
+  pTO p1p2 = pTO p2p1.
   by rewrite //= setUC.
 Qed.
 
-Lemma compPIOA_pTH_sym {A} (P1 P2 : @PIOA A) H H2 :
-  pTH (compPIOA P1 P2 H) = pTH (compPIOA P2 P1 H2).
+Lemma compPIOA_pTH_sym :
+  pTH p1p2 = pTH p2p1.
   by rewrite //= setUC.
 Qed.
 
-Lemma compPIOA_enabled_sym {A} (P1 P2 : @PIOA A) H H2 s x :
-  enabled (compPIOA P1 P2 H) s x = enabled (compPIOA P2 P1 H2) (s.2, s.1) x.
+Lemma compPIOA_enabled_sym s x :
+  enabled p1p2 s x = enabled p2p1 (s.2, s.1) x.
 rewrite /enabled //= /prePIOA_comptrans.
 remember (tr P1 s.1 x) as mu; remember (tr P2 s.2 x) as eta; destruct mu; destruct eta; rewrite -Heqmu -Heqeta.
 done.
@@ -435,10 +463,10 @@ done.
 Qed.
 
 
-Definition compPIOA_appTask_sym {A} (P1 P2 : @PIOA A) H H2 T mu : isSubdist mu ->
-  T \in Tasks (compPIOA P1 P2 H) ->
-  appTask (compPIOA P1 P2 H) T mu ~~
-  meas_fmap (appTask (compPIOA P2 P1 H2) T (x <- mu; ret ((x.1.2, x.1.1), x.2))) (fun x => ((x.1.2, x.1.1), x.2)) @ 0.
+Definition compPIOA_appTask_sym T mu : isSubdist mu ->
+  T \in Tasks p1p2 ->
+  appTask p1p2 T mu ~~
+  meas_fmap (appTask p2p1 T (x <- mu; ret ((x.1.2, x.1.1), x.2))) (fun x => ((x.1.2, x.1.1), x.2)) @ 0.
   intros Hsubmu HTin.
   intros.
   rewrite /appTask.
@@ -447,15 +475,14 @@ Definition compPIOA_appTask_sym {A} (P1 P2 : @PIOA A) H H2 T mu : isSubdist mu -
   apply measBind_cong_r; intros.
   rewrite bindRet; simpl.
   rewrite /runTask.
-  have:  [pick x0 in T  | enabled (compPIOA P1 P2 H) x.1 x0] =
-         [pick x0 in T  | enabled (compPIOA P2 P1 H2) (x.1.2, x.1.1) x0].  
+  have:  [pick x0 in T  | enabled p1p2 x.1 x0] =
+         [pick x0 in T  | enabled p2p1 (x.1.2, x.1.1) x0].  
   
   {
     apply eq_pick.
     move=> z.
     simpl.
     rewrite compPIOA_enabled_sym.
-    done.
     done.
   }
 
@@ -464,134 +491,125 @@ Definition compPIOA_appTask_sym {A} (P1 P2 : @PIOA A) H H2 T mu : isSubdist mu -
   rewrite -x0.
   case: pickP; intros.
 
-  destruct (compPIOA_tr_sym P1 P2  H x1 x.1).
+  destruct (compPIOA_tr_sym x1 x.1).
 
   apply/bigcupP.
   exists T.
 
-  (* TODO HERE *)
+  rewrite /action.
+  rewrite /Tasks in HTin.
+  move/setUP: HTin; elim; intro.
+  apply/setUP; left; apply/setUP; right; done.
+  apply/setUP; right; done.
+  move/andP: i; elim; done.
 
 
+  remember (tr p1p2 x.1 x1) as D; destruct D; symmetry in HeqD.
 
-
-  remember (tr (compPIOA P1 P2 H) x.1 x1) as D; destruct D; symmetry in HeqD.
-  remember (tr (compPIOA P2 P1 H2) (x.1.2, x.1.1) x1) as D'; destruct D'; symmetry in HeqD'.
-  have Heq := H3 _ _ HeqD' HeqD.
-  rewrite HeqD HeqD'.
+  destruct (H1 _ HeqD).
+  destruct H2.
+  rewrite H2.
+  rewrite HeqD.
   simpl.
-  rewrite bindAssoc (measBind_cong_l Heq).
+  rewrite (measBind_cong_l H3).
+  rewrite /meas_fmap.
+  rewrite !bindAssoc.
+  apply measBind_cong_r; intros.
+  rewrite bindRet.
   rewrite /external.
   rewrite compPIOA_pI_sym compPIOA_pTO_sym.
-  destruct (x1 \in pI (compPIOA P2 P1 H2) :|: cover (pTO (compPIOA P2 P1 H2))).
-  rewrite /meas_fmap bindAssoc.
-  apply measBind_cong_r; intros.
-  rewrite !bindRet.
-  simpl.
-  destruct x2;
-  reflexivity.
 
-  eapply (@tr_subDist _ (compPIOA P1 P2 H) _ _).
-  apply HeqD.
-  rewrite /meas_fmap bindAssoc.
-  apply measBind_cong_r; intros.
-  rewrite !bindRet //=.
-  destruct x2; reflexivity.
-  eapply (@tr_subDist _ (compPIOA P1 P2 H) _ _).
-  apply HeqD.
-  intros.
-  destruct (x1 \in external (compPIOA P2 P1 H2)).
-  dsubdist.
-  intros; dsubdist.
-  dsubdist.
-  intros; dsubdist.
-  destruct H1.
-  simpl in H1.
-  have Hq := H1 HeqD'.
-  simpl in HeqD.
-  destruct x.1.
-  remember x.1 as p; destruct p.
-  rewrite -Heqp in HeqD.
-  rewrite -Heqp in Hq.
-  simpl in Hq.
-  rewrite Hq in HeqD; done.
-  destruct H1.
-  simpl in H4.
-  simpl in HeqD.
-  have Hq := H4 HeqD.
-  simpl.
+  destruct (x1 \in pI p2p1 :|: cover (pTO p2p1)).
+  rewrite bindRet; simpl; reflexivity.
+  rewrite bindRet; simpl; reflexivity.
+
+  eapply (@tr_subDist _ p2p1 _ _ x2).
+  apply H2.
+  intros; destruct (x1 \in external p1p2); dsubdist.
   rewrite HeqD.
-  rewrite Hq.
-  rewrite bindRet.
-  simpl.
+  destruct H0.
+  rewrite (H0 HeqD).
+  rewrite bindRet; simpl.
   destruct x; simpl.
   destruct s; simpl.
   reflexivity.
-  rewrite bindRet.
-  simpl.
-  destruct x; simpl.
-  destruct s; simpl.
-  reflexivity.
+  rewrite bindRet; simpl; destruct x; simpl.
+  destruct s; simpl; reflexivity.
+
   done.
 Qed.
-
+  
+End compPIOAProps.
 
 Section CompPIOA_symm.
   Context {A : finType}.
   Context (P1 P2 : @PIOA A).
-  Context (Hc : Compatible P1 P2).
-  Context (ic : inputClosed (compPIOA P1 P2 Hc)).
+  Context (p1p2 : P1 ||| P2).
+  Definition p2p1 := compatible_sym P1 P2 p1p2.
+          
+  Context (ic : inputClosed p1p2).
 
-  Lemma inputClosed_sym : inputClosed (compPIOA P2 P1 (compatible_sym _ _ Hc)).
+  Lemma inputClosed_sym : inputClosed p2p1.
     rewrite /inputClosed.
-    rewrite compPIOA_pI_sym; done.
+    rewrite -compPIOA_pI_sym; done.
   Qed.
 
-  Lemma compPIOA_sym : @refinement _ (compPIOA P1 P2 Hc) (compPIOA P2 P1 (compatible_sym _ _ Hc)) ic inputClosed_sym 0.
+  Lemma compPIOA_sym : @refinement _ p1p2 p2p1 ic inputClosed_sym 0.
     eapply stateSimSound.
+    instantiate (1 := fun p => (p.2, p.1)).
+    constructor.
+    done.
+    intros.
+    exists (T :: nil).
+    split.
+    simpl.
+    apply/andP; split.
+    apply/compTaskP.
+    move/compTaskP: H.
+    elim.
+    intro; right; done.
+    intro; left; done.
+    done.
+    simpl.
+
+    Check compPIOA_appTask_sym.
+    
+    symmetry.
+    eapply compPIOA_appTask_sym.
+
+    apply compTaskP in H.
+    rewrite/ isTask.
+    rewrite /Tasks.
+
+    split.
+    rewrite -compTaskP in H.
+    
     admit.
   Admitted.
 End CompPIOA_symm.
+End compPIOAProps.
 
 Section CompPIOA_assoc.
   Context {A : finType}.
   Context (P1 P2 P3 : @PIOA A).
-  Context (Hc1 : Compatible P2 P3).
-  Context (Hc2 : Compatible P1 (compPIOA P2 P3 Hc1)).
-  Context (Hc3 : Compatible P1 P2).
-  Context (Hc4 : Compatible (compPIOA P1 P2 Hc3) P3).
-  Context (ic : inputClosed (compPIOA (compPIOA P1 P2 Hc3) P3 Hc4)).
+  Context (p2p3 : P2 ||| P3).
+  Context (p1_p2p3 : P1 ||| p2p3).
+  Context (p1p2 : P1 ||| P2).
+  Context (p1p2_p3 : p1p2 ||| P3).
+  Context (ic : inputClosed p1p2_p3).
 
-  Definition Q1 := compPIOA P1 (compPIOA P2 P3 Hc1) Hc2.
-  Definition Q2 := compPIOA (compPIOA P1 P2 Hc3) P3 Hc4.
-
-
-  Lemma pI_comp_assoc : pI Q1 = pI Q2.
+  Lemma pI_comp_assoc : pI p1p2_p3 = pI p1_p2p3.
     simpl.
-    rewrite !setUA.
-    rewrite !setDUl //=.
-    rewrite !setUA.
-    congr (_ :|: _ :|: _).
-    rewrite !coverU.
-    rewrite !setDDl.
-    congr (_ :\: _).
-    admit.
-    rewrite !coverU.
-    rewrite !setDDl.
-    congr (_ :\: _).
-    admit.
-    rewrite !coverU.
-    rewrite !setDDl.
-    congr (_ :\: _).
     admit.
   Admitted.
 
-  Lemma inputClosed_assoc : inputClosed (compPIOA P1 (compPIOA P2 P3 Hc1) Hc2).
+  Lemma inputClosed_assoc : inputClosed p1_p2p3.
     rewrite /inputClosed.
-    rewrite pI_comp_assoc.
+    rewrite -pI_comp_assoc.
     apply ic.
   Qed.
 
-  Lemma compPIOA_assoc : @refinement _ Q2 Q1 ic inputClosed_assoc 0.
+  Lemma compPIOA_assoc : @refinement _ p1_p2p3 p1p2_p3 inputClosed_assoc ic 0.
     admit.
   Admitted.
 End CompPIOA_assoc.

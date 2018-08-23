@@ -34,27 +34,30 @@ Definition comp_prePIOA {Act : finType} (P1 P2 : @PIOA Act) := mkPrePIOA Act ([f
 
 Record Compatible {Act : finType} (P1 P2 : @PIOA Act) :=
   {
-    _ : forall x y, x \in pTO P1 -> y \in pTO P2 -> [disjoint x & y];
-    _ : forall x y, x \in pTH P1 -> y \in action P2 -> [disjoint x & y];
-    _ : forall x y, x \in pTH P2 -> y \in action P1 -> [disjoint x & y];
+    _ : [forall (x | x \in pTO P1), [forall (y | y \in pTO P2), [disjoint x & y]]];
+    _ : [forall (x | x \in pTH P1), [forall (y | y \in action P2), [disjoint x & y]]];
+    _ : [forall (x | x \in pTH P2), [forall (y | y \in action P1), [disjoint x & y]]];
     }.
 
 
 Lemma compatible_sym {A : finType} (P1 P2 : @PIOA A) :
   Compatible P1 P2 -> Compatible P2 P1.
-  intros.
-  destruct H.
-  constructor.
-  intros; rewrite disjoint_sym; apply H; done.
-  intros; apply H1; done.
-  intros; apply H0; done.
-Qed.
+  case => h1 h2 h3; constructor.
+  apply/forall_inP => x Hx; apply/forall_inP => y Hy;
+  move: (forall_inP (forall_inP h1 y Hy) x Hx); by rewrite disjoint_sym.
+
+  apply/forall_inP => x Hx; apply/forall_inP => y Hy;
+  move: (forall_inP (forall_inP h3 x Hx) y Hy); by rewrite disjoint_sym.
+
+  apply/forall_inP => x Hx; apply/forall_inP => y Hy;
+  move: (forall_inP (forall_inP h2 x Hx) y Hy); by rewrite disjoint_sym.
+Defined.
 
 Lemma notsetU : forall {T : finType} {s1 s2 : {set T}} {x},
                           (x \notin s1 :|: s2) = ((x \notin s1) && (x \notin s2)).
 intros.
 rewrite in_setU negb_or; done.
-Qed.
+Defined.
 
 Lemma notincover : forall {T : finType} (x : T) (s : {set {set T}}), 
                             (x \notin (cover s)) =
@@ -75,7 +78,7 @@ Lemma notincover : forall {T : finType} (x : T) (s : {set {set T}}),
   intro; exfalso; apply H.
   exists x0; done.
   done.
-Qed.
+Defined.
 
 Lemma disjoint_setD {T : finType} (s1 s2 s3 : {set T}) :
   [disjoint s1 & s3] ->
@@ -125,9 +128,8 @@ Definition compPIOA {Act : finType} (P1 P2 : @PIOA Act) : Compatible P1 P2 -> @P
   destruct H.
   have: false.
   move/bigcupP: H3; elim; intros.
-  move/disjointP: (H5 _ _ H3 (pI_in_action P1)); intros.
-  move: (H7 _ H6) => Hc.
-  rewrite H0 in Hc; done.
+  move/disjointP: (forall_inP (forall_inP H5 _ H3) _ (pI_in_action P1)).
+  move/(_ _ H6); by rewrite H0.
   done.
   rewrite H3; destruct (tr P2 s.2 x); done.
 
@@ -153,12 +155,11 @@ Definition compPIOA {Act : finType} (P1 P2 : @PIOA Act) : Compatible P1 P2 -> @P
   intro.
   destruct H.
   move/bigcupP: H3; elim; intros.
-  move/disjointP: (H4 _ _ H3 (pI_in_action P2)).
-  intros.
-  rewrite (negbTE (H7 _ H6)) in H0; done.
-  intro Hc; rewrite Hc.
-  destruct (tr P1 s.1 x); done.
+  move/disjointP: (forall_inP (forall_inP H4 _ H3) _ (pI_in_action P2)).
+  move/(_ _ H6); by rewrite H0.
 
+  move=> Hr; rewrite Hr.
+  by destruct (tr P1 s.1 x).
   }
 
   instantiate (1 := pTH P1 :|: pTH P2).
@@ -182,12 +183,12 @@ Definition compPIOA {Act : finType} (P1 P2 : @PIOA Act) : Compatible P1 P2 -> @P
   destruct (actionDisjoint P1).
   move/disjointP: (H5 _ H2).
   intro He; apply He; done.
-  move: (H1 _ _ H2 (pI_in_action P1)); rewrite disjoint_sym; move/disjointP.
-  intro Hd; apply Hd; done.
+  move: (forall_inP (forall_inP H1 _ H2) _ (pI_in_action P1)); rewrite disjoint_sym; move/disjointP.
+  move/(_ _ H3); done.
 
   move/setUP: H2; elim; intros.
-  move: (H0 _ _ H2 (pI_in_action P2)); rewrite disjoint_sym; move/disjointP.
-  intro Hd; apply Hd; done.
+  move: (forall_inP (forall_inP H0 _ H2) _ (pI_in_action P2)); rewrite disjoint_sym; move/disjointP.
+  move/(_ _ H3); done.
 
   destruct (actionDisjoint P2).
   move/disjointP: (H5 _ H2); intro Hd; apply Hd; done.
@@ -197,10 +198,11 @@ Definition compPIOA {Act : finType} (P1 P2 : @PIOA Act) : Compatible P1 P2 -> @P
   destruct (actionDisjoint P1).
   apply H6; done.
 
-  rewrite disjoint_sym; apply H1.
+  rewrite disjoint_sym;
+    apply: (forall_inP (forall_inP H1 _ _)).
   done.
   apply tO_in_action; done.
-  rewrite disjoint_sym; apply H0.
+  rewrite disjoint_sym; apply: (forall_inP (forall_inP H0 _ _)).
   done.
   apply tO_in_action; done.
   destruct (actionDisjoint P2).
@@ -209,17 +211,18 @@ Definition compPIOA {Act : finType} (P1 P2 : @PIOA Act) : Compatible P1 P2 -> @P
   move=> x y; move/setUP; elim; intro; move/setUP; elim; intros.
   destruct (actionDisjoint P1).
   apply H8; done.
-  apply H; done.
-  rewrite disjoint_sym; apply H; done.
+  apply: (forall_inP (forall_inP H _ _)); done.
+
+  rewrite disjoint_sym; apply: (forall_inP (forall_inP H _ _)); done.
   destruct (actionDisjoint P2); apply H8; done.
 
   move=> x y; move/setUP; elim; intro; move/setUP; elim; intros.
   destruct (actionDisjoint P1).
   apply H9; done.
-  apply H0.
+  apply: (forall_inP (forall_inP H0 _ _)).
   done.
   apply tH_in_action; done.
-  rewrite disjoint_sym; apply H0.
+  rewrite disjoint_sym; apply: (forall_inP (forall_inP H0 _ _)).
   done.
   apply tH_in_action; done.
 
@@ -414,3 +417,21 @@ Definition compPIOA {Act : finType} (P1 P2 : @PIOA Act) : Compatible P1 P2 -> @P
   rewrite /cover bigcup_setU; apply/setUP; right; done.
 Defined.
 
+
+Definition CompPIOA {A : finType} (P1 P2 : @PIOA A) := Compatible P1 P2.
+
+Definition comp_of_ppair {A : finType} (P1 P2 : @PIOA A) : Compatible P1 P2 -> @PIOA A.
+  apply compPIOA.
+Defined.
+
+Coercion comp_of_ppair : Compatible >-> PIOA.
+
+Notation "P1 ||| P2" := (CompPIOA P1 P2) (at level 60).
+
+Lemma compPIOA_irrel {A : finType} (P1 P2 : @PIOA A) (h1 h2 : P1 ||| P2) : h1 = h2.
+  destruct h1.
+  destruct h2.
+  have: [/\ (i = i2), (i0 = i3) & (i1 = i4)].
+  split; apply eq_irrelevance.
+  case; intros; subst; done.
+Defined.
