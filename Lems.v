@@ -87,6 +87,16 @@ Qed.
 
 Lemma EM (b : bool) : forall (P : Type), (b -> P) -> (~~ b -> P) -> P.
   destruct b; intros P H H0; [apply H | apply H0]; done.
-Qed.
+Defined.
+
+Lemma bcase (b1 b2 : bool) : forall (P : Type), (b1 -> P) -> (b2 -> P) -> (b1 || b2 -> P).
+  destruct b1, b2; intros P H H0.
+  simpl; apply H.
+  simpl; apply H.
+  simpl; apply H0.
+  simpl; apply H.
+Defined.
+
+Print bcase.
 
 Ltac caseOn b := apply (EM b).
