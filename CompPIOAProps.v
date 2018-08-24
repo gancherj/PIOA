@@ -403,6 +403,50 @@ Lemma compat_hidden_disabled (T : Task A) x s:
   rewrite H6; done.
 Qed.  
 
+Lemma setDK {T : finType} (E F : {set T}) :
+  (E :\: F) :|: F = E :|: F.
+  apply/setP/subset_eqP/andP; split; apply/subsetP => x.
+  move/setUP; elim.
+  move/setDP; elim.
+  intros; apply/setUP; left; done.
+  intros; apply/setUP; right; done.
+  move/setUP; elim.
+  caseOn (x \in F).
+  intros; apply/setUP; right; done.
+  intros; apply/setUP; left; apply/setDP; split.
+  done.
+  done.
+  intros; apply/setUP; right; done.
+Qed.
+
+Lemma comp_actionE :
+  cover (action p1p2) = cover (action P1 :|: action P2).
+  rewrite /action.
+  simpl.
+  rewrite coverU.
+  have: cover ((pI P1 :|: pI P2) :\: cover (pTO P1 :|: pTO P2) |: (pTO P1 :|: pTO P2)) =
+        cover ((pI P1 :|: pI P2) |: (pTO P1 :|: pTO P2)).
+        
+  rewrite /cover.
+  rewrite !bigcup_setU.
+  rewrite !big_set1.
+  rewrite setDK.
+  done.
+  intros.
+  rewrite x.
+  rewrite !coverU /cover !big_set1.
+  rewrite !setUA.
+  congr (_ :|: _).
+  rewrite -!setUA.
+  congr (_ :|: _).
+  rewrite setUC.
+  rewrite -!setUA.
+  rewrite (setUC _ (pI P2)).
+  congr (_ :|: _).
+  rewrite setUA setUC.
+  congr (_ :|: _).
+  rewrite setUC //=.
+Qed.
 
 Lemma enabled_hidden_compE (T : Task A) x s :
   T \in (pTH P1) -> x \in T -> enabled P1 s.1 x =
@@ -572,22 +616,36 @@ Section CompPIOA_symm.
     done.
     simpl.
 
-    Check compPIOA_appTask_sym.
-    
-    symmetry.
-    eapply compPIOA_appTask_sym.
-
-    apply compTaskP in H.
-    rewrite/ isTask.
-    rewrite /Tasks.
-
-    split.
-    rewrite -compTaskP in H.
-    
-    admit.
-  Admitted.
+    have Heq := compPIOA_appTask_sym P1 P2 p1p2 p2p1 T mu H0 H.
+    rewrite /meas_fmap.
+    rewrite (measBind_cong_l Heq).
+    rewrite /meas_fmap bindAssoc.
+    symmetry; etransitivity.
+    symmetry; apply bindRet_r.
+    symmetry in H1.
+    rewrite (measBind_cong_l (appTask_cong _ _ _ _ H1)).
+    rewrite /meas_fmap.
+    apply measBind_cong_r; intros.
+    rewrite bindRet.
+    simpl.
+    destruct x.
+    destruct s.
+    simpl; reflexivity.
+    apply appTask_subDist.
+    apply isSubdist_bind.
+    done.
+    intros; dsubdist.
+    intros; dsubdist.
+    intros; dsubdist.
+  Qed.
 End CompPIOA_symm.
-End compPIOAProps.
+
+Lemma notinU {A : finType} (x : A) B C :
+  x \notin (B :|: C) = (x \notin B) && (x \notin C).
+  rewrite in_setU.
+  rewrite negb_or.
+  done.
+Qed.
 
 Section CompPIOA_assoc.
   Context {A : finType}.
@@ -600,8 +658,42 @@ Section CompPIOA_assoc.
 
   Lemma pI_comp_assoc : pI p1p2_p3 = pI p1_p2p3.
     simpl.
-    admit.
-  Admitted.
+    apply/setP/subset_eqP/andP; split; apply/subsetP => x.
+
+    move/setDP; elim; intros.
+    rewrite !coverU !notinU in H0. 
+    apply/setDP; split.
+    elim: (setUP H).
+    move/setDP; elim.
+    move/setUP; elim.
+    intros; apply/setUP; left; done.
+    intros; apply/setUP; right; apply/setDP; split.
+    apply/setUP; left; done.
+    rewrite coverU notinU; apply/andP; split.
+    elim: (andP H0); move/andP; elim; done.
+    elim: (andP H0); move/andP; elim; done.
+    intros;apply/setUP; right; apply/setDP; split.
+    apply/setUP; right; done.
+    rewrite coverU notinU; apply/andP; split.
+    elim: (andP H0); move/andP; elim; done.
+    elim: (andP H0); move/andP; elim; done.
+    rewrite setUA !coverU !notinU; done.
+    move/setDP; elim.
+    rewrite setUA !coverU !notinU.
+    intro; move/andP; elim; move/andP; elim; intros.
+    apply/setDP; split.
+    elim: (setUP H).
+    intros; apply/setUP; left; apply/setDP; split.
+    apply/setUP; left; done.
+    rewrite notinU H0 H1; done.
+    move/setDP; elim.
+    move/setUP; elim.
+    intros; apply/setUP; left; apply/setDP; split.
+    apply/setUP; right; done.
+    rewrite notinU H0 H1; done.
+    intros; apply/setUP; right; done.
+    rewrite !notinU H0 H1 H2; done.
+  Qed.
 
   Lemma inputClosed_assoc : inputClosed p1_p2p3.
     rewrite /inputClosed.
@@ -610,8 +702,117 @@ Section CompPIOA_assoc.
   Qed.
 
   Lemma compPIOA_assoc : @refinement _ p1_p2p3 p1p2_p3 inputClosed_assoc ic 0.
+    eapply stateSimSound.
+    instantiate (1 := fun p => ((p.1, p.2.1), p.2.2)).
+    constructor.
+    done.
+    intros.
+    exists (T :: nil); split.
+    simpl.
+    apply/andP; split.
+    elim: (compTaskP _ _ _ _ H).
+    intros; apply/compTaskP; left.
+    apply/compTaskP; left; done.
+    move/compTaskP; elim.
+    intros; apply/compTaskP; left; apply/compTaskP; right; done.
+    intros; apply/compTaskP; right; done.
+    done.
+    simpl.
+    symmetry; symmetry in H1; rewrite (appTask_cong _ _ _ _ H1).
+    rewrite /meas_fmap.
+    move: H0; clear; intros.
+
+    rewrite /appTask.
+    rewrite !bindAssoc.
+    apply measBind_cong_r; intros.
+    rewrite bindRet.
+    rewrite /runTask.
+    have: [pick x0 in T  | enabled p1p2_p3 (x.1.1, x.1.2.1, x.1.2.2, x.2).1 x0] =
+          [pick x0 in T  | enabled p1_p2p3 x.1 x0] .
+    apply eq_pick => z.
+    congr (_ && _).
+    rewrite /enabled.
+    simpl.
+    rewrite /prePIOA_comptrans.
+    simpl.
+    rewrite /prePIOA_comptrans //=.
+    remember (tr P1 x.1.1 z) as d1;
+      remember (tr P2 x.1.2.1 z) as d2;
+      remember (tr P3 x.1.2.2 z) as d3.
+    rewrite -Heqd1 -Heqd2 -Heqd3.
+    destruct d1.
+    destruct d2.
+    destruct d3.
+    done.
+    caseOn (z \notin cover (action P3)).
+    intro Heq; rewrite Heq.
+    done.
+    rewrite negbK.
+    intro Heq; rewrite Heq //=.
+    rewrite comp_actionE.
+    rewrite coverU.
+    rewrite notinU.
+    rewrite Heq.
+    simpl.
+    rewrite andbF.
+    done.
+    caseOn (z \in cover (action P2)).
+    intro Heq; rewrite Heq //=.
+    rewrite comp_actionE coverU notinU Heq.
+    rewrite andbF //=.
+    destruct d3.
+    rewrite comp_actionE coverU notinU Heq andFb //=.
+    rewrite comp_actionE coverU notinU Heq andFb //=.
+    intro Heq; rewrite Heq.
+    destruct d3.
+    done.
+    caseOn (z \in cover (action P3)).
+    intro Heq2; rewrite Heq2; rewrite comp_actionE coverU notinU Heq2.
+    rewrite andbF //=.
+    intro Heq2; rewrite Heq2; rewrite comp_actionE coverU notinU Heq2.
+    rewrite Heq //=.
+    destruct d2.
+    caseOn (z \in cover (action P1)).
+    intro Heq1; rewrite Heq1.
+    destruct d3.
+    rewrite comp_actionE coverU notinU Heq1.
+    rewrite andFb //=.
+    caseOn (z \in cover (action P3)).
+    intro Heq3; rewrite Heq3.
+    done.
+    intro Heq3; rewrite Heq3 //=.
+    intro Heq1; rewrite Heq1.
+    destruct d3.
+    done.
+    caseOn (z \in cover (action P3)).
+    intro Heq3; rewrite Heq3 //=.
+    intro Heq3.
+    rewrite Heq3.
+    done.
+    destruct d3.
+    caseOn (z \in cover (action P2)).
+    intro Heq2; rewrite Heq2 comp_actionE coverU notinU.
+    rewrite Heq2 //=.
+    rewrite andbF.
+    done.
+    intro Heq2; caseOn (z \in cover (action P1)).
+    intro Heq1; rewrite Heq1.
+    rewrite comp_actionE coverU notinU Heq2.
+    rewrite Heq1 andFb //=.
+    intro Heq1.
+    rewrite comp_actionE coverU notinU !Heq1 !Heq2.
+    done.
+    done.
+    intros.
+    rewrite x0.
+    case:pickP.
+    intros.
+    simpl.
     admit.
-  Admitted.
+    intros; rewrite bindRet.
+    reflexivity.
+    done.
+ Admitted.
 End CompPIOA_assoc.
 
 (* 
