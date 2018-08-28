@@ -17,16 +17,13 @@ Section StateInj.
   Record StateInj (R : pQ P1 -> pQ P2) :=
     {
       siStart : R (start _) = (start _);
-      siStep : forall T mu eta, T \in Tasks P1 ->
+      siStep : forall T mu eta, T \in Tasks P1 -> isSubdist mu ->
           meas_fmap mu (fun p => (R p.1, p.2)) ~~ eta @ 0 ->
           exists ts, all (isTask P2) ts /\
             meas_fmap (appTask P1 T mu) (fun p => (R p.1, p.2)) ~~
                       runPIOA P2 ts eta @ 0
       }.
 
-  Definition stateInjToDC (R : pQ P1 -> pQ P2) : Meas [eqType of Trace P1] -> Meas [eqType of Trace P2] -> Prop :=
-    fun mu eta => 
-      meas_fmap mu (fun p => (R p.1, p.2)) ~~ eta @ 0.
 
   Lemma stateSimSound R : StateInj R -> @refinement _ P1 P2 HC1 HC2 0.
     intros.
@@ -46,7 +43,10 @@ Section StateInj.
     rewrite all_rcons in H; move/andP: H => [h1 h2].
     destruct (IHts h2); clear IHts.
     destruct H.
-    destruct (siStep0 x _ _ h1 H0).
+    have Hs: isSubdist (runPIOA P1 ts (startTr P1)).
+    apply runPIOA_subDist.
+    rewrite /startTr; dsubdist.
+    destruct (siStep0 x _ _ h1 Hs H0).
     exists (x0 ++ x1).
     split.
     rewrite all_cat.

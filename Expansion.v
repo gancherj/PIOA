@@ -36,10 +36,11 @@ Lemma expansion_cong {A B : eqType} (R : Meas A -> Meas B -> Prop) d1 d2 d3 d4 :
   done.
 Qed.
 
+Definition compSubdist {A B : eqType} (f : A -> Meas B) := (forall x, measMass (f x) <= 1).
 
 Lemma expansion_bind {A B C : eqType} (R : Meas B -> Meas C -> Prop) (mu : Meas A) (f : A -> Meas B) (g : A -> Meas C) :
-  (forall x, measMass (f x) <= 1) ->
-  (forall x, measMass (g x) <= 1) ->
+  compSubdist f ->
+  compSubdist g ->
   (forall p, p \in (measSupport mu) -> expansion R (f p) (g p)) ->
   expansion R (p <- mu; f p) (p <- mu; g p).
   intros.
@@ -112,20 +113,26 @@ Lemma expansion_bind {A B C : eqType} (R : Meas B -> Meas C -> Prop) (mu : Meas 
   eapply measEquiv_0_trans. apply measBind_app.
   apply measEquiv_app_cong_0.
   intro; intro.
-  rewrite integ_measBind.
-  rewrite integ_measScale.
-  admit.
-  apply measEquiv_symm in rightEquiv0; apply rightEquiv0.
-  intros.
-  rewrite measSupport_app in H.
-  rewrite mem_cat in H.
-  move/orP: H; elim.
-  rewrite -(measSupport_measScale _ _ i).
-  apply RValid1; done.
-  apply RValid0; done.
-Admitted.
+  rewrite pdist_le0.
 
+  rewrite integ_measBind !integ_measScale -integ_measBind.
+  apply/eqP; congr (_ * _).
+  symmetry in rightEquiv1.
+  have Heq := rightEquiv1 f0 H.
+  rewrite pdist_le0 in Heq.
+  apply/eqP; done.
 
+  symmetry; done.
+  rewrite measSupport_app.
+  intro; rewrite mem_cat.
+  move/orP; elim.
+  intro; apply RValid1.
+  rewrite -measSupport_measScale in H.
+  done.
+  done.
+  apply RValid0.
+Qed.
+  
 
 Definition measCong {A B} (f : Meas A -> Meas B) := forall d1 d2, d1 ~~ d2 @ 0 -> f d1 ~~ (f d2) @ 0.
 
@@ -133,6 +140,9 @@ Definition joinDistrib {A B} (f : Meas A -> Meas B) := forall mu, isSubdist mu -
 
 
 Lemma joinDistrib_expansion_compat {A B : eqType} (R : Meas A -> Meas B -> Prop) mu1 mu2 mu f g :
+  compSubdist f ->
+  compSubdist g ->
+  isSubdist mu ->
   measCong f ->
   joinDistrib f ->
   measCong g ->
@@ -142,32 +152,29 @@ Lemma joinDistrib_expansion_compat {A B : eqType} (R : Meas A -> Meas B -> Prop)
   mu2 ~~ (p <- (meas_fmap mu snd); p) @ 0 ->
   (forall p, p \in (measSupport mu) -> (expansion R) (f (fst p)) (g (snd p)))  ->
   (expansion R) (f mu1) (g mu2).
-  admit.
-  
-(*
-intros.
-eapply expansion_cong.
-instantiate (1 := (p <- mu; f (p.1))).
-symmetry; rewrite (H _ _ H4).
-rewrite H0.
-rewrite /meas_fmap.
-rewrite bindAssoc.
-apply measBind_cong_r; intros.
-rewrite bindRet.
-done.
+  intros.
+  eapply expansion_cong.
+  instantiate (1 := (p <- mu; f (p.1))).
+  symmetry; rewrite (H2 _ _ H7).
+  rewrite H3.
+  rewrite /meas_fmap bindAssoc.
+  apply measBind_cong_r; intros.
+  rewrite bindRet; reflexivity.
+  done.
+  apply meas_fmap_isSubdist; done.
+  instantiate (1 := (p <- mu; g (p.2))).
+  symmetry; rewrite (H4 _ _ H8).
+  rewrite H5.
+  rewrite /meas_fmap bindAssoc; apply measBind_cong_r; intros.
+  rewrite bindRet; reflexivity.
+  done.
+  by apply meas_fmap_isSubdist.
 
-instantiate (1 := (p <- mu; g (p.2))).
-symmetry; rewrite (H1 _ _ H5).
-rewrite H2 /meas_fmap bindAssoc.
-apply measBind_cong_r; intros.
-rewrite bindRet; done.
-
-apply expansion_bind.
-intros.
-apply H6.
-done.
-*)
-Admitted.
+  apply expansion_bind.
+  done.
+  done.
+  done.
+Qed.
 
 Ltac expansion_simp :=
   eapply expansion_cong; [ dsimp; apply measEquiv_refl | dsimp; apply measEquiv_refl | idtac ].
