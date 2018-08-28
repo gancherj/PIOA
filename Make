@@ -1,5 +1,10 @@
--R ../libs libs
+-R ./libs libs
 Lems.v
 Posrat.v
 Meas.v
+Expansion.v
 PIOA.v
+
+CompPIOA.v
+DirectSim.v
+Expansion.v
