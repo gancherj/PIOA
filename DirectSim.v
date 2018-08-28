@@ -3,6 +3,7 @@ From mathcomp Require Import ssreflect ssrfun ssrbool ssrint eqtype ssrnat seq c
 From mathcomp Require Import bigop ssralg div ssrnum ssrint finset ssrnum ssrnat.
 
 Require Import PIOA Meas Posrat CompPIOA Lems.
+Require Import fset.
 
 Section DirectSim.
   Context {A : finType}.

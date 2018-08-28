@@ -1,12 +1,13 @@
 From mathcomp Require Import ssreflect ssrfun ssrbool ssrint eqtype ssrnat seq choice fintype rat finfun.
-From mathcomp Require Import bigop ssralg div ssrnum ssrint finset.
+From mathcomp Require Import bigop ssralg div ssrnum ssrint.
 Require Import Meas.
 Require Import Program.
+Require Import fset.
 Require Import Expansion.
 Require Import Posrat.
 Require Import Lems.
 
-Record prePIOA {Act : finType} :=
+Record prePIOA {Act : choiceType} :=
   mkPrePIOA {
       pQ : finType;
       start : pQ;
@@ -15,11 +16,11 @@ Record prePIOA {Act : finType} :=
                            }.
 
 
-Definition enabled {Act : finType} (P : @prePIOA Act) (s : pQ P) :=
+Definition enabled {Act} (P : @prePIOA Act) (s : pQ P) :=
   fun a =>
     match (tr P s a) with | Some _ => true | None => false end.
 
-Lemma enabledP {Act : finType} (P : @prePIOA Act) s a : reflect (exists mu, tr P s a = Some mu) (enabled P s a).
+Lemma enabledP {Act} (P : @prePIOA Act) s a : reflect (exists mu, tr P s a = Some mu) (enabled P s a).
 apply/(iffP idP).
 rewrite/enabled.
 remember (tr P s a) as o; symmetry in Heqo; destruct o.
@@ -30,75 +31,78 @@ intros; rewrite /enabled.
 rewrite H; done.
 Qed.
 
-Definition actionDeterm {Act : finType} (P : @prePIOA Act) (T : {set Act}) :=
+Definition actionDeterm {Act } (P : @prePIOA Act) (T : {fset Act}) :=
   forall s x y,
     x \in T -> y \in T -> x != y -> ~~ (enabled P s x && enabled P s y).
 
-Record ActionDisjoint {Act : finType} (pI : {set Act}) (pTO pTH : {set {set Act}}) :=
+Record ActionDisjoint {Act : choiceType} (pI : {fset Act}) (pTO pTH : {fset {fset Act}}) :=
   {
-    _ : forall x, x \in pTO -> [disjoint pI & x];
-    _ : forall y, y \in pTH -> [disjoint pI & y];
-    _ : forall x y, x \in pTO -> y \in pTH -> [disjoint x & y];
-    _ : forall x y, x \in pTO -> y \in pTO -> x != y -> [disjoint x & y];
-    _ : forall x y, x \in pTH -> y \in pTH -> x != y -> [disjoint x & y];
+    _ : forall x, x \in pTO -> fdisj pI x;
+    _ : forall y, y \in pTH -> fdisj pI y;
+    _ : forall x y, x \in pTO -> y \in pTH -> fdisj x y;
+    _ : forall x y, x \in pTO -> y \in pTO -> x != y -> fdisj x y;
+    _ : forall x y, x \in pTH -> y \in pTH -> x != y -> fdisj x y;
     }.
     
+
+Definition cover {A : choiceType} (X : {fset {fset A}}) : {fset A} :=
+  \bigcup_(x in X) x.
     
 
-Record PIOA {Act : finType} :=
+Record PIOA {Act : choiceType} :=
 buildPIOA {
-  pI : {set Act};
-  pTO : {set {set Act}};
-  pTH : {set {set Act}};
+  pI : {fset Act};
+  pTO : {fset {fset Act}};
+  pTH : {fset {fset Act}};
   pP :> @prePIOA Act;
   actionDisjoint : ActionDisjoint pI pTO pTH;
-  pActionDeterm : forall T, T \in (pTO :|: pTH) -> actionDeterm pP T; 
+  pActionDeterm : forall T, T \in (pTO `|` pTH) -> actionDeterm pP T; 
   inputEnabled : forall s x, x \in pI -> enabled pP s x;
-  actSetValid : forall s x, enabled pP s x -> x \in (pI :|: cover pTO :|: cover pTH)
+  actSetValid : forall s x, enabled pP s x -> x \in (pI `|` cover pTO `|` cover pTH)
   }.
 
 Lemma pIODisjoint {A}  (P : @PIOA A) :
-  (forall x, x \in pTO P -> [disjoint (pI P) & x]).
+  (forall x, x \in pTO P -> fdisj (pI P) x).
   destruct P; destruct actionDisjoint0; done.
 Qed.
 
 Lemma pIHDisjoint {A} (P : @PIOA A) :
-  (forall x, x \in pTH P -> [disjoint (pI P) & x]).
+  (forall x, x \in pTH P -> fdisj (pI P) x).
   destruct P; destruct actionDisjoint0; done.
 Qed.
 
 Lemma pOHDisjoint {A} (P : @PIOA A):
-  forall x y, x \in pTO P -> y \in pTH P -> [disjoint x & y].
+  forall x y, x \in pTO P -> y \in pTH P -> fdisj x y.
   destruct P; destruct actionDisjoint0; done.
 Qed.
 
 Lemma pOODisjoint {A} (P : @PIOA A):
-  forall x y, x \in pTO P -> y \in pTO P -> x != y -> [disjoint x & y].
+  forall x y, x \in pTO P -> y \in pTO P -> x != y -> fdisj x y.
   destruct P; destruct actionDisjoint0; done.
 Qed.
 
 Lemma pHHDisjoint {A} (P : @PIOA A):
-  forall x y, x \in pTH P -> y \in pTH P -> x != y -> [disjoint x & y].
+  forall x y, x \in pTH P -> y \in pTH P -> x != y -> fdisj x y.
   destruct P; destruct actionDisjoint0; done.
 Qed.
 
 
-Definition action {A : finType} (P : @PIOA A) :=
-  [set (pI P)] :|: (pTO P) :|: (pTH P).
+Definition action {A} (P : @PIOA A) :=
+  [fset (pI P)] `|` (pTO P) `|` (pTH P).
 
-Lemma pI_in_action {A : finType} (P : @PIOA A) :
+Lemma pI_in_action {A} (P : @PIOA A) :
   pI P \in action P.
-  rewrite/action; apply/setUP; left; apply/setUP; left; rewrite in_set; done.
+  rewrite/action; apply/fsetUP; left; apply/fsetUP; left; rewrite in_fset; done.
 Qed.
 
-Lemma tO_in_action {A : finType} (P : @PIOA A) :
+Lemma tO_in_action {A} (P : @PIOA A) :
   forall x, x \in pTO P -> x \in action P.
-  intros; rewrite/action; apply/setUP; left; apply/setUP; right; done.
+  intros; rewrite/action; apply/fsetUP; left; apply/fsetUP; right; done.
 Qed.
 
-Lemma tH_in_action {A : finType} (P : @PIOA A) :
+Lemma tH_in_action {A} (P : @PIOA A) :
   forall x, x \in pTH P -> x \in action P.
-  intros; rewrite/action; apply/setUP; right; done.
+  intros; rewrite/action; apply/fsetUP; right; done.
 Qed.
 
 
@@ -113,12 +117,12 @@ eapply i.
 apply H.
 Qed.
 
-Definition Tasks {Act : finType} (P : @PIOA Act) := (pTO P) :|: (pTH P).
+Definition Tasks {Act} (P : @PIOA Act) := (pTO P) `|` (pTH P).
 
-Definition Task (Act : finType) := {set Act}.
+Definition Task (Act : choiceType) := {fset Act}.
 
 Definition runTask {A} {P : @PIOA A} (T : Task A) (s : pQ P) : option (Meas (pQ P) * A) :=
-  match [pick x in T | enabled P s x] with
+  match fpick (enabled P s) T with
   | Some a =>
     match (tr P s a) with
     | Some mu => Some (mu, a)
@@ -128,10 +132,10 @@ Definition runTask {A} {P : @PIOA A} (T : Task A) (s : pQ P) : option (Meas (pQ 
               end.
 
 Definition external {A} (P : @PIOA A) :=
-  (pI P) :|: (cover (pTO P)).
+  (pI P) `|` (cover (pTO P)).
   
-Definition Trace {ActSpace : finType} (P : @PIOA ActSpace) :=
-  ((pQ P) * (list ActSpace))%type.
+Definition Trace {Act} (P : @PIOA Act) :=
+  ((pQ P) * (list Act))%type.
 
 Definition appTask {A} (P : @PIOA A) (T : Task A) (mu : Meas [eqType of Trace P]) : Meas [eqType of Trace P] :=
   t <- mu;
@@ -164,10 +168,12 @@ Lemma appTask_cong {A} (P : @PIOA A) : forall (T : Task A),
   intros.
   destruct x; intros.
   rewrite /runTask; simpl.
-  case: pickP; intros.
+  case: fpickP; intros.
   remember (tr P s x) as mu; symmetry in Heqmu; destruct mu; dsubdist.
   simpl.
-  intro x0; destruct (x \in external P); dsubdist.
+  intro x0; caseOn (x \in external P); intro Heq.
+  rewrite Heq; dsubdist.
+  rewrite (negbTE Heq); dsubdist.
   dsubdist.
   dsimp.
 Qed.
@@ -241,16 +247,16 @@ dsubdist.
 done.
 destruct x.
 rewrite /runTask //=.
-case: pickP.
+case: fpickP.
 intros.
 remember (tr P s x).
 destruct o.
 dsubdist.
 eapply tr_subDist.
 symmetry; apply Heqo.
-simpl; destruct (x \in external P).
-intro; dsubdist.
-intro; dsubdist.
+simpl; caseOn (x \in external P); intro Heqb; [rewrite Heqb | rewrite (negbTE Heqb)]; intros.
+dsubdist.
+dsubdist.
 dsubdist.
 intro; dsubdist.
 Qed.
@@ -272,7 +278,7 @@ Definition traceOf {Q act : eqType} (D : Meas ([eqType of Q * list act])%type) :
   meas_fmap D snd.
 
 Definition inputClosed {A} (P : @PIOA A) :=
-  (pI P) = set0.
+  (pI P) = fset0.
 
 Definition inputEquiv {A} (P1 P2 : @PIOA A) :=
   (pI P1) = (pI P2).
@@ -297,27 +303,31 @@ Lemma hiddenP {A} {P : @PIOA A} (T : Task A) mu :
 
   intros.
   exists ( fun s =>
-             match [pick x in T | enabled P s x] with
+             match fpick (enabled P s) T with
              | Some a => match tr P s a with | Some mu => mu | None => ret s end
              | None => ret s
                            end).
   rewrite /appTask /runTask.
   apply measBind_cong_r; intros.
   destruct x; simpl.
-  case:pickP.
-  move=> x /andP; elim; move=> xin Henabled.
+  case:fpickP.
+  intros.
   remember (tr P s x) as muP.
   destruct muP.
+  simpl.
+
   have: x \notin external P.
-  apply/setUP.
+  apply/fsetUP.
   elim; intros.
-  move/disjointP: (pIHDisjoint _ _ H).
+  move/fdisjointP: (pIHDisjoint _ _ H).
   move/(_ _ H2).
-  rewrite xin; done.
-  move/bigcupP: H2; elim; intros.
-  move/disjointP: (pOHDisjoint _ _ _ H2 H).
-  move/(_ _ H3).
-  rewrite xin; done.
+  rewrite i0; done.
+
+  elim: (cupP _ _ _ _ H2) => x0; move/andP; elim; intros.
+  move/fdisjointP: (pOHDisjoint _ _ _ H3 H).
+  elim: (andP H4) => _ h4.
+  move/(_ _ H4).
+  rewrite i0; done.
   intro Hni.
   rewrite /runTask //=.
   rewrite (negbTE Hni).

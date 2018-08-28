@@ -3,12 +3,13 @@
 From mathcomp Require Import ssreflect ssrfun ssrbool ssrint eqtype ssrnat seq choice fintype rat finfun.
 From mathcomp Require Import bigop ssralg div ssrnum ssrint finset ssrnum ssrnat.
 
-Require Import PIOA Meas Posrat CompPIOA Lems DirectSim .
+Require Import PIOA Meas Posrat CompPIOA Lems.
+Require Import fset.
 
 
 Section StateInj.
   
-  Context {A : finType}.
+  Context {A : choiceType}.
   Context (P1 P2 : @PIOA A).
   Context (HC1 : inputClosed P1).
   Context (HC2 : inputClosed P2).
