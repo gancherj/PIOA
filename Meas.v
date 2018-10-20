@@ -251,3 +251,68 @@ Lemma measBind_swap {A B C : choiceType} (D1 : Meas A) (D2 : Meas B) (D3 : A -> 
   rewrite (pmulrC j.1 i.1).
   rewrite pmulrA //=.
 Qed.
+
+Lemma mkMeas_nil {A : choiceType} : _pmeas (mkMeas (nil : PMeas A)) = nil.
+  rewrite //= sort_keys_nil //=.
+Qed.
+
+Lemma measSupport_nil {A : choiceType} : measSupport (mkMeas (nil : PMeas A)) = nil.
+  rewrite /measSupport mkMeas_nil //=.
+Qed.
+
+  Lemma psum_neq0 {A : eqType} (xs : seq A) f :
+    \big[padd/0]_(x <- xs) f x != 0 ->
+    exists x, (x \in xs) /\ f x != 0.
+    induction xs.
+    rewrite big_nil //=.
+    rewrite big_cons.
+    rewrite -padd0 negb_and; move/orP; elim => H.
+    exists a; split.
+    rewrite in_cons //= eq_refl //=.
+    done.
+    destruct (IHxs H).
+    exists x; split.
+    destruct H0.
+    rewrite in_cons H0  orbT //=.
+    destruct H0; done.
+  Qed.
+
+Lemma measSupport_bind {A B : choiceType} (c : Meas A) (d : A -> Meas B) x :
+  x \in measSupport (a <- c; d a) -> exists y, y \in measSupport c /\ x \in measSupport (d y).
+  rewrite measSupportP integ_measBind.
+  rewrite /integ.
+  move => H; apply psum_neq0 in H.
+  elim H => y Hy.
+  move: Hy => [hy1 hy2].
+  exists y.2; split.
+  apply/mapP; exists y; done.
+  rewrite measSupportP.
+  rewrite /integ.
+  rewrite -pmul0 negb_or in hy2; move/andP: hy2; elim; done.
+Qed.
+
+
+Definition measBind_dep {A B : choiceType} (c : Meas A) (f : forall x, x \in measSupport c -> Meas B) : Meas B :=
+  (x <- c;
+          (match (x \in measSupport c) as b return (x \in measSupport c) = b -> Meas B with
+            | true => fun p => f x p
+            | false => fun _ => mkMeas nil
+                              end) (Logic.eq_refl (x \in measSupport c))).
+
+Lemma integ_eq_fun_dep {A : choiceType} (M : Meas A) (f1 f2 : A -> posrat) :
+  (forall x, x \in measSupport M -> f1 x = f2 x) -> integ M f1 = integ M f2.
+  intros.
+  
+  rewrite /integ.
+
+
+  rewrite big_seq_cond.
+  rewrite (big_seq_cond _ (fun p => p.1 * f2 p.2)).
+  apply eq_big; rewrite //=.
+  intros.
+  move/andP: H0 => [H0 _].
+
+  rewrite H.
+  done.
+  apply/mapP; exists i; done.
+Qed.
