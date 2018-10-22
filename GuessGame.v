@@ -3,114 +3,119 @@ From mathcomp Require Import ssreflect ssrfun ssrbool ssrint eqtype ssrnat seq c
 From mathcomp Require Import bigop ssralg div ssrnum ssrint finset ssrnum ssrnat.
 
 Require Import PIOA Meas Posrat CompPIOA Lems DirectSim StateSim.
+Require Import fset.
+Require Import Strings.String.
+Require Import string.
 
-Check enabled.
+Local Open Scope string_scope.
 
-Inductive Action : Type :=
-  | Choose : Action 
-  | Input : bool -> Action
-  | Output : bool -> Action.
-
-
-Definition sum_of_action (a : Action) :=
-  match a with
-  | Choose => inl tt
-  | Input x => inr (inr x)
-  | Output x => inr (inl x)
-                   end.
-
-Definition action_of_sum t :=
-  match t with
-  | inl tt => Choose
-  | inr (inr x) => Input x
-  | inr (inl x) => Output x
-                      end.
-
-Lemma action_cancel : cancel sum_of_action action_of_sum.
-  by case.
-Qed.
-
-Definition action_eqmix := CanEqMixin action_cancel.
-Canonical action_eqType := EqType Action action_eqmix.
-Definition action_choicemix := CanChoiceMixin action_cancel.
-Canonical action_choiceType := ChoiceType Action action_choicemix.
-Definition action_countmix := CanCountMixin action_cancel.
-Canonical action_countType := CountType Action action_countmix.
-Definition action_finmix := CanFinMixin action_cancel.
-Canonical action_finType := FinType Action action_finmix.
+(*
 
 Definition guessQ := [eqType of option bool * option bool * bool].
 
-Definition guessTr (which : bool) (x : guessQ) (a : Action) : option (Meas guessQ) :=
-  match x, a with
-  | (None, None, false), Choose => Some (b <- 
-                            unif (true :: false :: nil); ret (Some b, None, false))
-  | (Some x, None, false), Input y =>
-    if which then Some (ret (Some x, Some x, false)) else
-        if x == y then Some (ret (Some x, Some true, false)) else Some (ret (Some x, Some false, false))
-  | (Some x, Some b, false), Output b' => if b == b' then Some (ret (Some x, Some b, true)) else None
-  | _, Input _ => Some (ret x)
-  | _, _ => None
-                end.
-    
+Definition guessTr (which : bool) (x : guessQ) (a : string * option bool) : option (Meas guessQ) :=
+  if a.1 == "choose" then
+    match x, a.2 with
+    | (None, None, false), None => Some (b <- unif (true :: false :: nil); ret (Some b, None, false))
+    | _, _ => None
+    end
+  else if a.1 == "input" then
+         match x, a.2 with
+         | (Some x, None, false), (Some y) =>
+           if which then Some (ret (Some x, Some x, false)) else
+             if x == y then Some (ret (Some x, Some true, false)) else Some (ret (Some x, Some false, false))
+         | _, _ => Some (ret x)
+                        end
+       else if a.1 == "output" then
+              match x, a.2 with
+              | (Some x, Some b, false), (Some b') => if b == b' then Some (ret (Some x, Some b, true)) else None
+              | _, _ => None
+                          end else None.
 
 Lemma guessTr_subDist wh x a m : guessTr wh x a = Some m -> isSubdist m.
+  intro.
+  rewrite /guessTr //= in H.
+  caseOn (a.1 == "choose"); intro Heq;
+    [ rewrite Heq in H | rewrite (negbTE Heq) in H; 
+        caseOn (a.1 == "input"); intro Heq2; [ rewrite Heq2 in H | rewrite (negbTE Heq2) in H; 
+            caseOn (a.1 == "output"); intro Heq3; rewrite ?Heq3 ?(negbTE Heq3) in H ] ];
   destruct wh;
   destruct x as [ [u v] w];
   destruct u as [ [ | ] | ];
   destruct v as [ [ | ] | ];
-  destruct w as [ | ];
-  destruct a as [ | [ | ] | [ | ] ];
-  simpl; try congruence;
-    try ltac:(intro H; injection H; intro; subst); dsubdist.
+  destruct w as [ | ]; destruct a.2; try congruence; try ltac:(injection H; intro; subst); dsubdist.
+
   apply isDist_isSubdist; apply unif_isDist; done.
-  intros; dsubdist.
+  intro; dsubdist.
   apply isDist_isSubdist; apply unif_isDist; done.
-  intros; dsubdist.
-Qed.   
+  intro; dsubdist.
+  destruct b; simpl in H; injection H; intro; subst; dsubdist.
+  destruct b; simpl in H; injection H; intro; subst; dsubdist.
+  destruct b; simpl in H; try congruence; injection H; intro; subst; dsubdist.
+  destruct b; simpl in H; try congruence; injection H; intro; subst; dsubdist.
+  destruct b; simpl in H; try congruence; injection H; intro; subst; dsubdist.
+  destruct b; simpl in H; try congruence; injection H; intro; subst; dsubdist.
+  destruct b; simpl in H; try congruence; injection H; intro; subst; dsubdist.
+  destruct b; simpl in H; try congruence; injection H; intro; subst; dsubdist.
+  destruct b; simpl in H; try congruence; injection H; intro; subst; dsubdist.
+  destruct b; simpl in H; try congruence; injection H; intro; subst; dsubdist.
+Qed.
  
-Definition guesspre wh : prePIOA := mkPrePIOA [finType of Action] [finType of guessQ] (None, None, false) (guessTr wh) (guessTr_subDist wh).
+Definition guesspre wh : prePIOA := mkPrePIOA [choiceType of string * option bool] [finType of guessQ] (None, None, false) (guessTr wh) (guessTr_subDist wh).
 
 
-Definition guessPIOA (wh : bool) : @PIOA [finType of Action].
+Definition guessPIOA (wh : bool) : @PIOA [choiceType of string * option bool].
   econstructor.
-  instantiate (3 := [set Input true; Input false]).
-  instantiate (2 := [set [set Output true; Output false]]).
-  instantiate (1 := [set [set Choose]]).
+  instantiate (3 := (fun b => ("input", Some b)) `@` [fset true; false]).
+  instantiate (2 := [fset (fun b => ("output", Some b)) `@` [fset true; false]]).
+  instantiate (1 := [fset [fset ("choose", None)]]).
+
 
   constructor.
-  move=> x; rewrite !in_set; intro; apply/disjointP; move=> y; rewrite !in_set.
-  rewrite (eqP H) !in_set.
-  move/orP; elim; move/eqP; intro; subst; done.
+  move=> x; rewrite !in_fset => eqx; apply/fdisjointP; move=> y.
+  move/fimsetP; elim; intros; subst.
+  rewrite (eqP eqx).
+  apply/fimsetP; elim.
+  congruence.
 
-  move=> x; rewrite !in_set; intro; apply/disjointP; move=> y; rewrite !in_set.
-  rewrite (eqP H) !in_set.
-  move/orP; elim; move/eqP; intro; subst; done.
+  move=> x; rewrite !in_fset => eqx; apply/fdisjointP => y;
+   move/fimsetP; elim; intros; subst; rewrite (eqP eqx) in_fset //=.
 
-  move=> x y; rewrite !in_set; move/eqP; intro; subst; move/eqP; intro; subst; apply/disjointP.
-  move=> x; rewrite !in_set; move/orP; elim; move/eqP; intro; subst; done.
+  move=> x y; rewrite !in_fset; move/eqP; intro; subst; move/eqP; intro; subst;
+  apply/fdisjointP => z; rewrite !in_fset; move/fimsetP; elim; intros; subst; done.
 
-  move=> x y; rewrite !in_set; move/eqP; intro; subst; move/eqP; intros; subst.
-  rewrite eq_refl in H; done.
-  move=> x y; rewrite !in_set; move/eqP; intro; subst; move/eqP; intros; subst.
-  rewrite eq_refl in H; done.
+  move=> x y; rewrite !in_fset; move/eqP; intro; subst; move/eqP; intro; subst.
+  rewrite eq_refl //=.
+
+  move=> x y; rewrite !in_fset; move/eqP; intro; subst; move/eqP; intro; subst.
+  rewrite eq_refl //=.
 
   instantiate (1 := guesspre wh).
-  move=> T; rewrite in_set; move/orP; elim; rewrite in_set; move/eqP; intro; subst.
-  move=> s x y; rewrite !in_set; move/orP; elim; move/eqP; intro; subst.
-  move/orP; elim.
-  move/eqP; intro; subst; done.
-  move/eqP; intro; subst.
-  destruct s as [ [ [ [ ] | ] [ [ | ] | ] ] [ | ] ]; rewrite /enabled //=.
-  move/orP; elim.
-  move/eqP; intro; subst.
-  destruct s as [ [ [ [ ] | ] [ [ | ] | ] ] [ | ] ]; rewrite /enabled //=.
-  move/eqP; intro; subst; done.
-  move=> s x y; rewrite !in_set.
+
+  move=> T; rewrite in_fset; move/orP; elim; rewrite in_fset; move/eqP; intro; subst.
+  move=> s x y; move/fimsetP; elim; intros; subst.
+  move/fimsetP: H1; elim; intros; subst.
+  
+  destruct s as [ [ [ [ ] | ] [ [ | ] | ] ] [ | ] ]; rewrite /enabled //=;
+  rewrite /guessTr eq_refl //=; destruct x0, x; simpl; rewrite ?eq_refl in H2; done.
+
+  move=> s x y; rewrite !in_fset.
   move/eqP; intro; subst; move/eqP; intro; subst; done.
-  move=> s x; rewrite !in_set; move/orP; elim; move/eqP; intro; subst.
-  destruct wh; destruct s as [ [ [ [ ] | ] [ [ | ] | ] ] [ | ] ]; rewrite /enabled //=.
-  destruct wh; destruct s as [ [ [ [ ] | ] [ [ | ] | ] ] [ | ] ]; rewrite /enabled //=.
+
+  move=> s x; move/fimsetP; elim; intros; subst.
+  destruct wh; destruct s as [ [ [ [ ] | ] [ [ | ] | ] ] [ | ] ]; destruct x0; rewrite /enabled //=.
+
+
+  destruct wh; destruct s as [ [ [ [ ] | ] [ [ | ] | ] ] [ | ] ]; rewrite /enabled /guessTr //=.
+
+  rewrite /guessTr.
+  intro.
+
+  caseOn (x.1 == "choose").
+  intro Heq; rewrite Heq.
+  done.
+  caseOn (x.1 == "input")
+  simpl.
   destruct x; intros.
   apply/setUP; right.
   apply/bigcupP.
@@ -290,3 +295,4 @@ Lemma guessSpec: forall ts, GuessSpec ts.
 
 
 
+*)

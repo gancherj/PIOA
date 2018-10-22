@@ -5,6 +5,9 @@ Require Import PIOA Meas Posrat Lems.
 Set Implicit Arguments.
 Unset Strict Implicit.
 
+(*
+
+to adapt
 
 Lemma nseq_rcons {A} (x : nat) (a : A) : nseq (S x) a = rcons (nseq x a) a.
   induction x.
@@ -449,3 +452,4 @@ Section RandCloseProof.
     intros; dsubdist.
 Qed.
 End RandCloseProof.
+*)
