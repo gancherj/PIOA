@@ -1,7 +1,0 @@
--R . libs
-COQDOCFLAGS = "-s --external 'http://math-comp.github.io/math-comp/htmldoc/' mathcomp"
-bcase.v
-edone.v
-base.v
-fset.v
-string.v
