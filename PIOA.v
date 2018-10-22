@@ -1,19 +1,76 @@
 From mathcomp Require Import ssreflect ssrfun ssrbool ssrint eqtype ssrnat seq choice fintype rat finfun.
-From mathcomp Require Import bigop ssralg div ssrnum ssrint.
-Require Import Meas.
-Require Import Program.
-Require Import fset.
-Require Import Expansion.
-Require Import Posrat.
-Require Import Lems.
+From mathcomp Require Import bigop ssralg div ssrnum ssrint order finmap.
+From mathcomp Require Import ssreflect ssrfun ssrbool ssrint eqtype ssrnat seq choice fintype rat finfun.
+From mathcomp Require Import bigop ssralg div ssrnum ssrint finmap.
 
-Record prePIOA {Act : choiceType} :=
-  mkPrePIOA {
-      pQ : finType;
-      start : pQ;
-      tr : pQ -> Act -> option (Meas pQ);
-      _ : forall s a mu, tr s a = Some mu -> isSubdist mu;
-                           }.
+Require Import Meas Lifting.
+Local Open Scope fset.
+
+Definition all_fset {A : choiceType} (f : {fset A}) (p : A -> bool) : bool :=
+  [fset x in f | p x] == f.
+
+Lemma all_fsetP {A : choiceType} (f : {fset A}) (p : A -> bool) :
+  reflect (forall (x : A), x \in f -> p x) (all_fset f p).
+  apply: (iffP idP); rewrite /all_fset.
+  move/eqP/fsetP => H x.
+  move: (H x); rewrite !in_fset inE //=.
+  destruct (x \in f).
+  move/andP; elim; done.
+  done.
+  intro H; apply/eqP/fsetP => x.
+  remember (x \in f) as b; symmetry in Heqb; destruct b.
+  rewrite !in_fset !inE //= Heqb (H _ Heqb) //=.
+  rewrite !in_fset !inE //= Heqb //=.
+Qed.
+
+Definition cover {A : choiceType} (f : {fset {fset A}}) : {fset A} :=
+  \bigcup_(p <- f) p.
+
+Record prePIOA {A : choiceType} :=
+  {
+    pQ : finType;
+    cO : {fset {fset A}};
+    cI : {fset {fset A}};
+    cH : {fset {fset A}};
+    tr :  pQ -> A -> option (Meas pQ);
+    }.
+
+
+Definition inputs {A : choiceType} (P : @prePIOA A) := cover (cI P).
+Definition outputs {A : choiceType} (P : @prePIOA A) := cover (cO P).
+Definition hiddens {A : choiceType} (P : @prePIOA A) := cover (cH P).
+
+Definition actions {A : choiceType} (P : @prePIOA A) := inputs P `|` outputs P `|` hiddens P.
+Definition lc_actions {A : choiceType} (P : @prePIOA A) := cover (cO P) `|`cover (cH P).
+Definition lc_channels {A : choiceType} (P : @prePIOA A) := (cO P) `|` (cH P).
+Definition channels {A : choiceType} (P : @prePIOA A) : {fset {fset A}} := cI P `&` cO P `&` cH P.
+
+Definition opt_lift {A} (p : A -> bool) := fun (x : option A) =>
+                                                 match x with
+                                                   | Some a => p a
+                                                   | None => true
+                                                               end.
+
+Definition actionDeterm {A : choiceType} (P : @prePIOA A) (C : {fset A}) : bool :=
+  all_fset C (fun a => [forall s, isSome (tr P s a) ==> all_fset C (fun b => tr P s b == None)]).
+
+
+Definition eq_rel3 {A : choiceType} (pP : @prePIOA A) :=
+  [&& [disjoint (inputs pP) & (outputs pP)]%fset,
+      [disjoint (inputs pP) & (hiddens pP)]%fset,
+      [disjoint (outputs pP) & (hiddens pP)]%fset & 
+      all_fset (channels pP) (fun C1 => all_fset (channels pP) (fun C2 => (C1 != C2) ==> [disjoint C1 & C2]%fset)) ].
+
+Record PIOA {A : choiceType} :=
+  {
+    pP :> @prePIOA A;
+    _ : [&&
+           eq_rel3 pP,
+         all_fset (inputs pP) (fun a => [forall s, tr pP s a != None]) , (* input enabled *)
+         all_fset (lc_channels pP) (actionDeterm pP) & (* action determinism *)
+         all_fset (actions pP) (fun a => [forall s, opt_lift isDist (tr pP s a)])] (* subdist *)
+          }.
+         
 
 
 Definition enabled {Act} (P : @prePIOA Act) (s : pQ P) :=
@@ -31,38 +88,68 @@ intros; rewrite /enabled.
 rewrite H; done.
 Qed.
 
-Definition actionDeterm {Act } (P : @prePIOA Act) (T : {fset Act}) :=
-  forall s x y,
-    x \in T -> y \in T -> x != y -> ~~ (enabled P s x && enabled P s y).
 
-Record ActionDisjoint {Act : choiceType} (pI : {fset Act}) (pTO pTH : {fset {fset Act}}) :=
-  {
-    _ : forall x, x \in pTO -> fdisj pI x;
-    _ : forall y, y \in pTH -> fdisj pI y;
-    _ : forall x y, x \in pTO -> y \in pTH -> fdisj x y;
-    _ : forall x y, x \in pTO -> y \in pTO -> x != y -> fdisj x y;
-    _ : forall x y, x \in pTH -> y \in pTH -> x != y -> fdisj x y;
-    }.
-    
+Definition fpick {A : choiceType} (f : {fset A}) (b : A -> bool) : option A :=
+  match (Sumbool.sumbool_of_bool ([fset x in f | b x] != fset0)) with
+    | left Hin => Some (xchoose (fset0Pn _ Hin))
+    | _ => None
+             end.
 
-Definition cover {A : choiceType} (X : {fset {fset A}}) : {fset A} :=
-  \bigcup_(x in X) x.
-    
+Lemma fpickP {A : choiceType} (f : {fset A}) b x :
+  fpick f b = Some x -> b x.
+rewrite /fpick.
+case: (Sumbool.sumbool_of_bool ([fset x0 | x0 in f & b x0] != fset0)) => H.
+move => Heq; injection Heq => <-.
+Check xchooseP.
+have H2 := (xchooseP (fset0Pn _ H)).
+rewrite !in_fset !inE in H2.
+move/andP: H2; elim; done.
+done.
+Qed.
 
-Record PIOA {Act : choiceType} :=
-buildPIOA {
-  pI : {fset Act};
-  pTO : {fset {fset Act}};
-  pTH : {fset {fset Act}};
-  pP :> @prePIOA Act;
-  actionDisjoint : ActionDisjoint pI pTO pTH;
-  pActionDeterm : forall T, T \in (pTO `|` pTH) -> actionDeterm pP T; 
-  inputEnabled : forall s x, x \in pI -> enabled pP s x;
-  actSetValid : forall s x, enabled pP s x -> x \in (pI `|` cover pTO `|` cover pTH)
-  }.
+Lemma fpickPn {A : choiceType} (f : {fset A}) b :
+  fpick f b = None -> all_fset f (fun x => ~~ b x).
+rewrite /fpick.
+case: (Sumbool.sumbool_of_bool ([fset x0 | x0 in f & b x0] != fset0)) => H.
+done.
+move => _.
+move: H.
+move/negbFE/eqP/fsetP=>H.
+apply/all_fsetP => x Hx.
+move: (H x); rewrite !in_fset !inE //=.
+rewrite Hx  andTb => -> //=.
+Qed.
+
+
+Definition runChan {A} {P : @PIOA A} (T : {fset A}) (s : pQ P) : option (Meas (pQ P) * A) :=
+  match fpick T (enabled P s) with
+  | Some a =>
+    match (tr P s a) with
+    | Some mu => Some (mu, a)
+    | None => None
+    end
+  | None => None
+              end.
+
+Definition Trace {Act : choiceType} (P : @PIOA Act) :=
+  ((pQ P) * (list Act))%type.
+
+Definition runPIOA {A} (P : @PIOA A) (ts : seq ({fset A})) (d : Meas ([choiceType of Trace P])) : Meas ([choiceType of Trace P]) :=
+  foldl (fun acc C =>
+           t <- acc;
+            match runChan C t.1 with
+               | Some (mu, a) => s' <- mu; if a \in hiddens P then ret (s', t.2) else ret (s', a :: t.2)
+               | None => ret t
+                           end) d ts.
+
+Definition closed {A} (P : @PIOA A) := cI P == fset0.
+
+
+
+(*
 
 Lemma pIODisjoint {A}  (P : @PIOA A) :
-  (forall x, x \in pTO P -> fdisj (pI P) x).
+  (forall x, x \in pO P -> fdisj (pI P) x).
   destruct P; destruct actionDisjoint0; done.
 Qed.
 
@@ -119,17 +206,6 @@ Qed.
 
 Definition Tasks {Act} (P : @PIOA Act) := (pTO P) `|` (pTH P).
 
-Definition Task (Act : choiceType) := {fset Act}.
-
-Definition runTask {A} {P : @PIOA A} (T : Task A) (s : pQ P) : option (Meas (pQ P) * A) :=
-  match fpick (enabled P s) T with
-  | Some a =>
-    match (tr P s a) with
-    | Some mu => Some (mu, a)
-    | None => None
-    end
-  | None => None
-              end.
 
 Definition external {A} (P : @PIOA A) :=
   (pI P) `|` (cover (pTO P)).
@@ -339,3 +415,4 @@ Lemma hiddenP {A} {P : @PIOA A} (T : Task A) mu :
   done.
 Qed.
 
+*)
