@@ -37,6 +37,7 @@ Lemma liftingBind {A B C : choiceType} R (c : Meas A) (f : A -> Meas B) (g : A -
   done.
 Qed.
 
+
 Lemma liftingBind_dep {A B C : choiceType} R (c : Meas A) (f : A -> Meas B) (g : A -> Meas C) :
   (forall x, x \in measSupport c -> lifting R (f x) (g x)) ->
   lifting R (x <- c; f x) (x <- c; g x).
@@ -47,30 +48,23 @@ Lemma liftingBind_dep {A B C : choiceType} R (c : Meas A) (f : A -> Meas B) (g :
   rewrite /measBind_dep bindAssoc.
   apply/eqP/MeasP => h; rewrite !integ_measBind.
   apply integ_eq_fun_dep => x Hx.
-  have: (if x \in measSupport c as b
-       return ((x \in measSupport c) = b -> Meas [choiceType of Meas B * Meas C])
-      then fun p : (x \in measSupport c) = true => xchoose (H x p)
-         else fun _ : (x \in measSupport c) = false => mkMeas [::]) (erefl (x \in measSupport c)) =
-        xchoose (H x Hx).
-  admit.
-  move => ->.
+  rewrite odflt_depP.
+
   have H2 := xchooseP (H x Hx); move/and3P: H2; elim => h1 h2 h3.
   rewrite -(eqP h1); done.
-
 
   rewrite /measBind_dep bindAssoc.
   apply/eqP/MeasP => h; rewrite !integ_measBind.
   apply integ_eq_fun_dep => x Hx.
-  have: (if x \in measSupport c as b
-       return ((x \in measSupport c) = b -> Meas [choiceType of Meas B * Meas C])
-      then fun p : (x \in measSupport c) = true => xchoose (H x p)
-         else fun _ : (x \in measSupport c) = false => mkMeas [::]) (erefl (x \in measSupport c)) =
-        xchoose (H x Hx).
-  admit.
-  move => ->.
+  rewrite odflt_depP.
   have H2 := xchooseP (H x Hx); move/and3P: H2; elim => h1 h2 h3.
   rewrite -(eqP h2); done.
 
-  admit.
-Admitted.
+  apply/allP => x.
+  move/measSupport_bind_dep; elim => y; elim => h hin.
 
+  have H2 := xchooseP (H y h); move/and3P: H2; elim => h1 h2 h3.
+  move/allP: h3 => h3.
+  apply h3.
+  done.
+Qed.

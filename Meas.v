@@ -291,20 +291,40 @@ Lemma measSupport_bind {A B : choiceType} (c : Meas A) (d : A -> Meas B) x :
   rewrite -pmul0 negb_or in hy2; move/andP: hy2; elim; done.
 Qed.
 
+Definition odflt_dep {A B} (p : A -> bool) (f : forall x (H : p x), B) (d : B) (x : A) : B :=
+  match (Sumbool.sumbool_of_bool (p x)) with
+  | left Heq => f x Heq
+  | _ => d
+           end.
+
+Lemma odflt_depP {A B} (p : A -> bool) x (f : forall x (H : p x), B) d (H : p x) :
+  odflt_dep p f d x = f x H.
+rewrite /odflt_dep.
+case: (Sumbool.sumbool_of_bool (p x)).
+move=> a; have: H = a by apply bool_irrelevance.
+move => ->; done.
+rewrite H; done.
+Qed.
 
 Definition measBind_dep {A B : choiceType} (c : Meas A) (f : forall x, x \in measSupport c -> Meas B) : Meas B :=
-  (x <- c;
-          (match (x \in measSupport c) as b return (x \in measSupport c) = b -> Meas B with
-            | true => fun p => f x p
-            | false => fun _ => mkMeas nil
-                              end) (Logic.eq_refl (x \in measSupport c))).
+  (x <- c; odflt_dep (fun x => x \in measSupport c) f (mkMeas nil) x).
+
+Definition measSupport_bind_dep {A B : choiceType} (c : Meas A) (f : forall x, x \in measSupport c -> Meas B) x :
+  x \in measSupport (measBind_dep c f) -> exists y (H : y \in measSupport c), x \in measSupport (f y H).
+  rewrite /measBind_dep.
+  intros.
+  apply measSupport_bind in H.
+  elim H => y; elim; intros.
+  exists y,  H0.
+  rewrite odflt_depP in H1.
+  done.
+Qed.
 
 Lemma integ_eq_fun_dep {A : choiceType} (M : Meas A) (f1 f2 : A -> posrat) :
   (forall x, x \in measSupport M -> f1 x = f2 x) -> integ M f1 = integ M f2.
   intros.
   
   rewrite /integ.
-
 
   rewrite big_seq_cond.
   rewrite (big_seq_cond _ (fun p => p.1 * f2 p.2)).
