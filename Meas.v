@@ -91,6 +91,8 @@ Section MeasOps.
     integ d (fun _ => 1).
   Definition isDist (d : Meas A) :=
     measMass d == 1.
+  Definition isSubdist (d : Meas A) :=
+    measMass d <= 1.
   Definition measSupport (d : Meas A) := map snd (_pmeas d).
 End MeasOps.
 
@@ -181,6 +183,12 @@ Lemma integ_eq_fun {A : choiceType} (M : Meas A) (f1 f2 : A -> posrat) :
   congr (_ + _).
   congr (_ * _).
   rewrite H; done.
+Qed.
+
+Lemma integ_ple_fun {A : choiceType} (M : Meas A) (f1 f2 : A -> posrat) :
+  (forall x, f1 x <= f2 x) -> integ M f1 <= integ M f2.
+  rewrite /integ => H; apply ple_sum => x.
+  apply ple_mul_l; done.
 Qed.
 
 Lemma bindAssoc {A B C : choiceType} : forall (c1 : Meas A) (c2 : A -> Meas B) (c3 : B -> Meas C),
@@ -335,4 +343,19 @@ Lemma integ_eq_fun_dep {A : choiceType} (M : Meas A) (f1 f2 : A -> posrat) :
   rewrite H.
   done.
   apply/mapP; exists i; done.
+Qed.
+
+
+Lemma isSubdist_bind {A B : choiceType} (c : Meas A) (f : A -> Meas B) :
+  isSubdist c -> (forall x, isSubdist (f x)) -> isSubdist (x <- c; f x).
+  rewrite /isSubdist /measMass integ_measBind //= => h1 h2.
+  eapply ple_trans.
+  apply integ_ple_fun.
+  instantiate (1 := fun _ => 1); rewrite //=.
+  done.
+Qed.
+
+Lemma isSubdist_ret {A : choiceType} (c : A) : isSubdist (ret c).
+  rewrite /isSubdist.
+  rewrite (eqP (isDist_ret c)) //=.
 Qed.

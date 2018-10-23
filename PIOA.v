@@ -6,6 +6,7 @@ From mathcomp Require Import bigop ssralg div ssrnum ssrint finmap.
 Require Import Meas Lifting.
 Local Open Scope fset.
 
+
 Definition all_fset {A : choiceType} (f : {fset A}) (p : A -> bool) : bool :=
   [fset x in f | p x] == f.
 
@@ -43,7 +44,22 @@ Definition hiddens {A : choiceType} (P : @prePIOA A) := cover (cH P).
 Definition actions {A : choiceType} (P : @prePIOA A) := inputs P `|` outputs P `|` hiddens P.
 Definition lc_actions {A : choiceType} (P : @prePIOA A) := cover (cO P) `|`cover (cH P).
 Definition lc_channels {A : choiceType} (P : @prePIOA A) := (cO P) `|` (cH P).
-Definition channels {A : choiceType} (P : @prePIOA A) : {fset {fset A}} := cI P `&` cO P `&` cH P.
+Definition channels {A : choiceType} (P : @prePIOA A) : {fset {fset A}} := cI P `|` cO P `|` cH P.
+
+Lemma inChan_inActions {A : choiceType} (P : @prePIOA A) y T :
+  T \in channels P -> y \in T -> y \in actions P.
+rewrite /channels /actions //=.
+move/fsetUP; elim.
+move/fsetUP; elim.
+intros; apply/fsetUP; left; apply/fsetUP; left.
+rewrite /inputs.
+rewrite /cover.
+apply/bigfcupP; exists T; rewrite //=.
+rewrite H //=.
+intros; apply/fsetUP; left; apply/fsetUP; right; rewrite /outputs /cover; apply/bigfcupP; exists T; rewrite //= H //=.  
+intros; apply/fsetUP; right; rewrite /outputs /cover; apply/bigfcupP; exists T; rewrite //= H //=.  
+Qed.
+
 
 Definition opt_lift {A} (p : A -> bool) := fun (x : option A) =>
                                                  match x with
@@ -54,6 +70,7 @@ Definition opt_lift {A} (p : A -> bool) := fun (x : option A) =>
 Definition actionDeterm {A : choiceType} (P : @prePIOA A) (C : {fset A}) : bool :=
   all_fset C (fun a => [forall s, isSome (tr P s a) ==> all_fset C (fun b => tr P s b == None)]).
 
+Check isSubdist.
 
 Definition eq_rel3 {A : choiceType} (pP : @prePIOA A) :=
   [&& [disjoint (inputs pP) & (outputs pP)]%fset,
@@ -68,10 +85,13 @@ Record PIOA {A : choiceType} :=
            eq_rel3 pP,
          all_fset (inputs pP) (fun a => [forall s, tr pP s a != None]) , (* input enabled *)
          all_fset (lc_channels pP) (actionDeterm pP) & (* action determinism *)
-         all_fset (actions pP) (fun a => [forall s, opt_lift isDist (tr pP s a)])] (* subdist *)
+         all_fset (actions pP) (fun a => [forall s, opt_lift isSubdist (tr pP s a)])] (* subdist *)
           }.
          
 
+Definition PIOA_subDist {A} (P : @PIOA A) : all_fset (actions P) (fun a => [forall s, opt_lift isSubdist (tr P s a)]).
+destruct P as [P Hp]; elim (and4P Hp); rewrite //=.
+Qed.
 
 Definition enabled {Act} (P : @prePIOA Act) (s : pQ P) :=
   fun a =>
@@ -95,12 +115,11 @@ Definition fpick {A : choiceType} (f : {fset A}) (b : A -> bool) : option A :=
     | _ => None
              end.
 
-Lemma fpickP {A : choiceType} (f : {fset A}) b x :
-  fpick f b = Some x -> b x.
+Lemma fpickPt {A : choiceType} (f : {fset A}) b x :
+  fpick f b = Some x -> b x /\ x \in f.
 rewrite /fpick.
 case: (Sumbool.sumbool_of_bool ([fset x0 | x0 in f & b x0] != fset0)) => H.
 move => Heq; injection Heq => <-.
-Check xchooseP.
 have H2 := (xchooseP (fset0Pn _ H)).
 rewrite !in_fset !inE in H2.
 move/andP: H2; elim; done.
@@ -120,8 +139,22 @@ move: (H x); rewrite !in_fset !inE //=.
 rewrite Hx  andTb => -> //=.
 Qed.
 
+Inductive fpick_spec {A : choiceType} (f : {fset A}) b :=
+  | fpick_true : forall x, fpick f b = Some x -> x \in f -> b x -> fpick_spec f b
+  | fpick_false : fpick f b = None -> all_fset f (fun x => ~~ b x) -> fpick_spec f b.
 
-Definition runChan {A} {P : @PIOA A} (T : {fset A}) (s : pQ P) : option (Meas (pQ P) * A) :=
+Lemma fpickP {A : choiceType} (f : {fset A}) b : fpick_spec f b.
+  remember (fpick f b); symmetry in Heqo; destruct o.
+  elim (fpickPt _ _ _ Heqo) => h1 h2; eapply fpick_true.
+  apply Heqo.
+  apply h2.
+  done.
+  eapply fpick_false; rewrite //=.
+  apply fpickPn; rewrite //=.
+Qed.
+
+
+Definition runChan {A} (P : @PIOA A) (T : {fset A}) (s : pQ P) : option (Meas (pQ P) * A) :=
   match fpick T (enabled P s) with
   | Some a =>
     match (tr P s a) with
@@ -134,17 +167,65 @@ Definition runChan {A} {P : @PIOA A} (T : {fset A}) (s : pQ P) : option (Meas (p
 Definition Trace {Act : choiceType} (P : @PIOA Act) :=
   ((pQ P) * (list Act))%type.
 
+Definition appChan {A} (P : @PIOA A) (C : {fset A}) (d : Meas [choiceType of Trace P]) : Meas [choiceType of Trace P] :=
+  t <- d;
+    match runChan P C t.1 with
+      | Some (mu, a) => s' <- mu; if a \in hiddens P then ret (s', t.2) else ret (s', a :: t.2)
+      | None => ret t
+                    end.
+
+
+
 Definition runPIOA {A} (P : @PIOA A) (ts : seq ({fset A})) (d : Meas ([choiceType of Trace P])) : Meas ([choiceType of Trace P]) :=
-  foldl (fun acc C =>
-           t <- acc;
-            match runChan C t.1 with
-               | Some (mu, a) => s' <- mu; if a \in hiddens P then ret (s', t.2) else ret (s', a :: t.2)
-               | None => ret t
-                           end) d ts.
+  foldl (fun acc C => appChan P C acc) d ts.
 
 Definition closed {A} (P : @PIOA A) := cI P == fset0.
 
+Lemma runPIOA_cons {A} (P : @PIOA A) (t : {fset A}) (ts : seq ({fset A})) d :
+  runPIOA P (t :: ts) d = (runPIOA P ts (appChan P t d)).
+  rewrite //=.
+Qed.
 
+Lemma runPIOA_rcons {A} (P : @PIOA A) (t : {fset A}) ts d :
+  runPIOA P (rcons ts t) d = appChan P t (runPIOA P ts d).
+  move: d; induction ts; rewrite //=.
+Qed.
+
+Lemma runPIOA_app {A} (P : @PIOA A) (ts ts' : seq ({fset A})) d :
+  runPIOA P (ts ++ ts') d = runPIOA P ts' (runPIOA P ts d).
+  rewrite /runPIOA foldl_cat //=.
+Qed.
+
+
+Lemma appChan_subDist {A} {P : @PIOA A} {T : {fset A}} {mu} : T \in channels P -> isSubdist mu -> isSubdist (appChan P T mu).
+  rewrite /appChan => H1 H2; apply isSubdist_bind; rewrite //=.
+  move => x.
+  rewrite /runChan.
+  case: (fpickP T (enabled P x.1)).
+  move => y => -> => Henabled.
+  remember (tr P x.1 y) as o; symmetry in Heqo; destruct o.
+  have: isSubdist m.
+  move/all_fsetP: (PIOA_subDist P).
+  move/(_ y (inChan_inActions _ _ _ _ _)).
+  move/(_ T H1 Henabled).
+  move/forallP; move/(_ x.1).
+  rewrite /opt_lift Heqo; done.
+  intros; apply isSubdist_bind; rewrite //=.
+  intros; destruct (y \in hiddens P); apply isSubdist_ret.
+  intro; apply isSubdist_ret.
+  move => -> => H; apply isSubdist_ret.
+Qed.
+
+
+Lemma runPIOA_subDist {A} {P : @PIOA A} {ts} {mu} : all (fun x => x \in channels P) ts -> isSubdist mu -> isSubdist (runPIOA P ts mu).
+  revert mu.
+induction ts; rewrite //=.
+intros; apply IHts.
+by elim (andP H).
+apply appChan_subDist.
+by elim (andP H).
+done.
+Qed.
 
 (*
 
