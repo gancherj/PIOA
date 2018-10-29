@@ -1,76 +1,67 @@
 
 
 From mathcomp Require Import ssreflect ssrfun ssrbool ssrint eqtype ssrnat seq choice fintype rat finfun.
-From mathcomp Require Import bigop ssralg div ssrnum ssrint finset ssrnum ssrnat.
+From mathcomp Require Import bigop ssralg div ssrnum ssrint finset ssrnum ssrnat finmap.
 
-Require Import PIOA Meas Posrat CompPIOA Lems.
-Require Import fset.
+Require Import PIOA Meas Posrat.
 
 
 Section StateInj.
   
   Context {A : choiceType}.
   Context (P1 P2 : @PIOA A).
-  Context (HC1 : inputClosed P1).
-  Context (HC2 : inputClosed P2).
+  Context (hc1 : closed P1).
+  Context (hc2 : closed P2).
 
   Record StateInj (R : pQ P1 -> pQ P2) :=
     {
       siStart : R (start _) = (start _);
-      siStep : forall T mu eta, T \in Tasks P1 -> isSubdist mu ->
-          meas_fmap mu (fun p => (R p.1, p.2)) ~~ eta @ 0 ->
-          exists ts, all (isTask P2) ts /\
-            meas_fmap (appTask P1 T mu) (fun p => (R p.1, p.2)) ~~
-                      runPIOA P2 ts eta @ 0
+      siStep : forall T mu eta, T \in channels P1 -> isSubdist mu ->
+          measMap mu (fun p => (R p.1, p.2)) = eta ->
+          exists ts, all (fun x => x \in channels P2) ts /\
+           measMap (appChan P1 T mu) (fun p => (R p.1, p.2)) =
+                      runPIOA P2 ts eta 
       }.
 
 
-  Lemma stateSimSound R : StateInj R -> @refinement _ P1 P2 HC1 HC2 0.
-    intros.
-    destruct H.
-    intro.
-    intro.
-    have: exists ts', all (isTask P2) ts' /\
-        meas_fmap (runPIOA P1 ts (startTr P1)) (fun p => (R p.1, p.2)) ~~ runPIOA P2 ts' (startTr P2) @ 0.
+  Lemma stateSimSound R : StateInj R -> @refinement _ P1 P2 hc1 hc2.
+    case => h1 h2.
+    move => ts Hts.
+
+    have: exists ts', all (fun x => x \in channels P2) ts' /\
+        measMap (runPIOA P1 ts (startTr P1)) (fun p => (R p.1, p.2)) = runPIOA P2 ts' (startTr P2).
     induction ts using last_ind.
     exists nil.
     split.
     done.
 
-    rewrite /meas_fmap //=.
-    rewrite /startTr; dsimp.
-    rewrite siStart0; reflexivity.
-    rewrite all_rcons in H; move/andP: H => [h1 h2].
-    destruct (IHts h2); clear IHts.
-    destruct H.
-    have Hs: isSubdist (runPIOA P1 ts (startTr P1)).
-    apply runPIOA_subDist.
-    rewrite /startTr; dsubdist.
-    destruct (siStep0 x _ _ h1 Hs H0).
-    exists (x0 ++ x1).
+    rewrite //= /startTr //= measMap_ret; congr (ret _); rewrite //= h1 //=.
+
+    rewrite all_rcons in Hts; move/andP: Hts => [Hx Hts].
+
+
+    destruct (IHts Hts) as [ts' Hts'].
+
+    have Hsd : isSubdist (runPIOA P1 ts (startTr P1)).
+    apply runPIOA_subDist; rewrite //=.
+    rewrite /startTr isSubdist_ret //=.
+    destruct Hts' as [Hts'1 Hts'2].
+    destruct (h2 _ _ _ Hx Hsd Hts'2) as [x0 Hx0].
+    simpl in *.
+
+    exists (ts' ++ x0).
     split.
     rewrite all_cat.
-    destruct H1.
-    rewrite H H1; done.
+    destruct Hx0 as [Hx01 Hx02].
+    rewrite Hx01 Hts'1 //=.
+    rewrite runPIOA_app runPIOA_rcons //=.
+    destruct Hx0; rewrite //=.
 
-    rewrite runPIOA_app.
-    rewrite runPIOA_rcons //=.
-    destruct H1; done.
-
-    elim; intros.
-    exists x.
-    split.
-    destruct H0; done.
-    destruct H0.
-    symmetry; rewrite /traceOf /meas_fmap.
-    symmetry in H1; rewrite (measBind_cong_l H1).
-    rewrite /meas_fmap.
-    dsimp.
-    apply measBind_cong_r; intros.
-    dsimp; reflexivity.
-    apply runPIOA_subDist.
-    rewrite /startTr; dsubdist.
-    intros; dsubdist.
-  Qed.
+    elim => ts' Hts'.
+    exists ts'.
+    destruct Hts'; split; rewrite //=.
+    rewrite -H0.
+    rewrite /traceOf measMap_measMap //=.
+ Qed.
 End StateInj.
 

@@ -359,3 +359,37 @@ Lemma isSubdist_ret {A : choiceType} (c : A) : isSubdist (ret c).
   rewrite /isSubdist.
   rewrite (eqP (isDist_ret c)) //=.
 Qed.
+
+Check integ.
+
+Lemma integ_measMap {A B : choiceType} (m : Meas A) (f : A -> B) g :
+  integ (measMap m f) g = integ m (fun x => g (f x)).
+  rewrite /measMap integ_mkMeas /integ big_map; apply eq_big; rewrite //=.
+Qed.
+
+Lemma integ_ret {A : choiceType} (x : A) g :
+  integ (ret x) g = g x.
+  rewrite /measRet integ_mkMeas integ_cons integ_nil paddr0.
+  have -> : (1, x).1 = 1 by rewrite //=.
+  have -> : (1, x).2 = x by rewrite //=.
+  rewrite pmul1r //=.
+Qed.
+
+Lemma measMap_ret {A B : choiceType} (x : A) (f : A -> B) :
+  measMap (ret x) f = ret (f x).
+  apply/MeasP => g; rewrite integ_measMap !integ_ret //=.
+Qed.
+
+Lemma measMap_bind {A B C : choiceType} (m : Meas A) (c : A -> Meas B) (f : B -> C) :
+  (measMap (x <- m; c x) f) = (x <- m; measMap (c x) f).
+  apply/MeasP => g.
+  rewrite !integ_measMap !integ_measBind.
+  apply integ_eq_fun => x.
+  rewrite integ_measMap //=.
+Qed.
+
+Lemma measMap_measMap {A B C : choiceType} (m : Meas A) (f : A -> B) (g : B -> C) :
+  measMap (measMap m f) g = measMap m (fun x => g (f x)).
+  apply/MeasP => h.
+  rewrite !integ_measMap //=.
+Qed.
