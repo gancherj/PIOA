@@ -2,7 +2,7 @@
 From mathcomp Require Import ssreflect ssrfun ssrbool ssrint eqtype ssrnat seq choice fintype rat finfun.
 From mathcomp Require Import bigop ssralg div ssrnum ssrint finset ssrnum ssrnat finmap.
 
-Require Import PIOA Meas Posrat.
+Require Import PIOA Meas Posrat Aux FastEnum.
 
 Definition compatible {A : choiceType} (P1 P2 : @PIOA A) :=
   [&& (all_fset (channels P1) (fun c1 => all_fset (channels P2) (fun c2 => (c1 == c2) || [disjoint c1 & c2]%fset))) ,
@@ -128,7 +128,7 @@ Section CompPIOA.
   Context (Hcompat : compatible P1 P2).
 
     Print prePIOA.
-    Definition compPre : @prePIOA A := Build_prePIOA A ([finType of pQ P1 * pQ P2])%type (start P1, start P2) (cO P1 `|` cO P2)%fset ((cI P1 `|` cI P2) `\` (cO P1 `|` cO P2))%fset (cH P1 `|` cH P2)%fset
+    Definition compPre : @prePIOA A := Build_prePIOA A ([fastEnumType of pQ P1 * pQ P2])%type (start P1, start P2) (cO P1 `|` cO P2)%fset ((cI P1 `|` cI P2) `\` (cO P1 `|` cO P2))%fset (cH P1 `|` cH P2)%fset
   (fun s a =>
      match tr P1 s.1 a, tr P2 s.2 a with
        | Some mu1, Some mu2 => Some (x <- mu1; y <- mu2; ret (x,y))

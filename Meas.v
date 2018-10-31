@@ -1,7 +1,7 @@
 
 From mathcomp Require Import ssreflect ssrfun ssrbool ssrint eqtype ssrnat seq choice fintype rat finfun.
 From mathcomp Require Import bigop ssralg div ssrnum ssrint order finmap.
-Require Import Posrat Premeas.
+Require Import PIOA.Posrat PIOA.Premeas.
 
 Record Meas (A : choiceType) :=
   {
@@ -210,6 +210,8 @@ Lemma bindRet_r {A : choiceType} (c : Meas A) :
   rewrite pmul1r paddr0 //=.
 Qed.
 
+
+
 Lemma measSupportP {A : choiceType} (c : Meas A) x :
   (x \in measSupport c) = (integ c (indicator x) != 0).
   apply Bool.eq_true_iff_eq; split => H.
@@ -392,4 +394,21 @@ Lemma measMap_measMap {A B C : choiceType} (m : Meas A) (f : A -> B) (g : B -> C
   measMap (measMap m f) g = measMap m (fun x => g (f x)).
   apply/MeasP => h.
   rewrite !integ_measMap //=.
+Qed.
+
+Lemma measBind_measMap {A B C : choiceType} (m : Meas A) (f : A -> B) (c : B -> Meas C) :
+  (x <- measMap m f; c x) = (x <- m; c (f x)).
+  apply/MeasP => g; rewrite !integ_measBind !integ_measMap //=.
+Qed.
+
+Lemma measBind_eqP {A B : choiceType} (m : Meas A) (c1 c2 : A -> Meas B) :
+  (forall x, x \in measSupport m -> c1 x = c2 x) -> ((x <- m; c1 x) = (x <- m; c2 x)).
+  move=> H; apply/MeasP => f.
+  rewrite !integ_measBind; apply integ_eq_fun_dep => x Hx.
+  rewrite (H x Hx) //=.
+Qed.
+
+Lemma bindRet_l {A B : choiceType} (a : A) (c : A -> Meas B) :
+  (x <- (ret a); c x) = c a.
+  apply/MeasP => f; rewrite integ_measBind integ_ret //=.
 Qed.
