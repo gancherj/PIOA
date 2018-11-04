@@ -82,6 +82,12 @@ Section FastEnumDefs.
     simpl in *.
     done.
   Qed.
+
+  Lemma mem_fastEnum s : s \in fastEnum.
+    erewrite perm_eq_mem.
+    instantiate (1 := enum T); apply mem_enum.
+    apply fastEnumP; rewrite //=.
+  Qed.
 End FastEnumDefs.
 
 

@@ -412,3 +412,28 @@ Lemma bindRet_l {A B : choiceType} (a : A) (c : A -> Meas B) :
   (x <- (ret a); c x) = c a.
   apply/MeasP => f; rewrite integ_measBind integ_ret //=.
 Qed.
+
+Lemma big_padd_foldr (xs : seq posrat) :
+  foldr padd 0 xs = \big[padd/0]_(x <- xs) x.
+  induction xs; rewrite ?big_nil ?big_cons //=.
+  rewrite IHxs //=.
+Qed.
+
+Lemma isSubdist_mkMeas {A : choiceType} (pm : PMeas A) :
+  (foldr padd 0 (map fst pm ) <= 1) -> isSubdist (mkMeas pm).
+  rewrite /isSubdist /measMass integ_mkMeas => H.
+  have -> : integ pm (fun _ => 1) = foldr padd 0 (map fst pm).
+  rewrite big_padd_foldr /integ big_map; apply eq_bigr => x _; rewrite pmulr1 //=.
+  done.
+Qed.
+
+Ltac isSubdist_tac :=
+  match goal with
+    | [ |- is_true (isSubdist (ret _))] => apply isSubdist_ret
+
+    | [ |- is_true (isSubdist (measBind _ _ )) ] =>
+        apply isSubdist_bind; [ isSubdist_tac | move => x; isSubdist_tac ]
+
+    | [ |- is_true (isSubdist (mkMeas _))] =>
+        apply isSubdist_mkMeas; rewrite //=
+                                       end.

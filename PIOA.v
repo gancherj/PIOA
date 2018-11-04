@@ -50,7 +50,7 @@ Definition opt_lift {A} (p : A -> bool) := fun (x : option A) =>
                                                                end.
 
 Definition actionDeterm {A : choiceType} (P : @prePIOA A) (C : {fset A}) : bool :=
-  all_fset C (fun a => [forall s, isSome (tr P s a) ==> all_fset C (fun b => (a != b) ==> (tr P s b == None))]).
+  all_fset (fun a => [forall s, isSome (tr P s a) ==> all_fset (fun b => (a != b) ==> (tr P s b == None)) C]) C.
 
 Check isSubdist.
 
@@ -58,14 +58,14 @@ Definition eq_rel3 {A : choiceType} (pP : @prePIOA A) :=
   [&& [disjoint (inputs pP) & (outputs pP)]%fset,
       [disjoint (inputs pP) & (hiddens pP)]%fset,
       [disjoint (outputs pP) & (hiddens pP)]%fset & 
-      all_fset (channels pP) (fun C1 => all_fset (channels pP) (fun C2 => (C1 != C2) ==> [disjoint C1 & C2]%fset)) ].
+      all_fset  (fun C1 => all_fset (fun C2 => (C1 != C2) ==> [disjoint C1 & C2]%fset) (channels pP)) (channels pP)].
 
 Definition PIOA_axiom {A : choiceType} (pP : @prePIOA A) :=
      [&&
            eq_rel3 pP,
-         all_fset (inputs pP) (fun a => [forall s, tr pP s a != None]) , (* input enabled *)
-         all_fset (lc_channels pP) (actionDeterm pP) & (* action determinism *)
-         all_fset (actions pP) (fun a => [forall s, opt_lift isSubdist (tr pP s a)])]. (* subdist *)
+         all_fset (fun a => [forall s, tr pP s a != None]) (inputs pP) , (* input enabled *)
+         all_fset (actionDeterm pP) (lc_channels pP) & (* action determinism *)
+         all_fset (fun a => [forall s, opt_lift isSubdist (tr pP s a)]) (actions pP)]. (* subdist *)
 
 Record PIOA {A : choiceType} :=
   {
@@ -112,7 +112,7 @@ move/all_fsetP: H5; move/(_ a H6)/forallP/(_ s); done.
 Qed.
 
 
-Definition PIOA_subDist {A} (P : @PIOA A) : all_fset (actions P) (fun a => [forall s, opt_lift isSubdist (tr P s a)]).
+Definition PIOA_subDist {A} (P : @PIOA A) : all_fset (fun a => [forall s, opt_lift isSubdist (tr P s a)]) (actions P).
 destruct P as [P Hp]; elim (and4P Hp); rewrite //=.
 Qed.
 
@@ -232,3 +232,214 @@ Qed.
 Lemma PIOAAxiom {A} (P : @PIOA A) : PIOA_axiom P.
   destruct P; done.
 Qed.
+
+
+(* Mechanism for definition of PIOA & automatic checking *)
+
+
+Definition channels_of_seqs {A : choiceType} (s : seq (seq A)) : {fset {fset A}} :=
+  fset_of_seq (map fset_of_seq s).
+
+
+Lemma channels_of_seqs_U {A : choiceType} (s1 s2 : seq (seq A)) :
+  (channels_of_seqs s1 `|` channels_of_seqs s2)%fset = channels_of_seqs (s1 ++ s2).
+  rewrite /channels_of_seqs.
+  rewrite map_cat fset_of_seq_cat //=.
+Qed.
+
+Lemma all_fset_cover_seq {A : choiceType} (s : seq (seq A)) P :
+  all P (flatten s) = all_fset P (cover (channels_of_seqs s)).
+
+  apply Bool.eq_true_iff_eq; split.
+  rewrite all_flatten.
+  move/allP => H.
+  apply/all_fsetP => x Hx.
+  elim (bigfcupP _ _ _ _ Hx) => y Hy1 Hy2.
+  rewrite andbT in Hy1.
+  rewrite -in_fset_of_seq in Hy1.
+  move/mapP: Hy1; elim => X HX1 HX2.
+  move/allP: (H _ HX1). 
+  rewrite HX2 -in_fset_of_seq in Hy2.
+  move/(_ _ Hy2); done. 
+
+
+  move/all_fsetP => H.
+  rewrite all_flatten; apply/allP => x Hx; apply/allP => y Hy.
+  apply H.
+  apply/bigfcupP.
+  exists (fset_of_seq x).
+  rewrite -in_fset_of_seq andbT; apply/mapP; exists x; rewrite //=.
+
+  rewrite -in_fset_of_seq //=.
+Qed.
+
+Definition fdisj_seq {A : choiceType} (s1 s2 : (seq A)) :=
+  all (fun x => all (fun y => x != y) s2) s1.
+
+Lemma fdisj_seqP {A : choiceType} (s1 s2 : (seq A)) :
+  fdisj_seq s1 s2 -> [disjoint (fset_of_seq s1) & (fset_of_seq s2)].
+  move/allP => H.
+  apply/fdisjointP => a Ha.
+  rewrite -in_fset_of_seq; rewrite -in_fset_of_seq in Ha.
+  move/allP: (H a Ha) => H2. 
+  apply/contraT; rewrite negbK => Hc.
+  move: (H2 _ Hc); rewrite eq_refl //=.
+Qed.
+
+Lemma fdisj_cover_seqP {A : choiceType} (s1 s2 : seq (seq A)) :
+  fdisj_seq (flatten s1) (flatten s2) -> [disjoint (cover (channels_of_seqs s1))  & (cover (channels_of_seqs s2))]%fset.
+  move/fdisj_seqP.
+  rewrite !fset_of_seq_flatten /cover /channels_of_seqs //=.
+Qed.
+
+Definition channels_pairwise_disj {A : choiceType} (s : seq (seq A)) :=
+  all (fun C => all (fun C' => (C != C') ==> (fdisj_seq C C')) s) s.
+(*  foldr (fun C acc => acc && foldr (fun C' acc2 => acc2 && ((C != C') ==> (fdisj_seq C C'))) true s) true s. *)
+
+Lemma channels_pairwise_disjP {A : choiceType} (s : seq (seq A)) :
+  channels_pairwise_disj s -> all_fset (fun C => all_fset (fun C' => (C != C') ==> ([disjoint C & C']%fset)) (channels_of_seqs s)) (channels_of_seqs s).
+  move/allP => H.
+  apply/all_fsetP  => x Hx.
+  apply/all_fsetP  => y Hy.
+  apply/implyP => Hneq.
+  rewrite -in_fset_of_seq in Hx; elim (mapP Hx) => zx Hzx Hzx'.
+  rewrite -in_fset_of_seq in Hy; elim (mapP Hy) => zy Hzy Hzy'.
+  subst.
+  apply fdisj_seqP.
+  move/allP: (H _ Hzx).
+  move/(_ _ Hzy);move/implyP.
+  case (eqVneq zx zy).
+  move => Hc; rewrite Hc eq_refl in Hneq; rewrite //=.
+  move => Hn; move/(_ Hn); rewrite //=.
+Qed.
+
+Definition decide_inputenabled {A : choiceType} (C : seq A) (P : @prePIOA A) :=
+  all (fun a => all (fun s => tr P s a != None) (@fastEnum (pQ P))) C.
+
+Lemma decide_inputenabledP {A : choiceType} (C : seq (seq A)) (P : @prePIOA A) :
+  decide_inputenabled (flatten C) P -> all_fset (fun a => [forall s, tr P s a != None]) (cover (channels_of_seqs C)).
+  move/allP => H.
+  apply/all_fsetP => x Hx.
+  apply/forallP => s.
+  move/bigfcupP: Hx; elim => z Hz1 Hz2.
+  rewrite andbT -in_fset_of_seq in Hz1; move/mapP: Hz1; elim => y Hy H'; subst.
+  have: x \in flatten C.
+  apply/flattenP; exists y; rewrite //=.
+  rewrite in_fset_of_seq //=.
+  move => Hf; move/allP: (H _ Hf) => H2.
+  apply H2.
+  apply mem_fastEnum.
+Qed.
+
+Definition decide_actionDeterm {A : choiceType} (Cs : seq (seq A)) (P : @prePIOA A) :=
+  all (fun C => all (fun a => all (fun s => tr P s a ==> (all (fun b => (a != b) ==> (tr P s b == None)) C)) (fastEnum (pQ P))) C) Cs.
+
+Definition channels_allpairs {A : choiceType} (Cs : seq (seq A)) : seq (A * A)  :=
+  flatten (map (fun C => allpairs (fun x y => (x,y)) C C) Cs).                                                                     
+
+Definition decide_actionDeterm_flat {A : choiceType} (Cs : seq (seq A)) (P : @prePIOA A) :=
+  all (fun abs => tr P abs.2 abs.1.1 ==> (abs.1.1 != abs.1.2) ==> (tr P abs.2 abs.1.2 == None))
+      (allpairs (fun x y => (x,y)) (channels_allpairs Cs) (fastEnum (pQ P))).
+
+Lemma decide_actionDeterm_flatE {A : choiceType} (Cs : seq (seq A)) (P : @prePIOA A) :
+  decide_actionDeterm Cs P = decide_actionDeterm_flat Cs P.
+  rewrite /decide_actionDeterm /decide_actionDeterm_flat.
+  apply Bool.eq_true_iff_eq; split => H.
+  apply/allP => abs.
+  move/allpairsP; elim => abs'; elim => H1 H2 => ->.
+  simpl.
+  apply/implyP => Htr; apply/implyP => Hneq.
+  move/flattenP: H1; elim => ab.
+  move/mapP; elim => C HC HC2; subst.
+  move/allpairsP; elim => ab; elim => Hab1 Hab2 He; subst.
+  move/allP: H.
+  move/(_ _ HC)/allP/(_ _ Hab1)/allP/(_ _ H2)/implyP.
+  rewrite He //= in Htr; move/(_ Htr)/allP/(_ _ Hab2)/implyP.
+  rewrite He //= in Hneq.
+  move/(_ Hneq); rewrite He //=.
+
+  apply/allP => x Hx; apply/allP => a Ha; apply/allP => s Hs; apply/implyP => Htr; apply/allP => b Hb; apply/implyP => Hneq.
+
+  move/allP: H.
+  move/(_ ((a,b), s)).
+  simpl.
+  have: (a,b,s) \in [seq (x0, y) | x0 <- channels_allpairs Cs, y <- fastEnum (pQ P)].
+  apply/allpairsP; eexists; split.
+  apply/flattenP; eexists.
+  apply/mapP; eexists.
+  apply Hx.
+  apply Logic.eq_refl.
+  apply/allpairsP; exists (a,b); split; rewrite //=.
+  instantiate (1 := ((a,b), s)); done.
+  simpl; done.
+  done.
+  move => H; move/(_ H).
+  move/implyP/(_ Htr)/implyP/(_ Hneq); done.
+Qed.
+
+Lemma decide_actionDetermP {A : choiceType} (Cs : seq (seq A)) (P : @prePIOA A) :
+  decide_actionDeterm Cs P -> all_fset (actionDeterm P) (channels_of_seqs Cs).
+  move/allP => H.
+  apply/all_fsetP => x Hx.
+  apply/all_fsetP => y Hy.
+  apply/forallP => s.
+  apply/implyP => Ht.
+  apply/all_fsetP => z Hz.
+  apply/implyP => Hneq.
+  rewrite -in_fset_of_seq in Hx; move/mapP: Hx; elim => X HX1 H'; subst.
+  move/allP: (H _ HX1) => H2.
+  rewrite -in_fset_of_seq in Hy.
+  move/allP: (H2 _ Hy) => H3.
+  have: s \in fastEnum (pQ P) by apply mem_fastEnum.
+  move => Hs; move/implyP: (H3 _ Hs); move/(_ Ht); move/allP => H4.
+  rewrite -in_fset_of_seq in Hz.
+  move/implyP: (H4 _ Hz); move/(_ Hneq); done.
+Qed.
+
+Check Build_prePIOA.
+
+Definition mkPIOA {A : choiceType} {S : fastEnumType} (st : S)
+           (sO sI sH : seq (seq A)) (t : S -> A -> option (Meas S)) :
+  let P := Build_prePIOA A S st (channels_of_seqs sO) (channels_of_seqs sI) (channels_of_seqs sH) t in
+  fdisj_seq (flatten sI) (flatten sO) ->
+  fdisj_seq (flatten sI) (flatten sH) ->
+  fdisj_seq (flatten sO) (flatten sH) ->
+  channels_pairwise_disj (sI ++ sO ++ sH) ->
+  decide_inputenabled (flatten sI) P ->
+decide_actionDeterm (sO ++ sH) P ->
+all (fun a : A => all (fun s => opt_lift isSubdist (t s a)) (fastEnum S)) (flatten (sI ++ sO ++ sH)) ->
+  @PIOA A.
+intros; econstructor.
+instantiate (1 := P); apply/and4P; split.
+apply/and4P; split.
+rewrite /inputs /outputs /hiddens //=; apply fdisj_cover_seqP; rewrite //=.
+rewrite /inputs /outputs /hiddens //=; apply fdisj_cover_seqP; rewrite //=.
+rewrite /inputs /outputs /hiddens //=; apply fdisj_cover_seqP; rewrite //=.
+rewrite /channels //= !channels_of_seqs_U.
+apply channels_pairwise_disjP.
+rewrite -catA //=.
+apply decide_inputenabledP; done.
+rewrite /lc_channels channels_of_seqs_U; apply decide_actionDetermP; done.
+rewrite /actions /inputs /outputs /hiddens !coverU //= !channels_of_seqs_U.
+rewrite -all_fset_cover_seq -catA.
+move/allP: H5 => Ha.
+apply/allP => x Hx.
+move/allP: (Ha x Hx) => Ha2.
+apply/forallP => s.
+apply Ha2.
+rewrite mem_fastEnum //=.
+Defined.
+
+
+
+Ltac tr_isSubdist_multiIf_tac := apply/allP => x Hx; apply/allP => s Hs; apply multiIfP; split_all; rewrite //=; try isSubdist_tac.
+
+Ltac mkPIOA_tac st outs ins hiddens trans :=
+  apply (mkPIOA st outs ins hiddens trans);
+  [ vm_compute; rewrite //=
+  | vm_compute; rewrite //=
+  | vm_compute; rewrite //=
+  | vm_compute; rewrite //=
+  | vm_compute; rewrite //=
+  | vm_compute; rewrite //=
+  | tr_isSubdist_multiIf_tac ].

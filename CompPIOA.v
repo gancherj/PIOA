@@ -5,10 +5,10 @@ From mathcomp Require Import bigop ssralg div ssrnum ssrint finset ssrnum ssrnat
 Require Import PIOA Meas Posrat Aux FastEnum.
 
 Definition compatible {A : choiceType} (P1 P2 : @PIOA A) :=
-  [&& (all_fset (channels P1) (fun c1 => all_fset (channels P2) (fun c2 => (c1 == c2) || [disjoint c1 & c2]%fset))) ,
-   (all_fset (cO P1) (fun c1 => all_fset (cO P2) (fun c2 => [disjoint c1 & c2]%fset))) , 
-   (all_fset (cH P1) (fun c1 => all_fset (channels P2) (fun c2 => [disjoint c1 & c2]%fset))) &
-   (all_fset (channels P1) (fun c1 => all_fset (cH P2) (fun c2 => [disjoint c1 & c2]%fset))) ].
+  [&& (all_fset (fun c1 => all_fset (fun c2 => (c1 == c2) || [disjoint c1 & c2]%fset) (channels P2)) (channels P1)) ,
+   (all_fset (fun c1 => all_fset (fun c2 => [disjoint c1 & c2]%fset) (cO P2)) (cO P1)) , 
+   (all_fset (fun c1 => all_fset (fun c2 => [disjoint c1 & c2]%fset) (channels P2)) (cH P1)) &
+   (all_fset (fun c1 => all_fset (fun c2 => [disjoint c1 & c2]%fset) (cH P2)) (channels P1)) ].
 
 Lemma compat_disjoint_c_hiddens2 {A} (P1 P2 : @PIOA A) (H : compatible P1 P2) cs :
   (cs `<=` channels P1)%fset -> [disjoint (cover cs) & (hiddens P2)]%fset.
