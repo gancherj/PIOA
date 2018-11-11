@@ -4,179 +4,345 @@ From mathcomp Require Import bigop ssralg div ssrnum ssrint finset ssrnum ssrnat
 
 Require Import PIOA Meas Posrat Aux FastEnum.
 
-Definition compatible {A : choiceType} (P1 P2 : @PIOA A) :=
-  [&& (all_fset (fun c1 => all_fset (fun c2 => (c1 == c2) || [disjoint c1 & c2]%fset) (channels P2)) (channels P1)) ,
-   (all_fset (fun c1 => all_fset (fun c2 => [disjoint c1 & c2]%fset) (cO P2)) (cO P1)) , 
-   (all_fset (fun c1 => all_fset (fun c2 => [disjoint c1 & c2]%fset) (channels P2)) (cH P1)) &
-   (all_fset (fun c1 => all_fset (fun c2 => [disjoint c1 & c2]%fset) (cH P2)) (channels P1)) ].
+Definition compatible {C} {Gamma : context C} (P1 P2 : PIOA Gamma) :=
+  seq_disjoint (outputs P1) (outputs P2).
 
-Lemma compat_disjoint_c_hiddens2 {A} (P1 P2 : @PIOA A) (H : compatible P1 P2) cs :
-  (cs `<=` channels P1)%fset -> [disjoint (cover cs) & (hiddens P2)]%fset.
-  move=> Hsub.
-  apply/fdisjointP => x Hx1.
-  apply/bigfcupP; elim => y Hc1 Hc2.
+Check mkPIOA.
 
-  move/and4P: H; elim => [_ _ _ /all_fsetP H].
+(* TODO *)
+Check omap.
+Check obind.
 
-  move/bigfcupP: Hx1; elim => C HC1 HC2.
-  have: C \in channels P1.
-  apply (fsubsetP Hsub); elim (andP HC1); done.
-  move => Cin1.
-  move/all_fsetP: (H _ Cin1).
-  move/andP: Hc1 => [Hc1 _].
-  move/(_ _ Hc1).
-  move/fdisjointP.
-  move/(_ _ HC2).
-  rewrite Hc2; done.
+
+Definition compPIOAtr {C} {Gamma : context C} (P1 P2 : PIOA Gamma) (s : St P1 * St P2) (h_a : action (consum (Delta P1) (Delta P2)) + action Gamma) : option (Meas [choiceType of St P1 * St P2]%type) :=
+    match h_a with
+    | inl h_ab => 
+      match (decomp_act h_ab) with
+      | inl ha =>
+        (tr P1 s.1 (inl ha)) <$>o fun mu => (s' <- mu; ret (s', s.2))
+      | inr hb => 
+        (tr P2 s.2 (inl hb)) <$>o fun mu => (s' <- mu; ret (s.1, s'))
+      end
+    | inr a => 
+      match tag a \in (inputs P1 ++ outputs P1), tag a \in (inputs P2 ++ outputs P2) with
+      | true, true =>
+        (tr P1 s.1 (inr a)) >>=o fun m1 => (tr P2 s.2 (inr a)) >>=o fun m2 => Some (x <- m1; y <- m2; ret (x,y))
+
+      | true, false => (tr P1 s.1 (inr a)) <$>o fun mu => (s' <- mu; ret (s', s.2))
+      | false, true => (tr P2 s.2 (inr a)) <$>o fun mu => (s' <- mu; ret (s.1, s'))
+      | false, false => None end
+        end.
+
+Definition compPIOA {C} {Gamma : context C} (P1 P2 : PIOA Gamma) : PIOA Gamma.
+  apply (mkPIOA Gamma ([finType of St P1 * St P2]) (start P1, start P2) (seqD (inputs P1 ++ inputs P2) (outputs P1 ++ outputs P2)) (outputs P1 ++ outputs P2) _ (consum (Delta P1) (Delta P2)) (compPIOAtr P1 P2)).
+  rewrite /seq_disjoint.
+  apply/allP => x Hx.
+  move/seqDP: Hx; elim => Hx1 Hx2.
+  rewrite -notin_seq_all; done.
+
+  case => sa sb; case; rewrite //=.
+  move => ha m1 m2; rewrite -!omap_neq_none => h1 h2.
+  by apply (ad_h P1 sa ha m1 m2).
+
+  move => hb m1 m2; rewrite -!omap_neq_none => h1 h2.
+  by apply (ad_h P2 sb hb m1 m2).
+
+  case => sa sb c m1 m2; rewrite /compPIOAtr.
+  simpl.
+  remember (c \in inputs P1 ++ outputs P1) as b1; symmetry in Heqb1; rewrite Heqb1.
+  remember (c \in inputs P2 ++ outputs P2) as b2; symmetry in Heqb2; rewrite Heqb2.
+  destruct b1; destruct b2.
+  move/obind_neq_none; elim => x; elim => fx; elim => Heqtr1; rewrite //=.
+  move/eqP/obind_eq_some; elim => x0; elim => htr2 h3.
+
+  move/obind_neq_none; elim => y; elim => fy; elim => Heqtr2.
+  move/eqP/obind_eq_some; elim => x0'; elim => htr2' h3'.
+  apply (ad_v P1 sa); rewrite ?Heqtr1 ?Heqtr2 //=.
+
+
+  move/obind_neq_none; elim => x; elim => fx; elim => h1 h2.
+  move/obind_neq_none; elim => x'; elim => fx'; elim => h1' h2'.
+  apply (ad_v P1 sa); rewrite ?h1 ?h1' //=.
+
+  move/obind_neq_none; elim => x; elim => fx; elim => h1 h2.
+  move/obind_neq_none; elim => x'; elim => fx'; elim => h1' h2'.
+  apply (ad_v P2 sb); rewrite ?h1 ?h1' //=.
+
+  done.
+
+  case => sa sb i; move/seqDP; elim.
+  move/catP; elim; move/andP; elim => h1 h2 h3 m.
+
+  rewrite /compPIOAtr //=.
+  rewrite mem_cat h1 orTb //=.
+  rewrite mem_cat negb_or in h3; move/andP: h3 => [h31 h32].
+  rewrite mem_cat (negbTE h2) (negbTE h32) //=.
+  have /opt_neq_none: tr P1 sa (inr (mkact Gamma i m)) != None by apply (i_a P1).
+  by elim => x ->.
+
+  rewrite /compPIOAtr //=.
+  rewrite mem_cat negb_or in h3; move/andP: h3 => [h31 h32].
+  rewrite (mem_cat) (negbTE h2) (negbTE h31) //=.
+  rewrite mem_cat h1 orTb //=.
+  have /opt_neq_none: tr P2 sb (inr (mkact Gamma i m)) != None by apply (i_a P2).
+  by elim => x ->.
+
+  rewrite /compPIOAtr //= mem_cat h1 orTb mem_cat h2 //=.
+  have /opt_neq_none: tr P1 sa (inr (mkact Gamma i m)) != None by apply (i_a P1).
+  elim => x -> //=.
+  have /opt_neq_none: tr P2 sb (inr (mkact Gamma i m)) != None by apply (i_a P2).
+  elim => y -> //=.
+Defined.
+
+Notation "P1 ||| P2" := (compPIOA P1 P2) (at level 70).
+
+
+Print act.
+Check oapp.
+Check odflt.
+
+Check app_h.
+Check app_ova.
+Check achoose_v.
+
+Section CompProps.
+  Context {C} {Gamma : context C} (P1 P2 : PIOA Gamma).
+
+Inductive compPIOA_spec {C} {Gamma : context C} (P1 P2 : PIOA Gamma) (a : H (P1 ||| P2) + C) (mu : Meas [choiceType of (St (P1 ||| P2)) * (trace (P1 ||| P2))]) :=
+| hidden1 (hl : H P1) :
+    a = inl (inl hl) ->
+        act (P1 ||| P2) a mu =
+        (st <- mu; s' <- app_h P1 hl st.1.1; ret ((s', st.1.2), st.2)) -> compPIOA_spec P1 P2 a mu
+| hidden2 (hr : H P2) :
+    a = inl (inr hr) ->
+        act (P1 ||| P2) a mu =
+        (st <- mu; s' <- app_h P2 hr st.1.2; ret ((st.1.1, s'), st.2)) -> compPIOA_spec P1 P2 a mu
+| out1_ext (ol : C) : ol \in outputs P1 -> ol \notin inputs P2 ->
+    a = inr ol ->
+        act (P1 ||| P2) a mu =
+        (st <- mu; let ox := achoose_v P1 ol st.1.1 in s' <- app_ova P1 ox st.1.1; ret ((s', st.1.2), ocons ox st.2)) -> compPIOA_spec P1 P2 a mu
+
+| out2_ext (or : C) : or \in outputs P2 -> or \notin inputs P1 ->
+    a = inr or ->
+        act (P1 ||| P2) a mu =
+        (st <- mu; let oy := achoose_v P2 or st.1.2 in s' <- app_ova P2 oy st.1.2; ret ((st.1.1, s'), ocons oy st.2)) -> compPIOA_spec P1 P2 a mu
+| out1_int (ol : C) : ol \in outputs P1 -> ol \in inputs P2 ->
+    a = inr ol ->
+        act (P1 ||| P2) a mu =
+        (st <- mu; let ox := achoose_v P1 ol st.1.1 in s1' <- app_ova P1 ox st.1.1; s2' <- app_ova P2 ox st.1.2; ret ((s1', s2'), ocons ox st.2)) -> compPIOA_spec P1 P2 a mu
+| out2_int (or : C) : or \in outputs P2 -> or \in inputs P1 ->
+    a = inr or ->
+        act (P1 ||| P2) a mu =
+        (st <- mu; let oy := achoose_v P2 or st.1.2 in s1' <- app_ova P1 oy st.1.1; s2' <- app_ova P2 oy st.1.2; ret ((s1', s2'), ocons oy st.2)) -> compPIOA_spec P1 P2 a mu
+.
+
+Lemma app_h_comp_l h s : app_h (P1 ||| P2) (inl h) s = (x <- app_h P1 h s.1; ret (x, s.2)).
+  rewrite /app_h //=.
+  rewrite /achoose_h //=.
+  have:  (fun m => enabled (P1 ||| P2) s (inl (mkact (Delta P1 :+: Delta P2) (inl h) m))) =1
+                  (fun m => enabled P1 s.1 (inl (mkact (Delta P1) h m))).
+  simpl => m.
+  rewrite /enabled //=.
+  rewrite -omap_neq_none //=.
+  move/eq_pick ->.
+  case: pickP.
+  rewrite //= => x Hx.
+  remember (tr P1 s.1 (inl (mkact (Delta P1) h x))) as o; rewrite -Heqo; destruct o; rewrite //=.
+  rewrite bindRet_l; by destruct s.
+  move => H; rewrite //= bindRet_l. by destruct s.
 Qed.
 
-Lemma compat_disjoint_c_hiddens1 {A} (P2 P1 : @PIOA A) (H : compatible P1 P2) cs :
-  (cs `<=` channels P2)%fset -> [disjoint (cover cs) & (hiddens P1)]%fset.
-  move=> Hsub.
-  apply/fdisjointP => x Hx1.
-  apply/bigfcupP; elim => y Hc1 Hc2.
-
-  move/and4P: H; elim => [_ _ /all_fsetP H _].
-
-  move/bigfcupP: Hx1; elim => C HC1 HC2.
-  have: C \in channels P2.
-  apply (fsubsetP Hsub); elim (andP HC1); done.
-  move => Cin2.
-  move/andP: Hc1 => [Hc1 _].
-  move/all_fsetP: (H _ Hc1).
-  move/(_ _ Cin2).
-  move/fdisjointP.
-  move/(_ _ Hc2).
-  rewrite HC2; done.
+Lemma app_h_comp_r h s : app_h (P1 ||| P2) (inr h) s = (x <- app_h P2 h s.2; ret (s.1, x)).
+  rewrite /app_h //=.
+  rewrite /achoose_h //=.
+  have:  (fun m => enabled (P1 ||| P2) s (inl (mkact (Delta P1 :+: Delta P2) (inr h) m))) =1
+                  (fun m => enabled P2 s.2 (inl (mkact (Delta P2) h m))).
+  simpl => m.
+  rewrite /enabled //=.
+  rewrite -omap_neq_none //=.
+  move/eq_pick ->.
+  case: pickP.
+  rewrite //= => x Hx.
+  remember (tr P2 s.2 (inl (mkact (Delta P2) h x))) as o; rewrite -Heqo; destruct o; rewrite //=.
+  rewrite bindRet_l; by destruct s.
+  move => H; rewrite //= bindRet_l. by destruct s.
 Qed.
 
-Local Open Scope fset.
+Lemma achoose_v_comp_l c s (Hcompat : compatible P1 P2) : c \in outputs P1 ->
+  achoose_v (P1 ||| P2) c s = achoose_v P1 c s.1.
+  move => hc; rewrite /achoose_v.
+  have:  [pick m | enabled (P1 ||| P2) s (inr (mkact Gamma c m)) ]  =
+         [pick m | enabled P1 s.1 (inr (mkact Gamma c m)) ].
+  apply eq_pick => x ; rewrite /enabled; simpl.
+  move/seq_disjointP: Hcompat; move/(_ _ hc) => co2.
+  rewrite !mem_cat hc (negbTE co2) orbT.
+  remember (c \in inputs P2); destruct b; rewrite //=.
+  remember (tr P1 s.1 (inr (mkact Gamma c x))) as tr; destruct tr; simpl.
+  rewrite -Heqtr //=.
+  have /opt_neq_none: tr P2 s.2 (inr (mkact Gamma c x)) != None by apply (i_a P2).
+  elim => z ->; done.
 
-Lemma bool_iffP (b1 b2 : bool) : reflect (b1 <-> b2) (b1 == b2).
-  apply/(iffP idP).
-  move/eqP => ->; rewrite //=.
-  move => H.
-  destruct b1.
-  apply/eqP; symmetry; apply H; rewrite //=.
-  destruct b2.
-  have: false by apply H; done.
+  rewrite -Heqtr //=.
+
+  rewrite -omap_neq_none //=.
+  move => ->.
+  done.
+Qed.
+
+Lemma achoose_v_comp_r c s (Hcompat : compatible P1 P2) : c \in outputs P2 ->
+  achoose_v (P1 ||| P2) c s = achoose_v P2 c s.2.
+  move => hc; rewrite /achoose_v.
+  have:  [pick m | enabled (P1 ||| P2) s (inr (mkact Gamma c m)) ]  =
+         [pick m | enabled P2 s.2 (inr (mkact Gamma c m)) ].
+  apply eq_pick => x ; rewrite /enabled; simpl.
+  rewrite /compatible seq_disjoint_sym in Hcompat.
+  move/seq_disjointP: Hcompat; move/(_ _ hc) => co2.
+  rewrite !mem_cat hc (negbTE co2) orbT.
+  remember (c \in inputs P1); destruct b; rewrite //=.
+  have /opt_neq_none: tr P1 s.1 (inr (mkact Gamma c x)) != None by apply (i_a P1).
+  elim => z ->; rewrite //=.
+
+  remember (tr P2 s.2 (inr (mkact Gamma c x))) as tr; destruct tr; simpl.
+  rewrite -Heqtr //=.
+  rewrite -Heqtr //=.
+
+
+  rewrite -omap_neq_none //=.
+  move => ->.
+  done.
+Qed.
+
+  
+
+
+Lemma compPIOAP (Hcompat : compatible P1 P2) (a : H (P1 ||| P2) + C) (ha : locally_controlled (P1 ||| P2) a) (mu : Meas [choiceType of (St (P1 ||| P2) * (trace (P1 ||| P2)))]) : compPIOA_spec P1 P2 a mu.
+  move: ha.
+  case: a.
+  case; rewrite //= => h _.
+  apply (hidden1 P1 P2 (inl (inl h)) mu h).
+  rewrite //=.
+  rewrite /=.
+  apply measBind_eqP => xt Hxt.
+  rewrite (app_h_comp_l) bindAssoc; apply measBind_eqP => yt Hyt.
+  rewrite bindRet_l //=.
+
+  apply (hidden2 P1 P2 (inl (inr h)) mu h).
+  rewrite //=.
+  rewrite /=.
+  apply measBind_eqP => xt Hxt.
+  rewrite (app_h_comp_r) bindAssoc; apply measBind_eqP => yt Hyt.
+  rewrite bindRet_l //=.
+
+  move => c Hc.
+  remember (c \in outputs P1) as co1; destruct co1.
+  remember (c \in inputs P2) as ci2; destruct ci2.
+
+
+
+  apply (out1_int P1 P2 (inr c) mu c).
   done.
   done.
-Qed.
-
-  Lemma coverU {X : choiceType} (F G : {fset {fset X}}) :
-    cover (F `|` G) = cover F `|` cover G.
-    rewrite /cover .
-    apply/fsetP => x.
-    apply/eqP/bool_iffP; split.
-    move/bigfcupP; elim => x0; move/andP; elim; move/fsetUP; elim.
-    intros; apply/fsetUP; left; apply/bigfcupP; exists x0; rewrite ?(H, H0) //=.
-    intros; apply/fsetUP; right; apply/bigfcupP; exists x0; rewrite ?(H, H0) //=.
-    move/fsetUP; elim.
-    move/bigfcupP; elim => x0; move/andP; elim; intros; apply/bigfcupP; exists x0.
-    apply/andP; split; rewrite //=.
-    apply/fsetUP; left; apply H.
-    done.
-    move/bigfcupP; elim => x0; move/andP; elim; intros; apply/bigfcupP; exists x0.
-    apply/andP; split; rewrite //=.
-    apply/fsetUP; right; apply H.
-    done.
-  Qed.
-
-    
-    Check fsetDP.
-
-Lemma notin_fsetU : forall {T : choiceType} {s1 s2 : {fset T}} {x},
-                          (x \notin s1 `|` s2) = ((x \notin s1) && (x \notin s2)).
-by intros; rewrite in_fsetU negb_or; done.
-Qed.
-
-Lemma notincover : forall {T : choiceType} (x : T) (s : {fset {fset T}}), 
-                            (x \notin (cover s)) <-> 
-                            ((forall t, (t \in s) -> (x \notin t))).
-  intros; split; intros.
-  apply/contraT.
-  rewrite negbK; intros.
-  move/bigfcupP: H.
-  elim.
-  exists t.
-  rewrite H0 //=.
-  rewrite H1 //=.
-
-  apply/bigfcupP.
-  elim.
-  intros.
-  apply/negP.
-  instantiate (1 := x \in x0); rewrite //=.
-  apply H.
-  move/andP: H0; elim; done.
   done.
+  simpl.
+  apply measBind_eqP => st Hst.
+  rewrite achoose_v_comp_l //=.
+
+
+  remember (achoose_v P1 c st.1.1) as oa; destruct oa; rewrite -Heqoa.
+  simpl.
+  symmetry in Heqoa; apply achoose_vP in Heqoa; move/andP: Heqoa => [h1 h2].
+  rewrite (eqP h2).
+  rewrite !mem_cat -Heqco1 -Heqci2 orTb orbT //=.
+
+  move/opt_neq_none: h1; elim => tr1 ->.
+  have/opt_neq_none: tr P2 st.1.2 (inr s) != None.
+  apply (inputEnabled P2).
+  rewrite (eqP h2); done.
+  elim => ? ->; rewrite //=.
+  rewrite bindAssoc; apply measBind_eqP => ? ?; rewrite bindAssoc; apply measBind_eqP => y Hy; rewrite bindRet_l; done.
+  simpl.
+  rewrite !bindRet_l; destruct st as [[? ?] ?]; done.
+
+  have Hco2: c \notin outputs P2.
+  move/seq_disjointP: Hcompat.
+  move/(_ c); rewrite -Heqco1; move/(_ is_true_true); done.
+
+  apply (out1_ext P1 P2 (inr c) mu c).
+  done.
+  rewrite -Heqci2 //=.
+  done.
+  
+  simpl.
+  apply measBind_eqP => st Hst.
+  rewrite achoose_v_comp_l //=.
+
+  remember (achoose_v P1 c st.1.1) as oa; destruct oa; rewrite -Heqoa.
+  simpl.
+  symmetry in Heqoa; apply achoose_vP in Heqoa; move/andP: Heqoa => [h1 h2].
+  rewrite (eqP h2) !mem_cat -Heqco1 -Heqci2 (negbTE Hco2) orbT /=.
+  move/opt_neq_none: h1; elim => tr1 ->.
+  rewrite //=.
+  rewrite bindAssoc; apply measBind_eqP => ? ?; rewrite bindRet_l; done.
+
+  simpl.
+  rewrite !bindRet_l; destruct st as [[? ?] ?]; done.
+
+  (* HERE *)
+  rewrite /locally_controlled //= mem_cat -Heqco1 orFb in Hc.
+  remember (c \in inputs P1) as ci1; symmetry in Heqci1; destruct ci1.
+  apply (out2_int P1 P2 (inr c) mu c).
+  done.
+  done.
+  done.
+  simpl.
+  apply measBind_eqP => st Hst.
+  simpl.
+  rewrite achoose_v_comp_r //=.
+  remember (achoose_v P2 c st.1.2) as oa; destruct oa; rewrite -Heqoa.
+  simpl.
+  symmetry in Heqoa; apply achoose_vP in Heqoa; move/andP: Heqoa => [h1 h2].
+  rewrite (eqP h2) !mem_cat -Heqco1 Heqci1 orTb Hc /=.
+
+  have ci2 : c \notin inputs P2.
+  (* HERE *)
+  move: (disj_io _ P2).
+  rewrite seq_disjoint_sym; move/seq_disjointP/(_ _ Hc); done.
+  rewrite (negbTE ci2) /=.
+
+  have: tr P1 st.1.1 (inr s) != None.
+  apply inputEnabled.
+  rewrite (eqP h2); done.
+  move/opt_neq_none; elim => tr ->.
+  simpl.
+  move/opt_neq_none: h1; elim => tr2 ->.
+  simpl.
+  simpl; rewrite bindAssoc; apply measBind_eqP => ? ?; rewrite bindAssoc; apply measBind_eqP => ? ?; rewrite bindRet_l.
+  done.
+
+  simpl.
+  rewrite !bindRet_l; destruct st as [[? ?] ?]; done.
+
+  apply (out2_ext P1 P2 (inr c) mu c).
+  done.
+  rewrite Heqci1; done.
+  done.
+
+  simpl.
+  apply measBind_eqP => st Hst.
+  rewrite achoose_v_comp_r //=.
+
+  remember (achoose_v P2 c st.1.2) as o; symmetry in Heqo; rewrite Heqo; destruct o.
+  apply achoose_vP in Heqo; move/andP: Heqo => [h1 h2].
+
+  simpl.
+  rewrite (eqP h2).
+  rewrite !mem_cat -Heqco1 Heqci1 Hc orbT /=.
+  move/opt_neq_none: h1; elim => tr2 Htr2; rewrite Htr2.
+  simpl.
+  rewrite bindAssoc; apply measBind_eqP => ? ?; rewrite !bindRet_l.
+  done.
+
+  simpl.
+  rewrite !bindRet_l.
+  destruct st as [[? ?] ?]; done.
 Qed.
-
-Lemma disjoint_coverD_l {T : choiceType} (f1 f2 : {fset {fset T}}) (d : {fset T}) :
-  [disjoint (cover f1) & d]%fset -> [disjoint (cover (f1 `\` f2)) & d]%fset.
-  move/fdisjointP => H; apply/fdisjointP => x Hx.
-  apply H.
-  move/bigfcupP: Hx; elim => t Ht1 Ht2.
-  apply/bigfcupP; exists t; rewrite //=.
-  apply/andP; split; rewrite //=; rewrite in_fsetD in Ht1; move/andP: Ht1 => [/andP [ht1 ht2] _]; done.
-Qed.
-
-Section CompPIOA.
-  Context {A : choiceType}.
-  Context (P1 P2 : @PIOA A).
-  Context (Hcompat : compatible P1 P2).
-
-    Print prePIOA.
-    Definition compPre : @prePIOA A := Build_prePIOA A ([fastEnumType of pQ P1 * pQ P2])%type (start P1, start P2) (cO P1 `|` cO P2)%fset ((cI P1 `|` cI P2) `\` (cO P1 `|` cO P2))%fset (cH P1 `|` cH P2)%fset
-  (fun s a =>
-     match tr P1 s.1 a, tr P2 s.2 a with
-       | Some mu1, Some mu2 => Some (x <- mu1; y <- mu2; ret (x,y))
-       | None, Some mu2 => if a \notin actions P1 then Some (y <- mu2; ret (s.1, y)) else None
-       | Some mu1, None => if a \notin actions P2 then Some (x <- mu1; ret (x, s.2)) else None
-       | None, None => None
-                         end).
-
-    Definition compPre_axiom : PIOA_axiom compPre. (* true but very tedious *)
-      apply/and4P; split.
-      apply/and4P; split.
-      rewrite /inputs /outputs //=.
-      admit.
-      rewrite /inputs /hiddens //=; apply disjoint_coverD_l; rewrite !coverU fdisjointUX !fdisjointXU.
-      apply/and3P; split.
-      apply/andP; split.
-      move/and4P: (PIOAAxiom P1) => [e _ _ _]; move/and4P: e; elim; done.
-      apply (compat_disjoint_c_hiddens2 P1); rewrite //=.
-      apply fsubsetU; apply/orP; left; apply fsubsetU; apply/orP; left; done.
-      apply (compat_disjoint_c_hiddens1 P2); rewrite //=.
-      apply fsubsetU; apply/orP; left; apply fsubsetU; apply/orP; left; done.
-      move/and4P: (PIOAAxiom P2) => [e _ _ _]; move/and4P: e; elim; done.
-
-      rewrite /outputs /hiddens //=; rewrite !coverU fdisjointUX !fdisjointXU.
-      apply/and3P; split.
-      apply/andP; split.
-      move/and4P: (PIOAAxiom P1) => [e _ _ _]; move/and4P: e; elim; done.
-      apply (compat_disjoint_c_hiddens2 P1); rewrite //=.
-      apply fsubsetU; apply/orP; left; apply fsubsetU; apply/orP; right; done.
-      apply (compat_disjoint_c_hiddens1 P2); rewrite //=.
-      apply fsubsetU; apply/orP; left; apply fsubsetU; apply/orP; right; done.
-      move/and4P: (PIOAAxiom P2) => [e _ _ _]; move/and4P: e; elim; done.
-
-      admit.
-
-      apply/all_fsetP => a Ha; apply/forallP => s.
-      rewrite //=.
-      admit.
-      admit.
-      admit.
-    Admitted.
-    Definition CompPIOA := Build_PIOA A compPre compPre_axiom.
-End CompPIOA.
-
-
-
-
-
-
-
-

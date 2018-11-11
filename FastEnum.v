@@ -88,6 +88,17 @@ Section FastEnumDefs.
     instantiate (1 := enum T); apply mem_enum.
     apply fastEnumP; rewrite //=.
   Qed.
+
+  Lemma forall_fastEnum p : [forall s, p s] = all p (fastEnum).
+    apply Bool.eq_true_iff_eq; split.
+    move/forallP => H.
+    apply/allP => x Hx.
+    apply H; done.
+    move/allP => H.
+    apply/forallP => x.
+    apply H.
+    apply mem_fastEnum.
+  Qed.
 End FastEnumDefs.
 
 
@@ -158,3 +169,28 @@ Qed.
 Canonical pairfastEnumMixin (T1 T2 : fastEnumType) := FastEnumMixin _ [seq (x, y) | x <- fastEnum T1, y <- fastEnum T2] (fast_enum_pair T1 T2).
 Canonical pairfastEnumType (T1 T2 : fastEnumType) := FastEnumType _ (pairfastEnumMixin T1 T2).
 
+Lemma fast_enum_sum (T1 T2 : fastEnumType) : FastEnum.axiom _ (map inl (fastEnum T1) ++ map inr (fastEnum T2)).
+  apply uniq_perm_eq; rewrite ?mem_uniq //=.
+  rewrite cat_uniq; apply/and3P; split.
+  rewrite map_inj_uniq.
+  apply fastEnum_uniq.
+  move => x y H; injection H; done.
+  apply/hasP; elim => x; move/mapP; elim => y Hy Hy2; move/mapP; elim; intros; subst; done.
+  rewrite map_inj_uniq; first by apply fastEnum_uniq.
+  move => x y H; injection H; done.
+  apply enum_uniq.
+
+  move => x; destruct x.
+  rewrite mem_cat mem_enum //=. 
+  have -> : inl s \in [finType of (T1 + T2)%type] by done.
+  apply/orP; left; apply/mapP; exists s; first by apply mem_fastEnum.
+  done.
+
+  rewrite mem_cat mem_enum //=. 
+  have -> : inr s \in [finType of (T1 + T2)%type] by done.
+  apply/orP; right; apply/mapP; exists s; first by apply mem_fastEnum.
+  done.
+Qed.
+
+Canonical sumfastEnumMixin (T1 T2 : fastEnumType) := FastEnumMixin _ _ (fast_enum_sum T1 T2).
+Canonical sumfastEnumType (T1 T2 : fastEnumType) := FastEnumType _ (sumfastEnumMixin T1 T2).

@@ -105,4 +105,5 @@ Definition PlayerB : @PIOA [choiceType of RPSAction].
   mkPIOA_tac (None : option play, None : option play, false, false) (playerO false) (playerI false) playerH (player_trans false).
 Defined.
 
+Print compatible.
 

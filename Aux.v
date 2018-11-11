@@ -196,14 +196,37 @@ Lemma fset_of_seq_flatten {A : choiceType} (s : seq (seq A)) :
 Qed.
 
 
-Fixpoint has_compute {A : eqType} (p : A -> bool) (xs : seq A) :=
+Fixpoint lfind {A : eqType} (p : A -> bool) (xs : seq A) :=
   match xs with
   | nil => None
-  | x :: xs' => if p x then Some x else has_compute p xs'
+  | x :: xs' => if p x then Some x else lfind p xs'
                                                    end.
 
+Inductive lfind_spec {A : eqType} (p : A -> bool) (xs : seq A) :=
+  | lfind_some x : lfind p xs = Some x -> x \in xs -> p x -> lfind_spec p xs
+  | lfind_none : lfind p xs = None -> all (fun x => ~~ p x) xs -> lfind_spec p xs.
+
+Lemma lfindP {A : eqType} (p : A -> bool) xs : lfind_spec p xs.
+  induction xs.
+  apply lfind_none; rewrite //=.
+  remember (p a) as b; symmetry in Heqb; destruct b.
+  apply (lfind_some p (a :: xs) a); rewrite //=.
+  rewrite Heqb //=.
+  rewrite in_cons eq_refl orTb //=.
+  destruct IHxs.
+  apply (lfind_some p (a :: xs) x).
+  rewrite //= Heqb //=.
+  rewrite in_cons i orbT //=.
+  done.
+  apply lfind_none; rewrite //=.
+  rewrite Heqb //= e //=.
+  apply/andP; split.
+  rewrite Heqb //=.
+  done.
+Qed.
+
 Definition all_counter {A : eqType} (p : A -> bool) (xs : seq A) :=
-  (has_compute (fun x => ~~ p x) xs) == None .
+  (lfind (fun x => ~~ p x) xs) == None .
 
 Lemma all_counter_cons {A : eqType} (p : A -> bool) xs x :
   all_counter p (x :: xs) = ((p x)) && all_counter p xs.
@@ -218,9 +241,9 @@ Definition all_counterP {A : eqType} (p : A -> bool) xs :
 Qed.
 
 Definition all_counterPn {A : eqType} (p : A -> bool) xs :
-  isSome (has_compute (fun x => ~~ p x) xs) = ~~ (all p xs).
+  isSome (lfind (fun x => ~~ p x) xs) = ~~ (all p xs).
   rewrite all_counterP /all_counter //=.
-  destruct (has_compute (fun x => ~~ p x) xs); rewrite //=.
+  destruct (lfind (fun x => ~~ p x) xs); rewrite //=.
 Qed.
 
 Lemma all_all {A B} (p : A -> B -> bool) xs ys :
@@ -262,6 +285,12 @@ Fixpoint multiIf_with_posrec {A} n (cs : list (bool * A)) : option (nat * A) :=
 
 Definition multiIf_with_pos {A} (cs : list (bool * A)) := multiIf_with_posrec 0 cs.
   
+Definition opt_lift {A} (p : A -> bool) := fun (x : option A) =>
+                                                 match x with
+                                                   | Some a => p a
+                                                   | None => true
+                                                               end.
+
 Lemma multiIfP {A} (cs : list (bool * A)) (P : A -> bool) :
   all (fun x => P x.2) cs -> opt_lift P (multiIf cs).
   induction cs; rewrite //=.
@@ -292,7 +321,159 @@ Ltac split_all :=
   | [ |- is_true (all _ nil)] => rewrite all_nil //=
                                end. 
 
-Lemma omap_eq_some {A B} (x : option A) (f : A -> B) :
+Lemma enum_orP b1 b2 :
+  reflect ([\/ (b1 && ~~ b2), (b2 && ~~ b1) | (b1 && b2)]) (b1 || b2).
+  apply/(iffP idP); destruct b1; destruct b2; rewrite //= => h.
+  by apply Or33.
+  by apply Or31.
+  by apply Or32.
+  elim h; done.
+Qed.
+
+Lemma catP {A : eqType} (s1 s2 : seq A) x :
+  reflect ([\/ ((x \in s1) && (x \notin s2)), ((x \in s2) && (x \notin s1)) | ((x \in s1) && (x \in s2))])
+          (x \in s1 ++ s2).
+  apply/(iffP idP).
+  rewrite mem_cat; move/enum_orP; done. 
+  move/enum_orP; rewrite mem_cat //=.
+Qed.
+
+Notation "x <$>o f" := (omap f x) (at level 40).
+Notation "x >>=o f" := (obind f x) (at level 40).
+
+Lemma opt_neq_none {A : eqType} {x : option A} :
+  reflect (exists a, x = Some a) (x != None).
+  apply/(iffP idP); case x; rewrite //=.
+  intros; exists s; done.
+  elim; done.
+Qed.
+
+Lemma omap_eq_none {A B} (x : option A) (f : A -> B) :
   x = None <-> omap f x = None.
 destruct x; done.
+Qed.
+
+Lemma omap_neq_none {A B : eqType} (x : option A) (f : A -> B) :
+  (x != None) = (omap f x != None).
+  destruct x; done.
+Qed.
+
+Lemma obind_eq_non {A B : eqType} (x : option A) (f : A -> option B) :
+  reflect (x = None \/ (exists a, x = Some a /\ f a = None)) (obind f x == None).
+  apply/(iffP idP).
+  case x; rewrite //=.
+  move => a; remember (f a) as fa. 
+  move => hfa; right; exists a; rewrite -Heqfa (eqP hfa) //=. 
+  move => _; left; done.
+  elim.
+  move => ->; done.
+  elim => a; elim => -> h2 //=; apply/eqP; done.
+Qed.
+
+Lemma obind_neq_none {A B : eqType} (x : option A) (f : A -> option B) :
+  reflect (exists a b, x = Some a /\ f a = Some b) (obind f x != None).
+  apply/(iffP idP).
+  case x; rewrite //=.
+  move => a; remember (f a) as fa; destruct fa; rewrite //=.
+  move => _; exists a, s; done.
+  elim => a; elim => b; elim => h1 h2.
+  rewrite h1 //=; rewrite h2 //=.
+Qed.
+
+Lemma obind_eq_some {A B : eqType} (x : option A) (f : A -> option B) b :
+  reflect (exists a, x = Some a /\ f a = Some b) (obind f x == Some b).
+  apply/(iffP idP).
+  case x; rewrite //=.
+  move => a; remember (f a) as fa; destruct fa; rewrite //=.
+  move/eqP => heq; injection heq => <-.
+  exists a; done.
+  elim => a; elim => ->; rewrite //=  => ->; rewrite //=.
+Qed.
+
+(* sequence stuff *)
+
+Definition seq_disjoint {A : eqType} (xs ys : seq A) :=
+  all (fun x => all (fun y => x != y) ys) xs.
+
+Lemma seq_disjoint_sym {A : eqType} (xs ys : seq A) :
+  seq_disjoint xs ys = seq_disjoint ys xs.
+  apply Bool.eq_true_iff_eq; split;
+  move/allP => H; apply/allP => x Hx; apply/allP => y Hy.
+  move/allP: (H _ Hy);move/(_ _ Hx); rewrite eq_sym //=.
+  move/allP: (H _ Hy);move/(_ _ Hx); rewrite eq_sym //=.
+Qed.
+
+Lemma notin_seq_all {A : eqType} (x : A) xs :
+  (x \notin xs) = (all (fun z => x != z) xs).
+  induction xs; rewrite //= in_cons negb_or IHxs //=. 
+Qed.
+
+Lemma in_seq_has {A : eqType} (x : A) xs :
+  (x \in xs) = (has (fun z => x == z) xs).
+  induction xs; rewrite //=.
+  rewrite in_cons IHxs.
+  done.
+Qed.
+
+Lemma seq_disjointP {A : eqType} (xs ys : seq A) :
+  reflect (forall x, x \in xs -> x \notin ys) (seq_disjoint xs ys).
+apply/(iffP idP).
+move/allP => H x Hx.
+rewrite notin_seq_all; apply H; done.
+
+move => H; apply/allP => x Hx; apply/allP => y Hy.
+have H2 := H _ Hx; rewrite notin_seq_all in H2; move/allP: H2; move/(_ _ Hy); done.
+Qed.
+
+Definition seq_eqmem_dec {A : eqType} (xs ys : seq A) :=
+  all (fun x => x \in ys) xs && all (fun y => y \in xs) ys.
+
+Notation "A ==i B" := (seq_eqmem_dec A B) (at level 70).
+Notation "A =/i B" := (~~ (A ==i B)) (at level 70).
+
+Lemma seq_eqmemP {A : eqType} (xs ys : seq A) :
+  reflect (xs =i ys) (xs ==i ys).
+  apply/(iffP idP).
+  move/andP; elim.
+  move/allP => H1.
+  move/allP => H2.
+  move => x.
+  remember (x \in xs) as b; destruct b; symmetry in Heqb.
+  rewrite (H1 _ Heqb); done.
+  remember (x \in ys) as b'; destruct b'; symmetry in Heqb'.
+  rewrite (H2 _ Heqb') in Heqb; done.
+  done.
+  move=> H; apply/andP; split.
+  apply/allP => x Hx.
+  rewrite -H; done.
+  apply/allP => X Hx; rewrite H; done.
+Qed.
+
+Definition seqD {A : eqType} (xs ys : seq A) :=
+  foldr (fun a acc => if a \in ys then acc else a :: acc) nil xs.
+
+Lemma seqDP {A : eqType} (xs ys : seq A) x :
+  reflect (x \in xs /\ x \notin ys) (x \in seqD xs ys).
+  apply/(iffP idP); induction xs; rewrite //=.
+  remember (a \in ys) as b; destruct b; symmetry in Heqb.
+  move/IHxs; elim; intros; split.
+  rewrite in_cons H orbT //=.
+  done.
+  rewrite in_cons; move/orP; elim.
+  move/eqP => ->.
+  split; [rewrite in_cons eq_refl //= | rewrite Heqb //=].
+  move/IHxs; elim; intros; split.
+  rewrite in_cons H orbT //=.
+  done.
+  elim; rewrite in_nil //=.
+
+  rewrite in_cons; elim.
+  move/orP; elim.
+  move/eqP => -> => H.
+  remember (a \in ys) as b; destruct b; symmetry in Heqb.
+  done.
+  rewrite in_cons eq_refl orTb //=.
+  intros; destruct (a \in ys).
+  apply IHxs; split; done.
+  rewrite in_cons IHxs ?orbT //=.
 Qed.
