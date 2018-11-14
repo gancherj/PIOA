@@ -8,12 +8,12 @@ Require Import PIOA Meas Posrat Aux FastEnum.
 
 Section StateInj.
   
-  Context {A : choiceType}.
-  Context (P1 P2 : @PIOA A).
+  Context {C} {Gamma : context C}.
+  Context (P1 P2 : PIOA Gamma).
   Context (hc1 : closed P1).
   Context (hc2 : closed P2).
 
-  Record StateInj (R : pQ P1 -> pQ P2) :=
+  Record StateInj (R : St P1 -> St P2) :=
     {
       siStart : R (start _) = (start _);
       siStep : forall T mu eta, T \in channels P1 -> isSubdist mu ->

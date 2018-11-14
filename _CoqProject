@@ -9,6 +9,6 @@ Premeas.v
 Meas.v
 Lifting.v
 PIOA.v
-StateSim.v
+Refinement.v
 CompPIOA.v
-CompPIOAProps.v
+StateSim.v

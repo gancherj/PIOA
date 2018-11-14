@@ -3,28 +3,24 @@ From mathcomp Require Import ssreflect ssrfun ssrbool ssrint eqtype ssrnat seq c
 From mathcomp Require Import bigop ssralg div ssrnum ssrint order finmap.
 Require Import Posrat Premeas Meas Program.
 
-Check and3P.
-Check forallP.
-Check allP.
-
-Definition isLifting {A B : choiceType} (R : Meas A -> Meas B -> bool) (mu : Meas A) (eta : Meas B) (w : Meas [choiceType of (Meas A) * (Meas B)]) :=
+Definition isLifting {A B : choiceType} (R : {meas A} -> {meas B} -> bool) (mu : {meas A}) (eta : {meas B}) (w : {meas {meas A} * {meas B}}) :=
   [&& (mu == (p <- w; p.1)), (eta == (p <- w; p.2)) & (all (fun p => R p.1 p.2) (measSupport w))].
 
-Definition lifting {A B : choiceType} R (mu : Meas A) (eta : Meas B) := exists w, isLifting R mu eta w.
+Definition lifting {A B : choiceType} R (mu : {meas A}) (eta : {meas B}) := exists w, isLifting R mu eta w.
 
 
-Lemma liftingBind {A B C : choiceType} R (c : Meas A) (f : A -> Meas B) (g : A -> Meas C) :
+Lemma liftingBind {A B C : choiceType} R (c : {meas A}) (f : A -> {meas B}) (g : A -> {meas C}) :
   (forall x, lifting R (f x) (g x)) ->
   lifting R (x <- c; f x) (x <- c; g x).
   move=> H.
   exists (x <- c; (xchoose (H x))).
   apply/and3P; split.
-  rewrite bindAssoc; apply/eqP/MeasP => h; rewrite !integ_measBind.
+  rewrite bindAssoc; apply/eqP/measP => h; rewrite !integ_measBind.
   apply integ_eq_fun => x.
   have H2 := xchooseP (H x); move/and3P: H2; elim => h1 h2 h3.
   rewrite -(eqP h1); done.
 
-  rewrite bindAssoc; apply/eqP/MeasP => h; rewrite !integ_measBind.
+  rewrite bindAssoc; apply/eqP/measP => h; rewrite !integ_measBind.
   apply integ_eq_fun => x.
   have H2 := xchooseP (H x); move/and3P: H2; elim => h1 h2 h3.
   rewrite -(eqP h2); done.
@@ -37,8 +33,7 @@ Lemma liftingBind {A B C : choiceType} R (c : Meas A) (f : A -> Meas B) (g : A -
   done.
 Qed.
 
-
-Lemma liftingBind_dep {A B C : choiceType} R (c : Meas A) (f : A -> Meas B) (g : A -> Meas C) :
+Lemma liftingBind_dep {A B C : choiceType} R (c : {meas A}) (f : A -> {meas B}) (g : A -> {meas C}) :
   (forall x, x \in measSupport c -> lifting R (f x) (g x)) ->
   lifting R (x <- c; f x) (x <- c; g x).
   move => H.
@@ -46,7 +41,7 @@ Lemma liftingBind_dep {A B C : choiceType} R (c : Meas A) (f : A -> Meas B) (g :
   apply/and3P; split.
 
   rewrite /measBind_dep bindAssoc.
-  apply/eqP/MeasP => h; rewrite !integ_measBind.
+  apply/eqP/measP => h; rewrite !integ_measBind.
   apply integ_eq_fun_dep => x Hx.
   rewrite odflt_depP.
 
@@ -54,7 +49,7 @@ Lemma liftingBind_dep {A B C : choiceType} R (c : Meas A) (f : A -> Meas B) (g :
   rewrite -(eqP h1); done.
 
   rewrite /measBind_dep bindAssoc.
-  apply/eqP/MeasP => h; rewrite !integ_measBind.
+  apply/eqP/measP => h; rewrite !integ_measBind.
   apply integ_eq_fun_dep => x Hx.
   rewrite odflt_depP.
   have H2 := xchooseP (H x Hx); move/and3P: H2; elim => h1 h2 h3.

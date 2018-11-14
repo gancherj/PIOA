@@ -477,3 +477,32 @@ Lemma seqDP {A : eqType} (xs ys : seq A) x :
   apply IHxs; split; done.
   rewrite in_cons IHxs ?orbT //=.
 Qed.
+
+
+Lemma seqD_eqnil {A : eqType} (xs ys : seq A) :
+  reflect (forall x, x \in xs -> x \in ys) (seqD xs ys ==  nil).
+  apply/(iffP idP).
+  induction xs; rewrite //=.
+  remember (a \in ys) as b; destruct b.
+  move/IHxs => h1 h2.
+  rewrite in_cons; move/orP; elim.
+  move/eqP => ->; done.
+  intros; apply h1; done.
+  done.
+
+  move => H; induction xs; rewrite //=.
+  remember (a \in ys) as b; destruct b.
+  apply IHxs.
+  move => x hx; apply H.
+  rewrite in_cons hx orbT //=.
+  rewrite H in Heqb.
+  done.
+  rewrite in_cons eq_refl //=.
+Qed.
+
+Lemma mem_seqD {A : eqType} (xs ys : seq A) x :
+  (x \in seqD xs ys) = ((x \in xs) && (x \notin ys)) .
+  apply Bool.eq_true_iff_eq; split => H.
+  elim (seqDP _ _ _ H) => -> -> //=.
+  apply/seqDP; split; elim (andP H); done.
+Qed.
