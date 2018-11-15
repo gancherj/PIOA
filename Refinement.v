@@ -13,9 +13,7 @@ Definition is_chan {Gamma D : context} (P : PIOA Gamma D) (hc : (H P) + (C P)) :
     c \in (inputs P ++ outputs P)
             end.
   
-
-Definition comparable {Gamma D D' : context} (P1 : PIOA Gamma D) (P2 : PIOA Gamma D') :=
-  ((inputs P1) ==i (inputs P2)) && (outputs P1 ==i outputs P2).
+Definition comparable {Gamma D D' : context} (P1 : PIOA Gamma D) (P2 : PIOA Gamma D') := (inputs P1 ==i inputs P2) && (outputs P1 ==i outputs P2).
 
 Definition protocol_for {Gamma D : context} (P : PIOA Gamma D) (x : seq (cdom D + cdom Gamma)) := all (is_chan P) x.
 
@@ -27,11 +25,10 @@ Definition refines  {Gamma D D' : context} (P1 : PIOA Gamma D) (P2 : PIOA Gamma 
         measMap (run (P1 ||| E) (g1)) snd = measMap (run (P2 ||| E) (g2)) snd.
 
 
-
 Record simulation_sameh  {Gamma D : context} (P1 P2 : PIOA Gamma D) (Hcomp : comparable P1 P2)
        (R : {meas (St P1) * (trace P1)} -> {meas (St P2) * (trace P2)} -> bool) :=
   {
-    sim_trace_eq : forall mu eta, R mu eta -> forall p1 p2, p1 \in measSupport mu -> p2 \in measSupport eta -> p1.2 = p2.2;
+    sim_trace_eq : forall mu eta, R mu eta -> forall p1 p2, p1 \in support mu -> p2 \in support eta -> p1.2 = p2.2;
     sim_start : R (initDist P1) (initDist P2);
     sim_step_lc : forall mu eta (hc : (H P1) + (C P1)), locally_controlled P1 hc -> R mu eta -> lifting R (act P1 hc mu) (act P2 hc eta);
     sim_step_i : forall mu eta (a : action Gamma), (tag a \in inputs P1) -> R mu eta ->
@@ -48,13 +45,13 @@ Definition extension {Gamma D D' D'' : context} (P1 : PIOA Gamma D) (P2 : PIOA G
            (R : {meas (St P1 * trace P1)} -> {meas (St P2 * trace P2)} -> bool)
            (mu : {meas St (P1 ||| E) * trace (P1 ||| E)})
            (eta : {meas St (P2 ||| E) * trace (P2 ||| E)}) :=
-  (all (fun p1 => all (fun p2 => (p1.1.2 == p2.1.2) && (p1.2 == p2.2)) (measSupport eta)) (measSupport mu)) && (R (proj_mt_l P1 E mu) (proj_mt_l P2 E eta)).
+  (all (fun p1 => all (fun p2 => (p1.1.2 == p2.1.2) && (p1.2 == p2.2)) (support eta)) (support mu)) && (R (proj_mt_l P1 E mu) (proj_mt_l P2 E eta)).
 
 
 
 Lemma comparable_cong {G D D' D'' : context} (P1 : PIOA G D) (P2 : PIOA G D') (P3 : PIOA G D'') :
   comparable P1 P2 -> comparable (P1 ||| P3) (P2 ||| P3).
-  move/andP => [h1 h2]; apply/andP; split; apply /seq_eqmemP.
+  move/andP => [h1 h2]; apply/andP; split; apply/seq_eqmemP.
   rewrite //= => z.
   rewrite !mem_seqD !mem_cat.
   rewrite !(seq_eqmemP _ _ h1) !(seq_eqmemP _ _ h2) //=.
@@ -62,10 +59,94 @@ Lemma comparable_cong {G D D' D'' : context} (P1 : PIOA G D) (P2 : PIOA G D') (P
   rewrite //= => z; rewrite !mem_cat !(seq_eqmemP _ _ h2) //=.
 Qed.
 
+Lemma all2P {X Y : eqType} (s1 : seq X) (s2 : seq Y) (p : X -> Y -> bool) :
+  reflect (forall x, x \in s1 -> forall y, y \in s2 -> p x y) (all (fun x => all (fun y => p x y) s2) s1).
+  apply/(iffP idP).
+  move/allP => H x Hx y Hy.
+  move: (allP (H x Hx));move/(_ y Hy); done.
+
+  move => H; apply/allP => x Hx; apply/allP => y Hy; apply H; done.
+Qed.
+
+
 Lemma simulation_cong {G D D' : context} (P1 P2 : PIOA G D) (E : PIOA G D') (He : env P1 E) (Hcomp : comparable P1 P2) R :
   simulation_sameh P1 P2 Hcomp R ->
   simulation_sameh (P1 ||| E) (P2 ||| E) (comparable_cong P1 P2 E Hcomp) (extension P1 P2 E He R).
+  move => Rsim.
+  elim (Rsim) => rs1 rs2 rs3 rs4; simpl in *.
+  constructor; simpl.
+
+  (* trace condition *)
+  move => mu eta; move/andP; rewrite //=; elim.
+  move/all2P; rewrite //= => H Hr p1 p2 Hp1 Hp2.
+  move/andP: (H p1 Hp1 p2 Hp2); elim => _ /eqP; done.
+
+  (* init dist *)
+  apply/andP; split.
+  apply/all2P; simpl => x Hx y Hy.
+  rewrite /initDist in Hx; support_tac Hx.
+  rewrite /initDist in Hy; support_tac Hy; subst; rewrite //= !eq_refl //=.
+
+  have Hp: forall P, proj_mt_l P E (initDist (P ||| E)) = initDist P.
+  move => c P.
+  rewrite /proj_mt_l /initDist measMap_ret //=.
+  rewrite !Hp //=.
+
+  (* locally controlled action *)
+  move => mu eta hc Hlhc; move/andP; elim.
+  move/all2P => H; simpl in H.
+  move => Hr.
+
+  move/andP: (He); elim => He1 He2.
+
+  destruct hc as [h | c].
+  destruct h as [hl | hr].
+  rewrite !hidden1P.
+
+  apply liftingBind_dep.
+  
+  have Hc2: compatible P2 E.
+    rewrite /compatible; elim (andP Hcomp) => _ /seq_eqmemP => Heq.
+    apply/seq_disjointP => x; rewrite -Heq => Hx.
+    move/seq_disjointP: He1; move/(_ _ Hx); done.
+  have lc2 : locally_controlled (P2 ||| E) hc.
+    move: Hlhc.
+    rewrite /locally_controlled; elim hc; rewrite //=.
+    move => b; rewrite !mem_cat; elim (andP Hcomp) => _ /seq_eqmemP => Heq; rewrite Heq //=.
+    
+  elim (compPIOAP P1 E He1 hc Hlhc mu); elim (compPIOAP P2 E Hc2 hc lc2 eta); intros; try congruence.
   admit.
+  admit.
+  admit.
+
+  admit.
+  rewrite 
+  rewrite i0 in i2.
+  admit.
+  admit.
+  admit.
+  admit.
+  admit.
+  admit.
+  admit.
+  admit.
+  admit.
+  admit.
+  `
+  admit.
+  congruence.
+  intros. 
+  rewrite e in e1; done.
+
+  have: lifting R (act P1 hc (proj_mt_l mu)) (act P2 hc (proj
+
+
+  
+  admit.
+
+
+  (* input trivial *)
+  move => mu eta; elim (andP He); rewrite /closed //= => _ /eqP -> in_nil //=.
 Admitted.
 
 

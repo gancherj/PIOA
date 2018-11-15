@@ -4,7 +4,7 @@ From mathcomp Require Import bigop ssralg div ssrnum ssrint order finmap.
 Require Import Posrat Premeas Meas Program.
 
 Definition isLifting {A B : choiceType} (R : {meas A} -> {meas B} -> bool) (mu : {meas A}) (eta : {meas B}) (w : {meas {meas A} * {meas B}}) :=
-  [&& (mu == (p <- w; p.1)), (eta == (p <- w; p.2)) & (all (fun p => R p.1 p.2) (measSupport w))].
+  [&& (mu == (p <- w; p.1)), (eta == (p <- w; p.2)) & (all (fun p => R p.1 p.2) (support w))].
 
 Definition lifting {A B : choiceType} R (mu : {meas A}) (eta : {meas B}) := exists w, isLifting R mu eta w.
 
@@ -26,7 +26,7 @@ Lemma liftingBind {A B C : choiceType} R (c : {meas A}) (f : A -> {meas B}) (g :
   rewrite -(eqP h2); done.
 
   apply/allP => x Hx.
-  elim (measSupport_bind _ _ _ Hx) => x0 [h1 h2].
+  elim (support_bind _ _ _ Hx) => x0 [h1 h2].
   have H2 := xchooseP (H x0); move/and3P: H2; elim => h3 h4 h5.
   move/allP: h5 => h5.
   apply h5.
@@ -34,7 +34,7 @@ Lemma liftingBind {A B C : choiceType} R (c : {meas A}) (f : A -> {meas B}) (g :
 Qed.
 
 Lemma liftingBind_dep {A B C : choiceType} R (c : {meas A}) (f : A -> {meas B}) (g : A -> {meas C}) :
-  (forall x, x \in measSupport c -> lifting R (f x) (g x)) ->
+  (forall x, x \in support c -> lifting R (f x) (g x)) ->
   lifting R (x <- c; f x) (x <- c; g x).
   move => H.
   exists (measBind_dep c (fun x p => xchoose (H x p))).
@@ -56,7 +56,7 @@ Lemma liftingBind_dep {A B C : choiceType} R (c : {meas A}) (f : A -> {meas B}) 
   rewrite -(eqP h2); done.
 
   apply/allP => x.
-  move/measSupport_bind_dep; elim => y; elim => h hin.
+  move/support_bind_dep; elim => y; elim => h hin.
 
   have H2 := xchooseP (H y h); move/and3P: H2; elim => h1 h2 h3.
   move/allP: h3 => h3.
