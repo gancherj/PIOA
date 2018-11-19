@@ -525,14 +525,16 @@ Lemma pdist_mul_r a b c : pdist (a * c) (b * c) = c * (pdist a b).
   apply pdist_mul_l.
 Qed.
 
-Lemma ple_sum {A} (c : seq A) (F1 F2 : A -> posrat) :
-  (forall x, F1 x <= F2 x) ->
-  (\big[padd/0]_(p <- c) F1 p) <= (\big[padd/0]_(p <- c) F2 p).
+Lemma ple_sum {A} (c : seq A) (F1 F2 : A -> posrat) (f : A -> bool) :
+  (forall x, f x -> F1 x <= F2 x) ->
+  (\big[padd/0]_(p <- c | f p) F1 p) <= (\big[padd/0]_(p <- c | f p) F2 p).
   intros.
   induction c.
   rewrite !big_nil; done.
   rewrite !big_cons.
+  remember (f a) as b; destruct b.
   apply ple_add_lr.
+  apply H; rewrite -Heqb //=.
   done.
   done.
 Qed.  
@@ -622,4 +624,18 @@ Lemma pdiv_pmul_denom a b c:
   rewrite pmulr1.
   done.
 Qed.
+
+  Lemma psum_neq0 {A : eqType} (xs : seq A) f :
+    (\big[padd/0]_(x <- xs) f x != 0) = (has (fun x => f x != 0) xs). 
+    induction xs.
+    rewrite big_nil //=.
+    rewrite big_cons //=.
+    rewrite -IHxs.
+    apply Bool.eq_true_iff_eq; split.
+    rewrite -padd0 negb_and; move/orP; elim => H; rewrite H //= ?orbT //=.
+
+    move/orP; elim => H.
+    rewrite -padd0 negb_and H //=.
+    rewrite -padd0 negb_and H //= orbT //=.
+  Qed.
 

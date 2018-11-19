@@ -5,11 +5,11 @@ From mathcomp Require Import bigop ssralg div ssrnum ssrint finmap.
 
 Require Import Meas Lifting Aux FastEnum.
 
-Record context := mkCon { cdom : finType; cfun :> cdom -> finType }.
+Record context := mkCon { cdom : fastEnumType; cfun :> cdom -> fastEnumType }.
 
 
 Definition consum (c d : context) :=
-  mkCon [finType of ((cdom c) + (cdom d))%type] (fun x => match x with | inl a => c a | inr a => d a end).
+  mkCon [fastEnumType of ((cdom c) + (cdom d))%type] (fun x => match x with | inl a => c a | inr a => d a end).
 
 Notation "G :+: H" := (consum G H) (at level 70).
 
@@ -36,14 +36,14 @@ Qed.
 
 Record PIOA (Gamma : context) (Delta : context) :=
   {
-    St : finType;
+    St : fastEnumType;
     start : St;
     inputs : seq (cdom Gamma);
     outputs : seq (cdom Gamma);
     disj_io : seq_disjoint inputs outputs;
     tr : St -> (action Delta + action Gamma) -> option ({meas St});
     ad_h : forall (s : St) (h : cdom Delta) (m1 m2 : Delta h), tr s (inl (mkact Delta h m1)) != None -> tr s (inl (mkact Delta h m2)) != None -> m1 == m2;
-    ad_v : forall (s : St) (c : cdom Gamma) (m1 m2 : Gamma c), tr s (inr (mkact Gamma c m1)) != None -> tr s (inr (mkact Gamma c m2)) != None -> m1 == m2;
+    ad_v : forall (s : St) (c : cdom Gamma) (m1 m2 : Gamma c), (c \in outputs) -> tr s (inr (mkact Gamma c m1)) != None -> tr s (inr (mkact Gamma c m2)) != None -> m1 == m2;
     i_a : forall s i, i \in inputs -> forall (m : Gamma i), tr s (inr (mkact Gamma i m)) != None
     }.
 
@@ -73,10 +73,11 @@ Lemma actDeterm_h {G D : context} (P : PIOA G D) (s : St P) (a1 a2 : action D) :
   have -> //=: s0 = s1 by apply/eqP; apply (ad_h _ _ _ _ _ h1 h2).
 Qed.
 
-Lemma actDeterm_v {G D : context} (P : PIOA G D) (s : St P) (a1 a2 : action G) : tag a1 = tag a2 -> tr P s (inr a1) != None -> tr P s (inr a2) != None -> a1 = a2.
+Lemma actDeterm_v {G D : context} (P : PIOA G D) (s : St P) (a1 a2 : action G) : tag a1 \in outputs P -> tag a1 = tag a2 -> tr P s (inr a1) != None -> tr P s (inr a2) != None -> a1 = a2.
   destruct a1; destruct a2; rewrite //=.
-  move => Heq; move: s0 s1; rewrite Heq => s0 s1 h1 h2.
-  have -> //=: s0 = s1 by apply/eqP; apply (ad_v _ _ _ _ _ h1 h2).
+  move => Hx Heq; move: s0 s1; rewrite Heq => s0 s1 h1 h2.
+  rewrite Heq in Hx.
+  have -> //=: s0 = s1 by apply/eqP; apply (ad_v _ _ _ _ _ Hx h1 h2).
 Qed.
 
 Lemma inputEnabled  {G D : context} (P : PIOA G D) s (a : action G) : tag a \in (inputs P) -> tr P s (inr a) != None.
@@ -117,8 +118,9 @@ Lemma achoose_hP {G D : context} (P : PIOA G D) h s a :
   destruct a; simpl in *; move: x; move/(_ s0); rewrite h1 //=.
 Qed.
 
-Lemma achoose_vP {G D : context} (P : PIOA G D) h s a :
+Lemma achoose_vP {G D : context} (P : PIOA G D) h s a : h \in outputs P ->
   achoose_v P h s = Some a <-> enabled P s (inr a) && (tag a == h).
+  move => Hh.
   split.
   rewrite /achoose_v; case: pickP => [x H | x]; rewrite //= => Heq.
   injection Heq => <-; rewrite //=.
@@ -126,8 +128,11 @@ Lemma achoose_vP {G D : context} (P : PIOA G D) h s a :
   move/andP => [h1 /eqP h2]; rewrite /achoose_v; case:pickP => [x H | x]; subst. 
   rewrite //=.
 
+
   have -> //= : (mkact G (tag a) x) = a.
   eapply actDeterm_v.
+  simpl.
+  apply Hh.
   done.
   apply H.
   done.
@@ -182,16 +187,16 @@ Lemma run_rcons {G D : context} (P : PIOA G D) xs x :
 Qed.
 
 Lemma act_bind {G D : context} {A : choiceType} (P : PIOA G D) a (m : Meas A) f :
-  act P a (measBind m f) = measBind m (fun x => act P a (f x)).
-  rewrite /act; case a => x; by rewrite bindAssoc.
+  act P a (x <- m; f x) = (x <- m; act P a (f x)).
+  rewrite /act; case a => x; by rewrite mbindA.
 Qed.
 
 
 
-Definition mkPIOA (G : context) (S : finType) (st : S) (inputs outputs : seq (cdom G)) (Delta : context) (tr : S -> (action Delta + action G) -> option ({meas S})) :
+Definition mkPIOA (G : context) (S : fastEnumType) (st : S) (inputs outputs : seq (cdom G)) (Delta : context) (tr : S -> (action Delta + action G) -> option ({meas S})) :
                 seq_disjoint inputs outputs ->
                 (forall s h m1 m2, tr s (inl (mkact Delta h m1)) != None -> tr s (inl (mkact Delta h m2)) != None -> m1 == m2) ->
-                (forall s h m1 m2, tr s (inr (mkact G h m1)) != None -> tr s (inr (mkact G h m2)) != None -> m1 == m2) ->
+                (forall s h m1 m2, h \in outputs -> tr s (inr (mkact G h m1)) != None -> tr s (inr (mkact G h m2)) != None -> m1 == m2) ->
                 (forall s i, i \in inputs -> forall (m : G i), tr s (inr (mkact G i m)) != None) -> PIOA G Delta.
   
 move => h1 h2 h3 h4.
@@ -200,6 +205,7 @@ Defined.
                                              
 
 (* TODO : move proof to Qed lemma *)
+(*
 Definition extendG {G D : context} (P : PIOA G D) (G' : context) :
   PIOA (G :+: G') D.
   Check decomp_act.
@@ -235,4 +241,54 @@ Definition extendG {G D : context} (P : PIOA G D) (G' : context) :
 
   move/mapP: Hi; elim; done.
 Defined.
+*)
 
+Section Reflections.
+  Context (Gamma Delta : context) (S : fastEnumType) (t : S -> (action Delta) + (action Gamma) -> option {meas S}) (inputs outputs : seq (cdom Gamma)) . 
+  Definition decide_ad_h :=
+    fall (S) (fun s => fall (cdom Delta) (fun h => fall (Delta h) (fun m1 => fall (Delta h) (fun m2 => (t s (inl (mkact Delta h m1)) != None) ==> (t s (inl (mkact Delta h m2)) != None) ==> (m1 == m2))))). 
+
+  Definition decide_ad_v :=
+    fall (S ) (fun s => all (fun h => fall (Gamma h) (fun m1 => fall (Gamma h) (fun m2 => (t s (inr (mkact Gamma h m1)) != None) ==> (t  s (inr (mkact Gamma h m2)) != None) ==> (m1 == m2)))) (outputs)).
+
+  Definition decide_i_a :=
+    fall (S) (fun s => all (fun i => fall (Gamma i) (fun m => t s (inr (mkact Gamma i m)) != None)) (inputs)).
+
+  Lemma decide_ad_hP :
+    reflect (forall (s : S) (h : cdom Delta) (m1 m2 : Delta h), t s (inl (mkact Delta h m1)) != None -> t s (inl (mkact Delta h m2)) != None -> m1 == m2) (decide_ad_h).
+    apply/(iffP idP); rewrite /decide_ad_h.
+
+    move => H s h m1 m2.
+    move/fallP: H; move/(_ s)/fallP/(_ h)/fallP/(_ m1)/fallP/(_ m2)/implyP => h1 h2.
+    move/implyP: (h1 h2); done.
+
+    move => H.
+    apply/fallP => s; apply/fallP => h; apply/fallP => m1; apply/fallP => m2; apply/implyP => h2; apply/implyP.
+    apply H; done.
+  Qed.
+
+
+  Lemma decide_ad_vP :
+    reflect (forall (s : S) (h : cdom Gamma) (m1 m2 : Gamma h), h \in outputs -> t s (inr (mkact Gamma h m1)) != None -> t s (inr (mkact Gamma h m2)) != None -> m1 == m2) (decide_ad_v).
+    apply/(iffP idP); rewrite /decide_ad_h.
+
+
+    move => H s h m1 m2 Hh.
+    move/fallP: H; move/(_ s)/allP/(_ _ Hh)/fallP/(_ m1)/fallP/(_ m2)/implyP => h1 h2.
+
+    move/implyP: (h1 h2); done.
+
+    move => H.
+    apply/fallP => s; apply/allP => h Hh; apply/fallP => m1; apply/fallP => m2; apply/implyP => h2; apply/implyP.
+    apply H; done.
+  Qed.
+
+  Lemma decide_i_aP :
+    reflect (forall s i, i \in inputs -> forall (m : Gamma i), t s (inr (mkact Gamma i m)) != None) (decide_i_a).
+    apply/(iffP idP); rewrite /decide_i_a.
+    move => H s i Hi m.
+    move/fallP: H; move/(_ s); move/allP;move/(_ i Hi);move/fallP/(_ m); done.
+    move => H; apply/fallP => x; apply/allP => i Hi; apply/fallP => m; apply H.
+done.
+  Qed.
+End Reflections.

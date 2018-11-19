@@ -2,7 +2,7 @@
 From mathcomp Require Import ssreflect ssrfun ssrbool ssrint eqtype ssrnat seq choice fintype rat finfun.
 From mathcomp Require Import bigop ssralg div ssrnum ssrint finset ssrnum ssrnat finmap.
 
-Require Import PIOA Meas Posrat Aux.
+Require Import PIOA Meas Posrat Aux FastEnum.
 
 Definition compatible {Gamma Delta Delta' : context} (P1 : PIOA Gamma Delta) (P2 : PIOA Gamma Delta') :=
   seq_disjoint (outputs P1) (outputs P2).
@@ -42,7 +42,7 @@ Lemma compPIOA1 :  seq_disjoint (seqD (inputs P1 ++ inputs P2) (outputs P1 ++ ou
   rewrite -notin_seq_all; done.
 Qed.
 
-Lemma compPIOA2 : forall (s : [finType of St P1 * St P2]) (h : cdom (D :+: D')) (m1 m2 : (D :+: D') h),
+Lemma compPIOA2 : forall (s : [fastEnumType of St P1 * St P2]) (h : cdom (D :+: D')) (m1 m2 : (D :+: D') h),
   compPIOAtr P1 P2 s (inl (mkact (D :+: D') h m1)) != None ->
   compPIOAtr P1 P2 s (inl (mkact (D :+: D') h m2)) != None -> m1 == m2.
   case => sa sb; case; rewrite //=.
@@ -54,35 +54,49 @@ Lemma compPIOA2 : forall (s : [finType of St P1 * St P2]) (h : cdom (D :+: D')) 
 Qed.
 
 Lemma compPIOA3 : 
-  forall (s : [finType of St P1 * St P2]) (h : cdom Gamma) (m1 m2 : Gamma h),
+  forall (s : [fastEnumType of St P1 * St P2]) (h : cdom Gamma) (m1 m2 : Gamma h), h \in (outputs P1 ++ outputs P2) ->
   compPIOAtr P1 P2 s (inr (mkact Gamma h m1)) != None ->
   compPIOAtr P1 P2 s (inr (mkact Gamma h m2)) != None -> m1 == m2.
 
-  case => sa sb c m1 m2; rewrite /compPIOAtr.
+  case => sa sb c m1 m2 Hc; rewrite /compPIOAtr.
   simpl.
   remember (c \in inputs P1 ++ outputs P1) as b1; symmetry in Heqb1; rewrite Heqb1.
   remember (c \in inputs P2 ++ outputs P2) as b2; symmetry in Heqb2; rewrite Heqb2.
   destruct b1; destruct b2.
+
   move/obind_neq_none; elim => x; elim => fx; elim => Heqtr1; rewrite //=.
   move/eqP/obind_eq_some; elim => x0; elim => htr2 h3.
 
   move/obind_neq_none; elim => y; elim => fy; elim => Heqtr2.
   move/eqP/obind_eq_some; elim => x0'; elim => htr2' h3'.
-  apply (ad_v P1 sa); rewrite ?Heqtr1 ?Heqtr2 //=.
 
+  rewrite mem_cat in Hc; move/orP: Hc; elim => Hc.
+
+  apply (ad_v P1 sa); rewrite ?Heqtr1 ?Heqtr2 ?htr2 ?htr2' //=.
+  apply (ad_v P2 sb); rewrite ?Heqtr1 ?Heqtr2 ?htr2 ?htr2' //=.
+
+  have Hc2: c \notin outputs P2.
+  apply contraT; rewrite negbK => Hc2.
+  rewrite mem_cat Hc2 orbT //= in Heqb2.
 
   move/obind_neq_none; elim => x; elim => fx; elim => h1 h2.
   move/obind_neq_none; elim => x'; elim => fx'; elim => h1' h2'.
   apply (ad_v P1 sa); rewrite ?h1 ?h1' //=.
+  rewrite mem_cat (negbTE Hc2) orbF //= in Hc.
+
+  have Hc1: c \notin outputs P1.
+  apply contraT; rewrite negbK => Hc1.
+  rewrite mem_cat Hc1 orbT //= in Heqb1.
 
   move/obind_neq_none; elim => x; elim => fx; elim => h1 h2.
   move/obind_neq_none; elim => x'; elim => fx'; elim => h1' h2'.
   apply (ad_v P2 sb); rewrite ?h1 ?h1' //=.
+  rewrite mem_cat (negbTE Hc1) orFb //= in Hc.
   done.
 Qed.
 
 Lemma compPIOA4 : 
-  forall (s : [finType of St P1 * St P2]) (i : cdom Gamma),
+  forall (s : [fastEnumType of St P1 * St P2]) (i : cdom Gamma),
   i \in seqD (inputs P1 ++ inputs P2) (outputs P1 ++ outputs P2) ->
   forall m : Gamma i, compPIOAtr P1 P2 s (inr (mkact Gamma i m)) != None.
   case => sa sb i; move/seqDP; elim.
@@ -110,7 +124,7 @@ Lemma compPIOA4 :
 Qed.
 
 Definition compPIOA : PIOA Gamma (D :+: D').
-  apply (mkPIOA Gamma ([finType of St P1 * St P2]) (start P1, start P2) (seqD (inputs P1 ++ inputs P2) (outputs P1 ++ outputs P2)) (outputs P1 ++ outputs P2) ((D) :+: (D')) (compPIOAtr P1 P2)).
+  apply (mkPIOA Gamma ([fastEnumType of St P1 * St P2]) (start P1, start P2) (seqD (inputs P1 ++ inputs P2) (outputs P1 ++ outputs P2)) (outputs P1 ++ outputs P2) ((D) :+: (D')) (compPIOAtr P1 P2)).
   apply compPIOA1.
   apply compPIOA2.
   apply compPIOA3.
@@ -137,8 +151,8 @@ Lemma app_h_comp_l h s : app_h (P1 ||| E) (inl h) s = (x <- app_h P1 h s.1; ret 
   case: pickP.
   rewrite //= => x Hx.
   remember (tr P1 s.1 (inl (mkact (D) h x))) as o; rewrite -Heqo; destruct o; rewrite //=.
-  rewrite bindRet_l; by destruct s.
-  move => H; rewrite //= bindRet_l. by destruct s.
+  rewrite ret_bind; by destruct s.
+  move => H; rewrite //= ret_bind. by destruct s.
 Qed.
 
 Lemma app_h_comp_r h s : app_h (P1 ||| E) (inr h) s = (x <- app_h E h s.2; ret (s.1, x)).
@@ -153,8 +167,8 @@ Lemma app_h_comp_r h s : app_h (P1 ||| E) (inr h) s = (x <- app_h E h s.2; ret (
   case: pickP.
   rewrite //= => x Hx.
   remember (tr E s.2 (inl (mkact (D') h x))) as o; rewrite -Heqo; destruct o; rewrite //=.
-  rewrite bindRet_l; by destruct s.
-  move => H; rewrite //= bindRet_l. by destruct s.
+  rewrite ret_bind; by destruct s.
+  move => H; rewrite //= ret_bind. by destruct s.
 Qed.
 
 Lemma achoose_v_comp_l c s (Hcompat : compatible P1 E) : c \in outputs P1 ->
@@ -205,81 +219,84 @@ Qed.
         act (P1 ||| E) (inl (inl hl)) mu =
         (st <- mu; s' <- app_h P1 hl st.1.1; ret ((s', st.1.2), st.2)).
   simpl.
-  apply measBind_eqP => xt Hxt.
-  rewrite app_h_comp_l bindAssoc; apply measBind_eqP => s' Hs'; rewrite bindRet_l //=.
+  apply mbind_eqP => xt Hxt.
+  rewrite app_h_comp_l mbindA; apply mbind_eqP => s' Hs'; rewrite ret_bind //=.
   Qed.
 
   Lemma hidden2P hr :
         act (P1 ||| E) (inl (inr hr)) mu =
         (st <- mu; s' <- app_h E hr st.1.2; ret ((st.1.1, s'), st.2)).
-  simpl; apply measBind_eqP => xt Hxt.
-  rewrite app_h_comp_r bindAssoc; apply measBind_eqP => s' Hs'; rewrite bindRet_l //=.
+  simpl; apply mbind_eqP => xt Hxt.
+  rewrite app_h_comp_r mbindA; apply mbind_eqP => s' Hs'; rewrite ret_bind //=.
   Qed.
 
   Lemma out1_extP ol (Hcompat : compatible P1 E) : ol \in outputs P1 -> ol \notin inputs E ->
         act (P1 ||| E) (inr ol) mu =
         (st <- mu; let ox := achoose_v P1 ol st.1.1 in s' <- app_ova P1 ox st.1.1; ret ((s', st.1.2), ocons ox st.2)).
-  move => H1 H2; simpl; apply measBind_eqP => st Hst.
+  move => H1 H2; simpl; apply mbind_eqP => st Hst.
   rewrite achoose_v_comp_l; rewrite //=.
 
   remember (achoose_v P1 ol st.1.1) as oa; destruct oa; rewrite -Heqoa.
   simpl.
-  symmetry in Heqoa; apply achoose_vP in Heqoa; move/andP: Heqoa => [h1 h2].
+  symmetry in Heqoa; apply achoose_vP in Heqoa; last by done.
+  move/andP: Heqoa => [h1 h2].
   rewrite (eqP h2).
   rewrite !mem_cat H1 (negbTE H2) orbT //=.
   move/seq_disjointP: Hcompat;move/(_ _ H1) => Hn; rewrite (negbTE Hn)//=.
 
   remember (tr P1 st.1.1 (inr s)) as t; destruct t; rewrite -Heqt ; simpl.
-  rewrite bindAssoc; apply measBind_eqP => s' Hs'.
-  rewrite bindRet_l; done.
+  rewrite mbindA; apply mbind_eqP => s' Hs'.
+  rewrite ret_bind; done.
 
-  rewrite !bindRet_l; destruct st as [[? ?] ?]; done. 
+  rewrite !ret_bind; destruct st as [[? ?] ?]; done. 
 
-  simpl; rewrite !bindRet_l; destruct st as [[? ?] ?]; done.
+  simpl; rewrite !ret_bind; destruct st as [[? ?] ?]; done.
   Qed.
 
 
   Lemma out2_extP ol (Hcompat : compatible P1 E) : ol \in outputs E -> ol \notin inputs P1 ->
         act (P1 ||| E) (inr ol) mu =
         (st <- mu; let ox := achoose_v E ol st.1.2 in s' <- app_ova E ox st.1.2; ret ((st.1.1, s'), ocons ox st.2)).
-  move => H1 H2; simpl; apply measBind_eqP => st Hst.
+  move => H1 H2; simpl; apply mbind_eqP => st Hst.
   rewrite achoose_v_comp_r; rewrite //=.
 
   remember (achoose_v E ol st.1.2) as oa; destruct oa; rewrite -Heqoa.
   simpl.
-  symmetry in Heqoa; apply achoose_vP in Heqoa; move/andP: Heqoa => [h1 h2].
+  symmetry in Heqoa; apply achoose_vP in Heqoa; last by done.
+  move/andP: Heqoa => [h1 h2].
   rewrite (eqP h2).
  rewrite !mem_cat H1 (negbTE H2) orbT; simpl.
  
   rewrite /compatible seq_disjoint_sym in Hcompat; move/seq_disjointP: Hcompat; move/(_ _ H1) => Hn; rewrite (negbTE Hn)//=.
 
   remember (tr E st.1.2 (inr s)) as t; destruct t; rewrite -Heqt ; simpl.
-  rewrite bindAssoc; apply measBind_eqP => s' Hs'.
-  rewrite bindRet_l; done.
+  rewrite mbindA; apply mbind_eqP => s' Hs'.
+  rewrite ret_bind; done.
 
-  rewrite !bindRet_l; destruct st as [[? ?] ?]; done. 
+  rewrite !ret_bind; destruct st as [[? ?] ?]; done. 
 
-  simpl; rewrite !bindRet_l; destruct st as [[? ?] ?]; done.
+  simpl; rewrite !ret_bind; destruct st as [[? ?] ?]; done.
   Qed.
 
   Lemma out1_intP ol (Hc : compatible P1 E) : ol \in outputs P1 -> ol \in inputs E ->
         act (P1 ||| E) (inr ol) mu =
         (st <- mu; let ox := achoose_v P1 ol st.1.1 in s1' <- app_ova P1 ox st.1.1; s2' <- app_ova E ox st.1.2; ret ((s1', s2'), ocons ox st.2)). 
-  move => h1 h2; simpl; apply measBind_eqP => st Hst; simpl; rewrite achoose_v_comp_l.
+  move => h1 h2; simpl; apply mbind_eqP => st Hst; simpl; rewrite achoose_v_comp_l.
   remember (achoose_v P1 ol st.1.1) as oa; destruct oa; rewrite -Heqoa; simpl.
-  symmetry in Heqoa; apply achoose_vP in Heqoa; move/andP: Heqoa => [h3 h4].
+  symmetry in Heqoa; apply achoose_vP in Heqoa; last by done.
+  move/andP: Heqoa => [h3 h4].
   rewrite (eqP h4) !mem_cat h1 h2 orbT //=.
   remember (tr P1 st.1.1 (inr s)) as ot; destruct ot; rewrite -Heqot; simpl.
   have: tr E st.1.2 (inr s) != None.
    by apply (inputEnabled E); rewrite (eqP h4).
   move/opt_neq_none; elim => tE HeqtE.
   rewrite HeqtE; simpl.
-  rewrite !bindAssoc; apply measBind_eqP => s' Hs'.
-  rewrite bindAssoc; apply measBind_eqP => y Hy.
-  rewrite bindRet_l; done.
+  rewrite !mbindA; apply mbind_eqP => s' Hs'.
+  rewrite mbindA; apply mbind_eqP => y Hy.
+  rewrite ret_bind; done.
   rewrite /enabled -Heqot //= in h3.
 
-  rewrite !bindRet_l; destruct st as [[? ?] ?]; done.
+  rewrite !ret_bind; destruct st as [[? ?] ?]; done.
   done.
   done.
  Qed.
@@ -287,9 +304,10 @@ Qed.
   Lemma out2_intP ol (Hc : compatible P1 E) : ol \in outputs E -> ol \in inputs P1 ->
         act (P1 ||| E) (inr ol) mu =
         (st <- mu; let ox := achoose_v E ol st.1.2 in s1' <- app_ova P1 ox st.1.1; s2' <- app_ova E ox st.1.2; ret ((s1', s2'), ocons ox st.2)). 
-  move => h1 h2; simpl; apply measBind_eqP => st Hst; simpl; rewrite achoose_v_comp_r.
+  move => h1 h2; simpl; apply mbind_eqP => st Hst; simpl; rewrite achoose_v_comp_r.
   remember (achoose_v E ol st.1.2) as oa; destruct oa; rewrite -Heqoa; simpl.
-  symmetry in Heqoa; apply achoose_vP in Heqoa; move/andP: Heqoa => [h3 h4].
+  symmetry in Heqoa; apply achoose_vP in Heqoa; last by done.
+  move/andP: Heqoa => [h3 h4].
   rewrite (eqP h4) !mem_cat h1 h2 orbT //=.
   have: tr P1 st.1.1 (inr s) != None.
     by apply (inputEnabled P1); rewrite (eqP h4).
@@ -297,11 +315,11 @@ Qed.
   rewrite Heqt1; simpl.
 
   remember (tr E st.1.2 (inr s)) as ot; destruct ot; rewrite -Heqot; simpl.
-  rewrite bindAssoc; apply measBind_eqP => s' Hs'; rewrite bindAssoc; apply measBind_eqP => x Hx.
-  rewrite bindRet_l //=.
+  rewrite mbindA; apply mbind_eqP => s' Hs'; rewrite mbindA; apply mbind_eqP => x Hx.
+  rewrite ret_bind //=.
   rewrite /enabled -Heqot //= in h3.
 
-  rewrite !bindRet_l; destruct st as [[? ?] ?]; done.
+  rewrite !ret_bind; destruct st as [[? ?] ?]; done.
   done.
   done.
  Qed.  

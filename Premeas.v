@@ -349,3 +349,17 @@ Lemma nubbed_sort_keys {A : choiceType} (M : PMeas A) :
   done.
 Qed.
 
+
+Lemma integ_app {A : choiceType} (d1 d2 : PMeas A) f : integ (d1 ++ d2) f = integ d1 f + integ d2 f.
+  unfold integ.
+  rewrite big_cat //=.
+Qed.
+
+
+Lemma indicator_eq0 {A : eqType} (x y : A) : (indicator x y == 0) = (x != y).
+  rewrite /indicator; case (x == y); done.
+Qed.
+
+Lemma indicator_neq0 {A : eqType} (x y : A) : (indicator x y != 0) = (x == y).
+  rewrite /indicator; case (x == y); rewrite //=. 
+Qed.

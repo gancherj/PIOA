@@ -99,6 +99,19 @@ Section FastEnumDefs.
     apply H.
     apply mem_fastEnum.
   Qed.
+
+  Check allP.
+
+  Definition fall p := all p fastEnum.
+
+  Lemma fallP (p : T -> bool) : reflect (forall (x : T), p x) (fall p).
+    rewrite /fall.
+    apply/(iffP idP).
+    rewrite -forall_fastEnum; move/forallP; done.
+    move/forallP; rewrite forall_fastEnum; done.
+  Qed.
+
+
 End FastEnumDefs.
 
 

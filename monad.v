@@ -141,11 +141,11 @@ Canonical stateMonadType S := Eval hnf in MonadType _ _ _ _ (stateMonadMixin S).
 
 Check (fun (c : State _ _) => (x <- c; put x)).
 
-Lemma meas_monad : Monad.axiom choiceType Choice.sort Meas.Meas (fun A => @eq (Meas.Meas A)) (fun (A : choiceType) (x : Choice.sort A) => Meas.measRet x) (fun (A B : choiceType) (ma : Meas.Meas A) (f : A -> Meas.Meas B) => Meas.measBind ma f).
+Lemma meas_monad : Monad.axiom choiceType Choice.sort Meas.Meas (fun A => @eq (Meas.Meas A)) (fun (A : choiceType) (x : Choice.sort A) => Meas.mret x) (fun (A B : choiceType) (ma : Meas.Meas A) (f : A -> Meas.Meas B) => Meas.mbind ma f).
   constructor; rewrite //=.
-  move => A B x f; rewrite Meas.bindRet_l //=.
-  move => A m; rewrite Meas.bindRet_r //=.
-  move => A B C m f g; rewrite Meas.bindAssoc //=.
+  move => A B x f; rewrite Meas.ret_bind //=.
+  move => A m; rewrite Meas.bind_ret //=.
+  move => A B C m f g; rewrite Meas.mbindA //=.
 Qed.
 
 Canonical measMonadMixin := MonadMixin _ _ _ _ _ _ meas_monad.

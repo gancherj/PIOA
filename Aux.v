@@ -506,3 +506,40 @@ Lemma mem_seqD {A : eqType} (xs ys : seq A) x :
   elim (seqDP _ _ _ H) => -> -> //=.
   apply/seqDP; split; elim (andP H); done.
 Qed.
+
+Lemma all2P {X Y : eqType} (s1 : seq X) (s2 : seq Y) (p : X -> Y -> bool) :
+  reflect (forall x, x \in s1 -> forall y, y \in s2 -> p x y) (all (fun x => all (fun y => p x y) s2) s1).
+  apply/(iffP idP).
+  move/allP => H x Hx y Hy.
+  move: (allP (H x Hx));move/(_ y Hy); done.
+
+  move => H; apply/allP => x Hx; apply/allP => y Hy; apply H; done.
+Qed.
+
+Definition odflt_dep {A B} (p : A -> bool) (f : forall x (H : p x), B) (d : B) (x : A) : B :=
+  match (Sumbool.sumbool_of_bool (p x)) with
+  | left Heq => f x Heq
+  | _ => d
+           end.
+
+Lemma odflt_depP {A B} (p : A -> bool) x (f : forall x (H : p x), B) d (H : p x) :
+  odflt_dep p f d x = f x H.
+rewrite /odflt_dep.
+case: (Sumbool.sumbool_of_bool (p x)).
+move=> a; have: H = a by apply bool_irrelevance.
+move => ->; done.
+rewrite H; done.
+Qed.
+
+Lemma allpairs_seq1 {A B C : eqType} (xs : seq A) (y : B) (f : A -> B -> C) :
+  [seq f a b | a <- xs, b <- [:: y]] = [seq f a y | a <- xs].
+  induction xs; rewrite //=.
+Qed.
+
+
+Lemma all_memeq {X : eqType} (s2 s1 : seq X) p :
+  s1 =i s2 -> all p s1 = all p s2.
+  move => H; apply Bool.eq_true_iff_eq; split; move/allP => H'; apply/allP => x Hx.
+  apply H'; rewrite H; done.
+  apply H'; rewrite -H; done.
+Qed.
