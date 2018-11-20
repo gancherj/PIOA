@@ -131,7 +131,7 @@ Defined.
 End CompPIOADef.
 Notation "P1 ||| P2" := (compPIOA P1 P2) (at level 70).
 
-(*
+
 Section CompProps.
 
   Context {Gamma D D' : ctx} (P1 : PIOA Gamma D) (E : PIOA Gamma D') 
@@ -323,4 +323,3 @@ Qed.
  Qed.  
   
 End CompProps.
-*)
