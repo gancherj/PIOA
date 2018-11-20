@@ -2,11 +2,28 @@
 From mathcomp Require Import ssreflect ssrfun ssrbool ssrint eqtype ssrnat seq choice fintype rat finfun.
 From mathcomp Require Import bigop ssralg div ssrnum ssrint finmap.
 
-Require Import Meas Aux PIOA Ascii String SSRString FastEnum.
+Require Import Meas Aux PIOA Ascii String CompPIOA SSRString FastEnum Action.
 Open Scope string_scope.
 
 Check mkPIOA.
 
+Definition ctx_bij_trans {C D E : ctx} (H1 : C ~~ D) (H2 : D ~~ E) : C ~~ E.
+  apply (Bij C E (fun x => lr H2 (lr H1 x)) (fun y => rl H1 (rl H2 y))).
+  move => x; rewrite !(lr_can) //=.
+  move => y; rewrite !(rl_can) //=.
+  move => c.
+  rewrite (ctx_eq H1) (ctx_eq H2) //=.
+Defined.
+
+Definition ctx_is_empty_l {C D : ctx} (H : C ~~ emptyCtx) : D ~~ (C :+: D).
+ apply (Bij D (C :+: D) (fun x => inr x) (fun x => match x with | inl a => match (lr H a) with end | inr a => a end)).
+ done.
+ case => a; rewrite //=.
+ generalize (H *c a).
+ case.
+ move => x; simpl.
+ done.
+Defined.
 
 Inductive RPSContextM :=
   choose | committed | reveal | commit | open | winner.
@@ -96,18 +113,6 @@ Definition rps_win_tie (va vb : option play) :=
   | _, _ => false
               end.
 
-Print context.
-
-(* to put in FastEnum *)
-Definition unit_fe : FastEnum.axiom _ [:: tt].
-  apply uniq_perm_eq.
-  done.
-  rewrite enum_uniq //=.
-  case; rewrite mem_enum //=.
-Qed.
-
-Canonical unit_feType := FastEnumType unit (FastEnumMixin _ _ unit_fe).
-
 Definition RPSContext_f (x : RPSContextM * bool) : fastEnumType  :=
   match x.1 with
     | (choose) => [fastEnumType of play]
@@ -121,14 +126,12 @@ Definition RPSContext_f (x : RPSContextM * bool) : fastEnumType  :=
 Definition RPSContext :=
   mkCon ([fastEnumType of RPSContextM * bool])%type RPSContext_f.
 
-Definition emptyContext :=
-  mkCon [fastEnumType of unit] (fun _ => [fastEnumType of unit]).
 
 Definition playerSt := (option play * option play * bool * bool)%type.
 
   
 
-Definition player_trans (wh : bool) (s : playerSt) (a : action emptyContext + action RPSContext) : option {meas playerSt}:=
+Definition player_trans (wh : bool) (s : playerSt) (a : action emptyCtx + action RPSContext) : option {meas playerSt}:=
   let vme := s.1.1.1 in
   let vother := s.1.1.2 in
   let cme := s.1.2 in
@@ -162,35 +165,27 @@ Definition player_trans (wh : bool) (s : playerSt) (a : action emptyContext + ac
   | _ => None                                                                                          
       end.
   
-Definition playerA : PIOA RPSContext emptyContext.
-  eapply mkPIOA.
-  apply ((None, None, false, false) : playerSt).
-  instantiate (2 := [:: (choose, true); (committed, false); (reveal, false)]).
-  instantiate (1 := [:: (commit, true); (open, true); (winner, true)]).
-  done.
-  instantiate (1 := (player_trans true)).
-  done.
-  apply/decide_ad_vP.
-  by vm_compute.
-  apply/decide_i_aP.
-  by vm_compute.
+Definition playerA : PIOA RPSContext emptyCtx.
+  mkPIOA_tac
+    RPSContext
+    emptyCtx
+    ((None, None, false, false) : playerSt)
+    [:: (choose, true); (committed, false); (reveal, false)]
+    [:: (commit, true); (open, true); (winner, true)]   
+    (player_trans true).
 Defined.
 
-Definition playerB : PIOA RPSContext emptyContext.
-  eapply mkPIOA.
-  apply ((None, None, false, false) : playerSt).
-  instantiate (2 := [:: (choose, false); (committed, true); (reveal, true)]).
-  instantiate (1 := [:: (commit, false); (open, false); (winner, false)]).
-  done.
-  instantiate (1 := (player_trans false)).
-  done.
-  apply/decide_ad_vP.
-  by vm_compute.
-  apply/decide_i_aP.
-  by vm_compute.
+Definition playerB : PIOA RPSContext emptyCtx.
+  mkPIOA_tac
+    RPSContext
+    emptyCtx
+    ((None, None, false, false) : playerSt)
+    [:: (choose, false); (committed, true); (reveal, true)]
+    [:: (commit, false); (open, false); (winner, false)]   
+    (player_trans false).
 Defined.
 
-Definition Ftrans (s : playerSt) (a : action emptyContext + action RPSContext) : option {meas playerSt} :=
+Definition Ftrans (s : playerSt) (a : action emptyCtx + action RPSContext) : option {meas playerSt} :=
   let va := s.1.1.1 in
   let vb := s.1.1.2 in
   let opa := s.1.2 in
@@ -214,16 +209,102 @@ Definition Ftrans (s : playerSt) (a : action emptyContext + action RPSContext) :
     if (opb && (vb == Some x)) then Some (ret s) else None
   | _ => None end.
                                                           
-Definition Funct : PIOA RPSContext emptyContext.
-  eapply mkPIOA.
-  apply ((None, None, false,false) : playerSt).
-  instantiate (2 := [:: (commit, true); (commit, false); (open, true); (open, false)]). 
-  instantiate (1 := [:: (committed, true); (committed, false); (reveal, true); (reveal, false)]).
-  done.
-  instantiate (1 := Ftrans).
-  done.
-  apply/decide_ad_vP.
-  by vm_compute.
-  apply/decide_i_aP.
-  by vm_compute.
+Definition Funct : PIOA RPSContext emptyCtx.
+  mkPIOA_tac
+    RPSContext
+    emptyCtx
+    ((None, None, false, false) : playerSt)
+    [:: (commit, true); (commit, false); (open, true); (open,false)]
+    [:: (committed, true); (committed, false); (reveal, true); (reveal, false)]
+    Ftrans.
 Defined.
+
+Lemma compatAB : compatible playerA playerB.
+  done.
+Qed.
+
+Lemma compatABF : compatible (playerA ||| playerB) Funct.
+  done.
+Qed.
+
+Definition rpshide : seq (cdom RPSContext) :=
+  [:: (commit, true); (commit, false);
+      (committed, true); (committed, false);
+      (open, true); (open, false);
+      (reveal, true); (reveal, false)].
+
+Definition IRPS : PIOA RPSContext (RPSContext |c_ rpshide).
+  eapply changeH.
+  apply (hidePIOA (playerA ||| playerB ||| Funct) rpshide).
+  done.
+  apply ctx_is_empty_l.
+  apply ctx_symm.
+  apply ctx_is_empty_l.
+  apply ctx_symm; apply empty_plus_r.
+Defined.
+
+Definition FReal (wh : bool) (s : option play * bool) (a : action emptyCtx + action RPSContext) :=
+  let val := s.1 in
+  let op := s.2 in
+  match a with
+  | inr (existT (commit, b) m) =>
+    if wh == b then Some (ret (if val == None then Some m else val, op)) else None
+  | inr (existT (committed, b) m) =>
+    if (wh == b) && (val != None) then Some (ret s) else None
+  | inr (existT (open, b) m) =>
+    if (wh == b) then Some (ret (val, true)) else None
+  | inr (existT (reveal, b) m) =>
+    if (wh == b) && op && (val == Some m) then Some (ret s) else None
+  | _ => None end.                                                                   
+                      
+Definition FB : PIOA RPSContext emptyCtx.
+  mkPIOA_tac
+    RPSContext
+    emptyCtx
+    ((None, false) : option play * bool)
+    [:: (commit, true); (open, true)]
+    [:: (committed, true); (reveal, true)]
+    (FReal true).
+Defined.
+
+Definition FA : PIOA RPSContext emptyCtx.
+  mkPIOA_tac
+    RPSContext
+    emptyCtx
+    ((None, false) : option play * bool)
+    [:: (commit, false); (open, false)]
+    [:: (committed, false); (reveal, false)]
+    (FReal false).
+Defined.
+    
+
+Definition RRPS : PIOA RPSContext (RPSContext |c_ rpshide).
+  eapply changeH.
+  apply (hidePIOA (playerA ||| playerB ||| FA ||| FB) rpshide).
+  done.
+
+  apply ctx_is_empty_l.
+  apply ctx_symm; apply ctx_is_empty_l.
+  apply ctx_symm; apply ctx_is_empty_l.
+  apply ctx_symm; apply empty_plus_r.
+Defined.
+
+Goal (tr (playerA |||  FA) (start (playerA |||  FA)) (inr (mkact RPSContext (choose,true) rock))) = None.
+  rewrite /compPIOA /tr; cbv.
+  Time
+  simpl.
+
+Goal (tr (playerA) (start (playerA)) (inr (mkact RPSContext (choose,true) rock))) = None.
+  Time simpl.
+  
+Goal (tr (playerA ||| playerB ||| FA ||| FB) (start (playerA ||| playerB ||| FA ||| FB)) (inr (mkact RPSContext (choose,true) rock))) = None.
+  vm_compute.
+  rewrite /=.
+  simpl.
+  rewrite mbindA.
+  Set Printing All.
+  rewrite /tr.
+  vm_compute.
+  simpl.
+Compute (outputs IRPS).
+Compute ((committed, true) \in (inputs RRPS)).  

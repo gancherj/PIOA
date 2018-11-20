@@ -8,6 +8,7 @@ Posrat.v
 Premeas.v
 Meas.v
 Lifting.v
+Action.v
 PIOA.v
 Refinement.v
 CompPIOA.v

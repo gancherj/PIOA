@@ -2,6 +2,8 @@
 From mathcomp Require Import ssreflect ssrfun ssrbool ssrint eqtype ssrnat seq choice fintype rat finfun.
 From mathcomp Require Import bigop ssralg div ssrnum ssrint order finmap.
 
+Require Import Aux.
+
 Module FastEnum.
 
 Definition axiom (T : finType) (s : seq T) := perm_eq s (enum T).
@@ -114,6 +116,16 @@ Section FastEnumDefs.
 
 End FastEnumDefs.
 
+(* unit *)
+Definition unit_fe : FastEnum.axiom _ [:: tt].
+  apply uniq_perm_eq.
+  done.
+  rewrite enum_uniq //=.
+  case; rewrite mem_enum //=.
+Qed.
+
+Canonical unit_feType := FastEnumType unit (FastEnumMixin _ _ unit_fe).
+
 
 (* bool *)
 
@@ -207,3 +219,44 @@ Qed.
 
 Canonical sumfastEnumMixin (T1 T2 : fastEnumType) := FastEnumMixin _ _ (fast_enum_sum T1 T2).
 Canonical sumfastEnumType (T1 T2 : fastEnumType) := FastEnumType _ (sumfastEnumMixin T1 T2).
+
+Check SeqSub.
+
+Definition seqsub {T : choiceType} (s : seq T) (x : T) :=
+  match Sumbool.sumbool_of_bool (x \in s) with
+    | left Heq => Some (SeqSub Heq)
+    | _ => None
+             end.
+
+
+Lemma seqsub_pmap_in {T : choiceType} (s : seq T) x (H : x \in s) :
+  (SeqSub H) \in (pmap (seqsub s) (undup s)).
+  rewrite mem_pmap.
+  apply/mapP.
+  exists x.
+  rewrite mem_undup //=.
+  rewrite /seqsub.
+  remember (Sumbool.sumbool_of_bool (x \in s)) as p; rewrite -Heqp; destruct p.
+  have -> //= : H = e.
+  apply bool_irrelevance.
+  have e2 := e.
+  rewrite H in e2; done.
+Qed.
+
+Lemma seq_sub_fe (T : choiceType) (s : seq T) : FastEnum.axiom ([finType of seq_sub s]) (pmap (seqsub s) (undup s)).
+  apply uniq_perm_eq; rewrite ?mem_uniq //=.
+  eapply pmap_uniq.
+  instantiate (1 := fun x => ssval x).
+  move => x; rewrite /seqsub //=.
+  remember (Sumbool.sumbool_of_bool (x \in s)) as s0; destruct s0; rewrite -Heqs0; done.
+  apply undup_uniq.
+  apply enum_uniq.
+  move => x; rewrite mem_enum //=. 
+  have -> : x \in [finType of seq_sub s].
+  done.
+  destruct x; simpl.
+  rewrite seqsub_pmap_in.
+  done.
+Qed.
+
+Canonical fastEnumSeqSubType (T : choiceType) (s : seq T) := FastEnumType _ (FastEnumMixin _ _ (seq_sub_fe T s)).

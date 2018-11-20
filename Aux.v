@@ -516,6 +516,19 @@ Lemma all2P {X Y : eqType} (s1 : seq X) (s2 : seq Y) (p : X -> Y -> bool) :
   move => H; apply/allP => x Hx; apply/allP => y Hy; apply H; done.
 Qed.
 
+Fixpoint opt_seq_red {A} (s : seq (option A)) :=
+  match s with
+  | nil => nil
+  | (Some x) :: xs => x :: (opt_seq_red xs)
+  | (None) :: xs => (opt_seq_red xs)
+                      end.
+
+Definition map_dep {A B : eqType} (s : seq A) (p : forall (x : A), x \in s -> B) : seq B :=
+  opt_seq_red (map (fun x =>
+         match (Sumbool.sumbool_of_bool (x \in s)) with
+           | left heq => Some (p x heq)
+           | _ => None end) s).
+
 Definition odflt_dep {A B} (p : A -> bool) (f : forall x (H : p x), B) (d : B) (x : A) : B :=
   match (Sumbool.sumbool_of_bool (p x)) with
   | left Heq => f x Heq

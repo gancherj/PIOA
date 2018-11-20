@@ -2,9 +2,9 @@
 From mathcomp Require Import ssreflect ssrfun ssrbool ssrint eqtype ssrnat seq choice fintype rat finfun.
 From mathcomp Require Import bigop ssralg div ssrnum ssrint finset ssrnum ssrnat finmap.
 
-Require Import PIOA Meas Posrat Aux FastEnum.
+Require Import PIOA Meas Posrat Aux FastEnum Action.
 
-Definition compatible {Gamma Delta Delta' : context} (P1 : PIOA Gamma Delta) (P2 : PIOA Gamma Delta') :=
+Definition compatible {Gamma Delta Delta' : ctx} (P1 : PIOA Gamma Delta) (P2 : PIOA Gamma Delta') :=
   seq_disjoint (outputs P1) (outputs P2).
 
 (* TODO: unify monad syntax *)
@@ -12,15 +12,12 @@ Check omap.
 Check obind.
 
 
-Definition compPIOAtr {Gamma Delta Delta' : context} (P1 : PIOA Gamma Delta) (P2 : PIOA Gamma Delta') (s : St P1 * St P2) (h_a : action (Delta :+: Delta') + action Gamma) : option {meas (St P1) * (St P2)} :=
+Definition compPIOAtr {Gamma Delta Delta' : ctx} (P1 : PIOA Gamma Delta) (P2 : PIOA Gamma Delta') (s : St P1 * St P2) (h_a : action (Delta :+: Delta') + action Gamma) : option {meas (St P1) * (St P2)} :=
     match h_a with
-    | inl h_ab => 
-      match (decomp_act h_ab) with
-      | inl ha =>
-        (tr P1 s.1 (inl ha)) <$>o fun mu => (s' <- mu; ret (s', s.2))
-      | inr hb => 
-        (tr P2 s.2 (inl hb)) <$>o fun mu => (s' <- mu; ret (s.1, s'))
-      end
+    | inl (existT (inl ha) m) =>
+      (tr P1 s.1 (inl (mkact Delta ha m))) <$>o fun mu => (s' <- mu; ret (s', s.2))
+    | inl (existT (inr hb) m) =>
+      (tr P2 s.2 (inl (mkact Delta' hb m))) <$>o fun mu => (s' <- mu; ret (s.1, s'))
     | inr a => 
       match tag a \in (inputs P1 ++ outputs P1), tag a \in (inputs P2 ++ outputs P2) with
       | true, true =>
@@ -32,7 +29,7 @@ Definition compPIOAtr {Gamma Delta Delta' : context} (P1 : PIOA Gamma Delta) (P2
         end.
 
 Section CompPIOADef.
-  Context {Gamma D D' : context} (P1 : PIOA Gamma D) (P2 : PIOA Gamma D').
+  Context {Gamma D D' : ctx} (P1 : PIOA Gamma D) (P2 : PIOA Gamma D').
 
 Lemma compPIOA1 :  seq_disjoint (seqD (inputs P1 ++ inputs P2) (outputs P1 ++ outputs P2))
     (outputs P1 ++ outputs P2).
@@ -42,7 +39,7 @@ Lemma compPIOA1 :  seq_disjoint (seqD (inputs P1 ++ inputs P2) (outputs P1 ++ ou
   rewrite -notin_seq_all; done.
 Qed.
 
-Lemma compPIOA2 : forall (s : [fastEnumType of St P1 * St P2]) (h : cdom (D :+: D')) (m1 m2 : (D :+: D') h),
+Lemma compPIOA2 : forall (s : [choiceType of St P1 * St P2]) (h : cdom (D :+: D')) (m1 m2 : (D :+: D') h),
   compPIOAtr P1 P2 s (inl (mkact (D :+: D') h m1)) != None ->
   compPIOAtr P1 P2 s (inl (mkact (D :+: D') h m2)) != None -> m1 == m2.
   case => sa sb; case; rewrite //=.
@@ -54,7 +51,7 @@ Lemma compPIOA2 : forall (s : [fastEnumType of St P1 * St P2]) (h : cdom (D :+: 
 Qed.
 
 Lemma compPIOA3 : 
-  forall (s : [fastEnumType of St P1 * St P2]) (h : cdom Gamma) (m1 m2 : Gamma h), h \in (outputs P1 ++ outputs P2) ->
+  forall (s : [choiceType of St P1 * St P2]) (h : cdom Gamma) (m1 m2 : Gamma h), h \in (outputs P1 ++ outputs P2) ->
   compPIOAtr P1 P2 s (inr (mkact Gamma h m1)) != None ->
   compPIOAtr P1 P2 s (inr (mkact Gamma h m2)) != None -> m1 == m2.
 
@@ -96,7 +93,7 @@ Lemma compPIOA3 :
 Qed.
 
 Lemma compPIOA4 : 
-  forall (s : [fastEnumType of St P1 * St P2]) (i : cdom Gamma),
+  forall (s : [choiceType of St P1 * St P2]) (i : cdom Gamma),
   i \in seqD (inputs P1 ++ inputs P2) (outputs P1 ++ outputs P2) ->
   forall m : Gamma i, compPIOAtr P1 P2 s (inr (mkact Gamma i m)) != None.
   case => sa sb i; move/seqDP; elim.
@@ -124,7 +121,7 @@ Lemma compPIOA4 :
 Qed.
 
 Definition compPIOA : PIOA Gamma (D :+: D').
-  apply (mkPIOA Gamma ([fastEnumType of St P1 * St P2]) (start P1, start P2) (seqD (inputs P1 ++ inputs P2) (outputs P1 ++ outputs P2)) (outputs P1 ++ outputs P2) ((D) :+: (D')) (compPIOAtr P1 P2)).
+  apply (mkPIOA Gamma ([choiceType of St P1 * St P2]) (start P1, start P2) (seqD (inputs P1 ++ inputs P2) (outputs P1 ++ outputs P2)) (outputs P1 ++ outputs P2) ((D) :+: (D')) (compPIOAtr P1 P2)).
   apply compPIOA1.
   apply compPIOA2.
   apply compPIOA3.
@@ -134,9 +131,10 @@ Defined.
 End CompPIOADef.
 Notation "P1 ||| P2" := (compPIOA P1 P2) (at level 70).
 
+(*
 Section CompProps.
 
-  Context {Gamma D D' : context} (P1 : PIOA Gamma D) (E : PIOA Gamma D') 
+  Context {Gamma D D' : ctx} (P1 : PIOA Gamma D) (E : PIOA Gamma D') 
    (mu : {meas (St (P1 ||| E) * trace (P1 ||| E))}).
 
 Lemma app_h_comp_l h s : app_h (P1 ||| E) (inl h) s = (x <- app_h P1 h s.1; ret (x, s.2)).
@@ -325,3 +323,4 @@ Qed.
  Qed.  
   
 End CompProps.
+*)

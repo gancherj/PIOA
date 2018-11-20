@@ -7,10 +7,6 @@ Require Import PIOA Premeas Meas Posrat Aux FastEnum CompPIOA Lifting.
 Check channel.
 Print channel.
 
-
-
-
-
 Definition is_chan {Gamma D : context} (P : PIOA Gamma D) (hc : (H P) + (C P)) :=
   match hc with
   | inl _ => true
@@ -27,7 +23,7 @@ Definition env {Gamma D D' : context} (P1 : PIOA Gamma D) (P2 : PIOA Gamma D') :
   
 Definition refines  {Gamma D D' : context} (P1 : PIOA Gamma D) (P2 : PIOA Gamma D') (hc : comparable P1 P2) :=
   forall {D'' : context} (E: PIOA Gamma D''), env P1 E -> forall g1, protocol_for (P1 ||| E) g1 -> exists g2, protocol_for (P2 ||| E) g2 /\ 
-        measMap (run (P1 ||| E) (g1)) snd = measMap (run (P2 ||| E) (g2)) snd.
+        (run (P1 ||| E) (g1)) <$> snd = (run (P2 ||| E) (g2)) <$> snd.
 
 
 Record simulation_sameh  {Gamma D : context} (P1 P2 : PIOA Gamma D) (Hcomp : comparable P1 P2)
@@ -40,6 +36,8 @@ Record simulation_sameh  {Gamma D : context} (P1 P2 : PIOA Gamma D) (Hcomp : com
     sim_step_i : forall mu eta (a : action Gamma), (tag a \in inputs P1) -> R mu eta ->
                                                    lifting R (apply_i P1 a mu) (apply_i P2 a eta)
                           }. 
+
+(*
 
 Definition restr_trace_l {Gamma D : context} (P1 : PIOA Gamma D) (x : seq (action Gamma)) : seq (action Gamma) :=
   filter (fun a => tag a \in (inputs P1 ++ outputs P1)) x.
@@ -444,3 +442,4 @@ Theorem simulation_sound_sameh {Gamma Delta : context} (P1 P2 : PIOA Gamma Delta
 
   Check measMap_ret.
 
+*)

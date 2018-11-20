@@ -3,40 +3,12 @@ From mathcomp Require Import bigop ssralg div ssrnum ssrint order finmap.
 From mathcomp Require Import ssreflect ssrfun ssrbool ssrint eqtype ssrnat seq choice fintype rat finfun.
 From mathcomp Require Import bigop ssralg div ssrnum ssrint finmap.
 
-Require Import Meas Lifting Aux FastEnum.
-
-Record context := mkCon { cdom : fastEnumType; cfun :> cdom -> fastEnumType }.
+Require Import Meas Lifting Aux FastEnum Action.
 
 
-Definition consum (c d : context) :=
-  mkCon [fastEnumType of ((cdom c) + (cdom d))%type] (fun x => match x with | inl a => c a | inr a => d a end).
-
-Notation "G :+: H" := (consum G H) (at level 70).
-
-
-Definition action (gamma : context) := {c : (cdom gamma) & gamma c}.
-Definition mkact (gamma : context) (c : cdom gamma) (x : gamma c) := existT (cfun gamma) c x.
-
-Definition decomp_act {g1 : context} {g2 : context} : action (g1 :+: g2) -> (action g1) + (action g2).
-  case; case.
-  rewrite //= => a g1a; left; apply (mkact g1 a); apply g1a.
-  rewrite //= => b g2b; right; apply (mkact g2 b); apply g2b.
-Defined.
-
-Definition act_comp {g1 : context} {g2 : context} : (action g1) + action g2 -> action (g1 :+: g2).
-  case; case => x gx.
-  apply (mkact (consum g1 g2) (inl x)); apply gx.
-  apply (mkact (consum g1 g2) (inr x)); apply gx.
-Defined.
-
-Lemma act_decomp_cancel {g1 : context} {g2 : context} :
-  cancel (@decomp_act g1 g2) (@act_comp g1 g2).
-  case; case; rewrite //=.
-Qed.
-
-Record PIOA (Gamma : context) (Delta : context) :=
+Record PIOA (Gamma : ctx) (Delta : ctx) :=
   {
-    St : fastEnumType;
+    St : choiceType;
     start : St;
     inputs : seq (cdom Gamma);
     outputs : seq (cdom Gamma);
@@ -56,51 +28,43 @@ Arguments inputs [Gamma Delta].
 Arguments start [Gamma Delta].
 Arguments outputs [Gamma Delta].
 
-Definition C {G D : context} (P : PIOA G D) := cdom G.
-Definition H {G D : context} (P : PIOA G D) := cdom D.
+Definition C {G D : ctx} (P : PIOA G D) := cdom G.
+Definition H {G D : ctx} (P : PIOA G D) := cdom D.
 
-Definition channel {G D : context} (P : PIOA G D) :=
+Definition channel {G D : ctx} (P : PIOA G D) :=
   ((H P) + seq_sub (inputs P ++ outputs P))%type.
 
-Definition enabled  {G D : context} (P : PIOA G D) (x : St P) a :=
+Definition enabled  {G D : ctx} (P : PIOA G D) (x : St P) a :=
   tr P x a != None.
 
-Definition trace {G D : context} (P : PIOA G D) := seq (action G).
+Definition trace {G D : ctx} (P : PIOA G D) := seq (action G).
 
-Lemma actDeterm_h {G D : context} (P : PIOA G D) (s : St P) (a1 a2 : action D) : tag a1 = tag a2 -> tr P s (inl a1) != None -> tr P s (inl a2) != None -> a1 = a2.
+Lemma actDeterm_h {G D : ctx} (P : PIOA G D) (s : St P) (a1 a2 : action D) : tag a1 = tag a2 -> tr P s (inl a1) != None -> tr P s (inl a2) != None -> a1 = a2.
   destruct a1; destruct a2; rewrite //=.
   move => Heq; move: s0 s1; rewrite Heq => s0 s1 h1 h2.
   have -> //=: s0 = s1 by apply/eqP; apply (ad_h _ _ _ _ _ h1 h2).
 Qed.
 
-Lemma actDeterm_v {G D : context} (P : PIOA G D) (s : St P) (a1 a2 : action G) : tag a1 \in outputs P -> tag a1 = tag a2 -> tr P s (inr a1) != None -> tr P s (inr a2) != None -> a1 = a2.
+Lemma actDeterm_v {G D : ctx} (P : PIOA G D) (s : St P) (a1 a2 : action G) : tag a1 \in outputs P -> tag a1 = tag a2 -> tr P s (inr a1) != None -> tr P s (inr a2) != None -> a1 = a2.
   destruct a1; destruct a2; rewrite //=.
   move => Hx Heq; move: s0 s1; rewrite Heq => s0 s1 h1 h2.
   rewrite Heq in Hx.
   have -> //=: s0 = s1 by apply/eqP; apply (ad_v _ _ _ _ _ Hx h1 h2).
 Qed.
 
-Lemma inputEnabled  {G D : context} (P : PIOA G D) s (a : action G) : tag a \in (inputs P) -> tr P s (inr a) != None.
+Lemma inputEnabled  {G D : ctx} (P : PIOA G D) s (a : action G) : tag a \in (inputs P) -> tr P s (inr a) != None.
   by case: a => x p H; apply (i_a P).
 Qed.
 
 (* h.x *)
-Definition achoose_h {G D : context} (P : PIOA G D) (h : (H P)) (x : St P) :=
+Definition achoose_h {G D : ctx} (P : PIOA G D) (h : (H P)) (x : St P) :=
         omap (fun x => (mkact D h x)) (pick (fun (m : D h) => enabled P x (inl (mkact _ h m)))).
 
 (* o.x *)
-Definition achoose_v {G D : context} (P : PIOA G D) (c : C P) (x : St P) :=
+Definition achoose_v {G D : ctx} (P : PIOA G D) (c : C P) (x : St P) :=
         omap (fun x => (mkact G c x)) (pick (fun (m : G c) => enabled P x (inr (mkact _ c m)))).
 
-
-Definition smap {A B C D} (f : A -> B) (g : C -> D) (x : A + C) : B + D :=
-match x with
-  | inl a => inl (f a)
-  | inr a => inr (g a)
-                 end.
-
-
-Lemma achoose_hP {G D : context} (P : PIOA G D) h s a :
+Lemma achoose_hP {G D : ctx} (P : PIOA G D) h s a :
   achoose_h P h s = Some a <-> enabled P s (inl a) && (tag a == h).
   split.
   rewrite /achoose_h; case: pickP => [x H | x]; rewrite //= => Heq.
@@ -118,7 +82,7 @@ Lemma achoose_hP {G D : context} (P : PIOA G D) h s a :
   destruct a; simpl in *; move: x; move/(_ s0); rewrite h1 //=.
 Qed.
 
-Lemma achoose_vP {G D : context} (P : PIOA G D) h s a : h \in outputs P ->
+Lemma achoose_vP {G D : ctx} (P : PIOA G D) h s a : h \in outputs P ->
   achoose_v P h s = Some a <-> enabled P s (inr a) && (tag a == h).
   move => Hh.
   split.
@@ -142,11 +106,11 @@ Qed.
 
 
 (* def 3 *)
-Definition app_h {G D : context} (P : PIOA G D) (h : H P) (s : St P) :=
+Definition app_h {G D : ctx} (P : PIOA G D) (h : H P) (s : St P) :=
   oapp (fun ha => oapp id (ret s) (tr P s (inl ha))) (ret s) (achoose_h P h s).
 
 (* the (y) in o.x(y) *)
-Definition app_ova  {G D : context} (P : PIOA G D) (ova : option (action G)) (s : St P) :=
+Definition app_ova  {G D : ctx} (P : PIOA G D) (ova : option (action G)) (s : St P) :=
   oapp (fun va => oapp id (ret s) (tr P s (inr va))) (ret s) ova.
 
 
@@ -154,7 +118,7 @@ Definition ocons {A} (x : option A) (xs : seq A) :=
   match x with | Some a => a :: xs | None => xs end.
 
 (* definition 6 *)
-Definition act {G D : context} (P : PIOA G D) (hc : (H P) + (C P)) (mu : {meas (St P) * (trace P)}) :=
+Definition act {G D : ctx} (P : PIOA G D) (hc : (H P) + (C P)) (mu : {meas (St P) * (trace P)}) :=
   match hc with
     | inl h => 
         (xt <- mu; s' <- app_h P h xt.1; ret (s', xt.2))
@@ -163,37 +127,37 @@ Definition act {G D : context} (P : PIOA G D) (hc : (H P) + (C P)) (mu : {meas (
       (xt <- mu; s' <- app_ova P (achoose_v P c xt.1) xt.1; ret (s', ocons (achoose_v P c xt.1) xt.2))
   end.
 
-Definition locally_controlled  {G D : context} (P : PIOA G D) (hc : (H P) + (C P)) :=
+Definition locally_controlled  {G D : ctx} (P : PIOA G D) (hc : (H P) + (C P)) :=
   match hc with
   | inl _ => true
   | inr c => c \in (outputs P)
                      end.
 
 
-Definition initDist {G D : context} (P : PIOA G D) : {meas (St P) * (trace P)} := ret (start P, nil).
+Definition initDist {G D : ctx} (P : PIOA G D) : {meas (St P) * (trace P)} := ret (start P, nil).
 
-Definition run {G D : context} (P : PIOA G D) (g : seq ((H P) + (C P))) :=
+Definition run {G D : ctx} (P : PIOA G D) (g : seq ((H P) + (C P))) :=
   foldl (fun acc x => act P x acc) (initDist P) g.
 
-Definition closed {G D : context} (P : PIOA G D) := inputs P == nil.
+Definition closed {G D : ctx} (P : PIOA G D) := inputs P == nil.
 
-Definition apply_i {G D : context} (P : PIOA G D) (a : action G) (mu : {meas (St P) * (trace P)}) :=
+Definition apply_i {G D : ctx} (P : PIOA G D) (a : action G) (mu : {meas (St P) * (trace P)}) :=
   (xt <- mu; s' <- app_ova P (Some a) xt.1; ret (s', a :: xt.2)).
 
-Lemma run_rcons {G D : context} (P : PIOA G D) xs x :
+Lemma run_rcons {G D : ctx} (P : PIOA G D) xs x :
   run P (rcons xs x) = act P x (run P xs).
   rewrite /run //=.
   rewrite -cats1 foldl_cat //=.
 Qed.
 
-Lemma act_bind {G D : context} {A : choiceType} (P : PIOA G D) a (m : Meas A) f :
+Lemma act_bind {G D : ctx} {A : choiceType} (P : PIOA G D) a (m : Meas A) f :
   act P a (x <- m; f x) = (x <- m; act P a (f x)).
   rewrite /act; case a => x; by rewrite mbindA.
 Qed.
 
 
 
-Definition mkPIOA (G : context) (S : fastEnumType) (st : S) (inputs outputs : seq (cdom G)) (Delta : context) (tr : S -> (action Delta + action G) -> option ({meas S})) :
+Definition mkPIOA (G : ctx) (S : choiceType) (st : S) (inputs outputs : seq (cdom G)) (Delta : ctx) (tr : S -> (action Delta + action G) -> option ({meas S})) :
                 seq_disjoint inputs outputs ->
                 (forall s h m1 m2, tr s (inl (mkact Delta h m1)) != None -> tr s (inl (mkact Delta h m2)) != None -> m1 == m2) ->
                 (forall s h m1 m2, h \in outputs -> tr s (inr (mkact G h m1)) != None -> tr s (inr (mkact G h m2)) != None -> m1 == m2) ->
@@ -206,7 +170,7 @@ Defined.
 
 (* TODO : move proof to Qed lemma *)
 (*
-Definition extendG {G D : context} (P : PIOA G D) (G' : context) :
+Definition extendG {G D : ctx} (P : PIOA G D) (G' : ctx) :
   PIOA (G :+: G') D.
   Check decomp_act.
   apply (mkPIOA (G :+: G') (St P) (start P) (map inl (inputs P)) (map inl (outputs P)) D 
@@ -244,7 +208,7 @@ Defined.
 *)
 
 Section Reflections.
-  Context (Gamma Delta : context) (S : fastEnumType) (t : S -> (action Delta) + (action Gamma) -> option {meas S}) (inputs outputs : seq (cdom Gamma)) . 
+  Context (Gamma Delta : ctx) (S : fastEnumType) (t : S -> (action Delta) + (action Gamma) -> option {meas S}) (inputs outputs : seq (cdom Gamma)) . 
   Definition decide_ad_h :=
     fall (S) (fun s => fall (cdom Delta) (fun h => fall (Delta h) (fun m1 => fall (Delta h) (fun m2 => (t s (inl (mkact Delta h m1)) != None) ==> (t s (inl (mkact Delta h m2)) != None) ==> (m1 == m2))))). 
 
@@ -292,3 +256,90 @@ Section Reflections.
 done.
   Qed.
 End Reflections.
+
+
+Ltac mkPIOA_tac g d st ins outs t :=
+  apply (mkPIOA g _ st ins outs d t); [
+    by vm_compute | apply/decide_ad_hP; by vm_compute | apply/decide_ad_vP; by vm_compute | apply/ decide_i_aP; by vm_compute ].
+
+
+(* hiding *)
+
+Section Hiding.
+  Context {G D : ctx} (P : PIOA G D) (o : seq (cdom G)) (Ho : all (fun x => x \in (outputs P)) o).
+
+  Check mkPIOA.
+  Check tr.
+  Check existT.
+
+  Definition hide_tr : St P -> action (D :+: (G |c_ o)) + action G -> option {meas (St P)} :=
+    fun s a =>
+      match a with
+        | inl (existT (inl h) m) => tr P s (inl (mkact D h m))
+        | inl (existT (inr h) m) => tr P s (inr (mkact G (ssval h) m))
+        | inr (existT c m) => tr P s (inr (mkact G c m))
+                 end.
+
+  Check mkPIOA.
+  Definition hidePIOA : PIOA G (D :+: (G |c_ o)).
+    eapply mkPIOA.
+    apply (start P).
+    instantiate (2 := seqD (inputs P) o).
+    instantiate (1 := seqD (outputs P) o).
+    apply/seq_disjointP => x Hx.
+    rewrite mem_seqD in Hx; elim (andP Hx) => h1 h2.
+    rewrite mem_seqD negb_and h2 //= orbF.
+    move/seq_disjointP: (disj_io _ _ P); move/(_ _ h1); done.
+    instantiate (2 := hide_tr) => s h m1 m2.
+    rewrite //=.
+    destruct h.
+    apply (ad_h P).
+    apply (ad_v P).
+    apply (allP Ho).
+    apply ssvalP.
+    intros.
+    eapply (ad_v P).
+    rewrite mem_seqD in H0; elim (andP H0); done.
+    apply H1.
+    done.
+    intros; apply i_a.
+    rewrite mem_seqD in H0; elim (andP H0); done.
+ Defined.
+End Hiding.
+
+(* change context *)
+Section ChangeH.
+  Context {G D D' : ctx} (P : PIOA G D) (H : D' ~~ D).
+
+  Definition changeHTr (s : St P) (a : action D' + action G) :=
+    match a with
+      | inl h => tr P s (inl (H *a h))
+      | inr a => tr P s (inr a)
+                     end.
+
+  Definition changeH : PIOA G D'.
+    Check mkPIOA.
+    apply (mkPIOA
+             G
+             (St P)
+             (start P)
+             (inputs P)
+             (outputs P)
+             D'
+             changeHTr).
+    apply disj_io.
+    simpl.
+    move => s h m1 m2.
+    rewrite !bijactionE.
+    move => h1 h2.
+    apply/eqP;
+    eapply bijmsg_inj.
+    apply/eqP.
+    apply (ad_h P s).
+    apply h1.
+    done.
+    simpl.
+    apply ad_v.
+    apply i_a.
+  Defined.
+End ChangeH.
