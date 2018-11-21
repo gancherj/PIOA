@@ -39,19 +39,19 @@ Lemma compPIOA1 :  seq_disjoint (seqD (inputs P1 ++ inputs P2) (outputs P1 ++ ou
   rewrite -notin_seq_all; done.
 Qed.
 
-Lemma compPIOA2 : forall (s : [choiceType of St P1 * St P2]) (h : cdom (D :+: D')) (m1 m2 : (D :+: D') h),
+Lemma compPIOA2 : forall (s : [finType of St P1 * St P2]) (h : cdom (D :+: D')) (m1 m2 : (D :+: D') h),
   compPIOAtr P1 P2 s (inl (mkact (D :+: D') h m1)) != None ->
   compPIOAtr P1 P2 s (inl (mkact (D :+: D') h m2)) != None -> m1 == m2.
   case => sa sb; case; rewrite //=.
   move => ha m1 m2; rewrite -!omap_neq_none => h1 h2.
-  by apply (ad_h P1 sa ha m1 m2).
+  by apply (ad_h (PIOAP P1) sa ha m1 m2).
 
   move => hb m1 m2; rewrite -!omap_neq_none => h1 h2.
-  by apply (ad_h P2 sb hb m1 m2).
+  by apply (ad_h (PIOAP P2) sb hb m1 m2).
 Qed.
 
 Lemma compPIOA3 : 
-  forall (s : [choiceType of St P1 * St P2]) (h : cdom Gamma) (m1 m2 : Gamma h), h \in (outputs P1 ++ outputs P2) ->
+  forall (s : [finType of St P1 * St P2]) (h : cdom Gamma) (m1 m2 : Gamma h), h \in (outputs P1 ++ outputs P2) ->
   compPIOAtr P1 P2 s (inr (mkact Gamma h m1)) != None ->
   compPIOAtr P1 P2 s (inr (mkact Gamma h m2)) != None -> m1 == m2.
 
@@ -69,8 +69,8 @@ Lemma compPIOA3 :
 
   rewrite mem_cat in Hc; move/orP: Hc; elim => Hc.
 
-  apply (ad_v P1 sa); rewrite ?Heqtr1 ?Heqtr2 ?htr2 ?htr2' //=.
-  apply (ad_v P2 sb); rewrite ?Heqtr1 ?Heqtr2 ?htr2 ?htr2' //=.
+  apply (ad_v (PIOAP P1) sa); rewrite ?Heqtr1 ?Heqtr2 ?htr2 ?htr2' //=.
+  apply (ad_v (PIOAP P2) sb); rewrite ?Heqtr1 ?Heqtr2 ?htr2 ?htr2' //=.
 
   have Hc2: c \notin outputs P2.
   apply contraT; rewrite negbK => Hc2.
@@ -78,7 +78,7 @@ Lemma compPIOA3 :
 
   move/obind_neq_none; elim => x; elim => fx; elim => h1 h2.
   move/obind_neq_none; elim => x'; elim => fx'; elim => h1' h2'.
-  apply (ad_v P1 sa); rewrite ?h1 ?h1' //=.
+  apply (ad_v (PIOAP P1) sa); rewrite ?h1 ?h1' //=.
   rewrite mem_cat (negbTE Hc2) orbF //= in Hc.
 
   have Hc1: c \notin outputs P1.
@@ -87,13 +87,13 @@ Lemma compPIOA3 :
 
   move/obind_neq_none; elim => x; elim => fx; elim => h1 h2.
   move/obind_neq_none; elim => x'; elim => fx'; elim => h1' h2'.
-  apply (ad_v P2 sb); rewrite ?h1 ?h1' //=.
+  apply (ad_v (PIOAP P2) sb); rewrite ?h1 ?h1' //=.
   rewrite mem_cat (negbTE Hc1) orFb //= in Hc.
   done.
 Qed.
 
 Lemma compPIOA4 : 
-  forall (s : [choiceType of St P1 * St P2]) (i : cdom Gamma),
+  forall (s : [finType of St P1 * St P2]) (i : cdom Gamma),
   i \in seqD (inputs P1 ++ inputs P2) (outputs P1 ++ outputs P2) ->
   forall m : Gamma i, compPIOAtr P1 P2 s (inr (mkact Gamma i m)) != None.
   case => sa sb i; move/seqDP; elim.
@@ -103,34 +103,47 @@ Lemma compPIOA4 :
   rewrite mem_cat h1 orTb //=.
   rewrite mem_cat negb_or in h3; move/andP: h3 => [h31 h32].
   rewrite mem_cat (negbTE h2) (negbTE h32) //=.
-  have /opt_neq_none: tr P1 sa (inr (mkact Gamma i m)) != None by apply (i_a P1).
+  have /opt_neq_none: tr P1 sa (inr (mkact Gamma i m)) != None by apply (i_a (PIOAP P1)).
   by elim => x ->.
 
   rewrite /compPIOAtr //=.
   rewrite mem_cat negb_or in h3; move/andP: h3 => [h31 h32].
   rewrite (mem_cat) (negbTE h2) (negbTE h31) //=.
   rewrite mem_cat h1 orTb //=.
-  have /opt_neq_none: tr P2 sb (inr (mkact Gamma i m)) != None by apply (i_a P2).
+  have /opt_neq_none: tr P2 sb (inr (mkact Gamma i m)) != None by apply (i_a (PIOAP P2)).
   by elim => x ->.
 
   rewrite /compPIOAtr //= mem_cat h1 orTb mem_cat h2 //=.
-  have /opt_neq_none: tr P1 sa (inr (mkact Gamma i m)) != None by apply (i_a P1).
+  have /opt_neq_none: tr P1 sa (inr (mkact Gamma i m)) != None by apply (i_a (PIOAP P1)).
   elim => x -> //=.
-  have /opt_neq_none: tr P2 sb (inr (mkact Gamma i m)) != None by apply (i_a P2).
+  have /opt_neq_none: tr P2 sb (inr (mkact Gamma i m)) != None by apply (i_a (PIOAP P2)).
   elim => y -> //=.
 Qed.
 
+Definition compPIOA_data : PIOA_data Gamma (D :+: D').
+econstructor.
+apply (start P1, start P2).
+apply (seqD (inputs P1 ++ inputs P2) (outputs P1 ++ outputs P2)).
+apply (outputs P1 ++ outputs P2).
+apply (compPIOAtr P1 P2).
+Defined.
+
+Lemma compPIOA_spec : PIOA_spec compPIOA_data.
+constructor.
+apply compPIOA1.
+apply compPIOA2.
+apply compPIOA3.
+apply compPIOA4.
+Qed.
+
 Definition compPIOA : PIOA Gamma (D :+: D').
-  apply (mkPIOA Gamma ([choiceType of St P1 * St P2]) (start P1, start P2) (seqD (inputs P1 ++ inputs P2) (outputs P1 ++ outputs P2)) (outputs P1 ++ outputs P2) ((D) :+: (D')) (compPIOAtr P1 P2)).
-  apply compPIOA1.
-  apply compPIOA2.
-  apply compPIOA3.
-  apply compPIOA4.
+  apply (mkPIOA _ _ compPIOA_data compPIOA_spec).
 Defined.
 
 End CompPIOADef.
 Notation "P1 ||| P2" := (compPIOA P1 P2) (at level 70).
 
+(*
 
 Section CompProps.
 
@@ -323,3 +336,4 @@ Qed.
  Qed.  
   
 End CompProps.
+*)

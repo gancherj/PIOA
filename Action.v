@@ -10,15 +10,15 @@ Require Import Eqdep.
 
 Require Import Meas Lifting Aux FastEnum.
 
-Record ctx := mkCon { cdom : fastEnumType; cfun :> cdom -> fastEnumType }.
+Record ctx := mkCon { cdom : finType; cfun :> cdom -> finType }.
 
 Definition consum (c d : ctx)  :=
-  mkCon [fastEnumType of ((cdom c) + (cdom d))%type] (fun x => match x with | inl a => c a | inr a => d a end).
+  mkCon [finType of ((cdom c) + (cdom d))%type] (fun x => match x with | inl a => c a | inr a => d a end).
 
 Notation "G :+: H" := (consum G H) (at level 70).
 
 Definition conrestr (c : ctx) (s : seq (cdom c)) :=
-  mkCon ([fastEnumType of seq_sub s]) (fun x => c (ssval x)).
+  mkCon ([finType of seq_sub s]) (fun x => c (ssval x)).
 
 Notation "G |c_ s" := (conrestr G s) (at level 70).
 
@@ -111,16 +111,17 @@ Canonical void_eqtype := EqType void (PcanEqMixin void_pcancel).
 Canonical void_choice := ChoiceType void (PcanChoiceMixin void_pcancel).
 Canonical void_count := CountType void (PcanCountMixin void_pcancel).
 Canonical void_fin := FinType void (PcanFinMixin void_pcancel).
-Lemma void_fe : FastEnum.axiom _ (nil : seq void).
+
+Instance fevoid : FastEnum [finType of void] :=
+  {fastEnum := [::]}.
   apply uniq_perm_eq.
   done.
   apply enum_uniq.
   case.
-Qed.
-Canonical void_fetype := FastEnumType void (FastEnumMixin _ _ void_fe).
+Defined.
 
 Definition emptyCtx :=
-  mkCon [fastEnumType of void] (fun x => match x with end).
+  mkCon [finType of void] (fun x => match x with end).
 
 Definition empty_plus_r (C : ctx) :  C ~~ (C :+: emptyCtx).
   apply (Bij C (C :+: emptyCtx) inl (fun x => match x with |inl a => a | inr r => match r with end end)).

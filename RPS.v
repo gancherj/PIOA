@@ -2,10 +2,14 @@
 From mathcomp Require Import ssreflect ssrfun ssrbool ssrint eqtype ssrnat seq choice fintype rat finfun.
 From mathcomp Require Import bigop ssralg div ssrnum ssrint finmap.
 
-Require Import Meas Aux PIOA Ascii String CompPIOA SSRString FastEnum Action.
+Require Import Meas Aux PIOA Ascii String CompPIOA SSRString FastEnum Action Refinement StateSim.
 Open Scope string_scope.
 
 Check mkPIOA.
+
+Print pick.
+Check pickP.
+
 
 Definition ctx_bij_trans {C D E : ctx} (H1 : C ~~ D) (H2 : D ~~ E) : C ~~ E.
   apply (Bij C E (fun x => lr H2 (lr H1 x)) (fun y => rl H1 (rl H2 y))).
@@ -58,11 +62,9 @@ Canonical rps_choice := ChoiceType RPSContextM (CanChoiceMixin rps_context_can).
 Canonical rps_count := CountType RPSContextM (CanCountMixin rps_context_can).
 Canonical rps_fin := FinType RPSContextM (CanFinMixin rps_context_can).
 
-Lemma rps_fe : FastEnum.axiom _ [:: choose; committed; reveal; commit; open; winner].
- apply uniq_perm_eq; rewrite ?enum_uniq //= => x; case x; rewrite mem_enum //=.
-Qed.
-
-Canonical rps_fetype := FastEnumType RPSContextM (FastEnumMixin _ _ rps_fe).
+Instance rps_fe : FastEnum [finType of RPSContextM] := { fastEnum := [:: choose; committed; reveal; commit; open; winner]}.
+apply uniq_perm_eq; rewrite ?enum_uniq //= => x; case x; rewrite mem_enum //=.
+Defined.
 
 Inductive play := rock | paper | scissors.
 
@@ -87,13 +89,9 @@ Canonical play_choiceType := ChoiceType play (CanChoiceMixin play_obool_can).
 Canonical play_countType := CountType play (CanCountMixin play_obool_can).
 Canonical play_finType := FinType play (CanFinMixin play_obool_can).
 
-Check FastEnum.axiom.
-
-Lemma play_fe : FastEnum.axiom _ [:: rock; paper; scissors].
+Instance play_fe : FastEnum [finType of play] := {fastEnum := [:: rock; paper; scissors]}.
   apply uniq_perm_eq; rewrite ?enum_uniq //= => x; case x; rewrite mem_enum //=.
-Qed.
-
-Canonical play_fastEnumType:= FastEnumType play (FastEnumMixin _ _ play_fe).
+Defined.
 
 Definition rps_win_a (va vb : option play) :=
   match va, vb with
@@ -113,23 +111,24 @@ Definition rps_win_tie (va vb : option play) :=
   | _, _ => false
               end.
 
-Definition RPSContext_f (x : RPSContextM * bool) : fastEnumType  :=
+Definition RPSContext_f (x : RPSContextM * bool) : finType  :=
   match x.1 with
-    | (choose) => [fastEnumType of play]
-    | (committed) => [fastEnumType of unit]
-    | (reveal) => [fastEnumType of play]
-    | (commit) => [fastEnumType of play]
-    | (open) => [fastEnumType of unit]
-    | (winner) => [fastEnumType of option bool]
+    | (choose) => [finType of play]
+    | (committed) => [finType of unit]
+    | (reveal) => [finType of play]
+    | (commit) => [finType of play]
+    | (open) => [finType of unit]
+    | (winner) => [finType of option bool]
                             end.
 
 Definition RPSContext :=
-  mkCon ([fastEnumType of RPSContextM * bool])%type RPSContext_f.
+  mkCon ([finType of RPSContextM * bool])%type RPSContext_f.
 
+Instance rpscontext_fe (x : cdom RPSContext) : FastEnum (RPSContext x).
+case x; case; case; simpl; rewrite /RPSContext_f //=; apply _.
+Defined.
 
 Definition playerSt := (option play * option play * bool * bool)%type.
-
-  
 
 Definition player_trans (wh : bool) (s : playerSt) (a : action emptyCtx + action RPSContext) : option {meas playerSt}:=
   let vme := s.1.1.1 in
@@ -164,26 +163,34 @@ Definition player_trans (wh : bool) (s : playerSt) (a : action emptyCtx + action
         ([&& wh == b, msg == None & rps_win_tie vme vother], (ret s)) ]
   | _ => None                                                                                          
       end.
-  
-Definition playerA : PIOA RPSContext emptyCtx.
-  mkPIOA_tac
-    RPSContext
-    emptyCtx
-    ((None, None, false, false) : playerSt)
-    [:: (choose, true); (committed, false); (reveal, false)]
-    [:: (commit, true); (open, true); (winner, true)]   
-    (player_trans true).
+
+Definition player_data (wh : bool) : PIOA_data RPSContext emptyCtx.
+econstructor.
+apply ((None, None, false, false) : playerSt).
+apply ([:: (choose, wh); (committed, ~~ wh); (reveal, ~~ wh)]).
+apply ([:: (commit, wh); (open, wh); (winner, wh)]).
+apply (player_trans wh).
 Defined.
 
-Definition playerB : PIOA RPSContext emptyCtx.
-  mkPIOA_tac
-    RPSContext
-    emptyCtx
-    ((None, None, false, false) : playerSt)
-    [:: (choose, false); (committed, true); (reveal, true)]
-    [:: (commit, false); (open, false); (winner, false)]   
-    (player_trans false).
-Defined.
+Lemma player_spec wh : PIOA_spec (player_data wh).
+econstructor.
+done.
+done.
+  intros; apply (decide_ad_vP RPSContext emptyCtx _ [finType of playerSt] (player_trans wh) [:: (commit, wh); (open, wh); (winner, wh)] s). 
+  done.
+  done.
+  done.
+  case wh; vm_compute; done.
+
+  
+  intros; apply (decide_i_aP RPSContext emptyCtx _ [finType of playerSt] _  [:: (choose, wh); (committed, ~~ wh); (reveal, ~~ wh)] ).
+  done.
+  case wh; vm_compute; done.
+Qed.
+  
+
+Definition playerA := mkPIOA _ _ (player_data false) (player_spec false).
+Definition playerB := mkPIOA _ _ (player_data true) (player_spec true).
 
 Definition Ftrans (s : playerSt) (a : action emptyCtx + action RPSContext) : option {meas playerSt} :=
   let va := s.1.1.1 in
@@ -208,16 +215,31 @@ Definition Ftrans (s : playerSt) (a : action emptyCtx + action RPSContext) : opt
   | inr (existT (reveal, true) x) =>
     if (opb && (vb == Some x)) then Some (ret s) else None
   | _ => None end.
-                                                          
-Definition Funct : PIOA RPSContext emptyCtx.
-  mkPIOA_tac
-    RPSContext
-    emptyCtx
-    ((None, None, false, false) : playerSt)
-    [:: (commit, true); (commit, false); (open, true); (open,false)]
-    [:: (committed, true); (committed, false); (reveal, true); (reveal, false)]
-    Ftrans.
+
+Definition funct_data : PIOA_data RPSContext emptyCtx.
+econstructor.
+apply ((None, None, false, false) : playerSt).
+    apply [:: (commit, true); (commit, false); (open, true); (open,false)].
+apply    [:: (committed, true); (committed, false); (reveal, true); (reveal, false)].
+apply Ftrans.
 Defined.
+
+Lemma funct_spec : PIOA_spec funct_data.
+econstructor.
+done.
+done.
+  intros; eapply (decide_ad_vP RPSContext emptyCtx _ [finType of playerSt] _ _ s).
+  apply H.
+  apply H0.
+  done.
+  vm_compute; done.
+
+  intros; eapply decide_i_aP.
+  apply H.
+  vm_compute; done.
+Qed.
+
+Definition Funct := mkPIOA _ _ funct_data funct_spec.
 
 Lemma compatAB : compatible playerA playerB.
   done.
@@ -257,26 +279,31 @@ Definition FReal (wh : bool) (s : option play * bool) (a : action emptyCtx + act
     if (wh == b) && op && (val == Some m) then Some (ret s) else None
   | _ => None end.                                                                   
                       
-Definition FB : PIOA RPSContext emptyCtx.
-  mkPIOA_tac
-    RPSContext
-    emptyCtx
-    ((None, false) : option play * bool)
-    [:: (commit, true); (open, true)]
-    [:: (committed, true); (reveal, true)]
-    (FReal true).
+Definition FAB_data (wh : bool) : PIOA_data RPSContext emptyCtx.
+econstructor.
+apply ((None, false)  : option play * bool).
+    apply [:: (commit, wh); (open, wh)].
+apply    [:: (committed, wh); (reveal, wh)].
+apply (FReal wh).
 Defined.
 
-Definition FA : PIOA RPSContext emptyCtx.
-  mkPIOA_tac
-    RPSContext
-    emptyCtx
-    ((None, false) : option play * bool)
-    [:: (commit, false); (open, false)]
-    [:: (committed, false); (reveal, false)]
-    (FReal false).
-Defined.
-    
+Definition FAB_spec (wh : bool) : PIOA_spec (FAB_data wh).
+  constructor.
+  done.
+  done.
+  intros; eapply (decide_ad_vP RPSContext emptyCtx _ [finType of option play * bool] _ _ s).
+  apply H.
+  apply H0.
+  done.
+  case wh; vm_compute; done.
+
+  intros; eapply decide_i_aP.
+  apply H.
+  case wh; vm_compute; done.
+Qed.
+
+Definition FA := mkPIOA _ _ (FAB_data false) (FAB_spec false).
+Definition FB := mkPIOA _ _ (FAB_data true) (FAB_spec true).
 
 Definition RRPS : PIOA RPSContext (RPSContext |c_ rpshide).
   eapply changeH.
@@ -289,22 +316,127 @@ Definition RRPS : PIOA RPSContext (RPSContext |c_ rpshide).
   apply ctx_symm; apply empty_plus_r.
 Defined.
 
-Goal (tr (playerA |||  FA) (start (playerA |||  FA)) (inr (mkact RPSContext (choose,true) rock))) = None.
-  rewrite /compPIOA /tr; cbv.
-  Time
-  simpl.
+Definition R_RPS (x : St RRPS) : St IRPS :=
+  match x with
+  | (xa, xb, (fa1, fa2), (fb1, fb2)) =>
+    (xa, xb, (fa1, fb1, fa2, fb2))
+      end.
 
-Goal (tr (playerA) (start (playerA)) (inr (mkact RPSContext (choose,true) rock))) = None.
-  Time simpl.
+Lemma act_bind' {G D : ctx} {A : choiceType} (P : PIOA G D) (a : H P + C P) (m : {meas A}) (f : A -> {meas (St P) * (trace P)}) :
+  act P a (x <- m; f x) = (x <- m; act P a (f x)).
+  rewrite /act; case a => x; by rewrite mbindA.
+Qed.
+
+Lemma rps_sim : SimpleStateInj RRPS IRPS R_RPS.
+  constructor.
+  done.
+
   
-Goal (tr (playerA ||| playerB ||| FA ||| FB) (start (playerA ||| playerB ||| FA ||| FB)) (inr (mkact RPSContext (choose,true) rock))) = None.
-  vm_compute.
-  rewrite /=.
-  simpl.
-  rewrite mbindA.
+  intros.
+  rewrite act_bind.
+
+
+  Focus 2.
+
+
+  admit.
+
+  rewrite act_bind.
+  move => mu hc.
+  rewrite act_bind'.
+  intro.
+  symmetry.
+  Check act_bind.
+  rewrite (act_bind IRPS).
+  Check act_bind.
+
   Set Printing All.
-  rewrite /tr.
-  vm_compute.
+  Check (@act_bind RPSContext (RPSContext |c_ rpshide) [choiceType of (St RRPS * trace RRPS)%type] IRPS hc mu (fun x => ret (R_RPS x.1, x.2))).
+  unfold act.
+  elim hc.
+  rewrite /act.
+
+  Check act_bind.
+  rewrite (act_bind IRPS hc mu).
+
+  intro; etransitivity; last first.
+
+  symmetry; apply act_bind.
   simpl.
-Compute (outputs IRPS).
-Compute ((committed, true) \in (inputs RRPS)).  
+  apply act_bind.
+
+  etransitivity.
+  apply erefl.
+  sy
+  rewrite (act_bind IRPS hc).
+
+  Check act_bind.
+  intro h.
+  Set Printing All.
+  Check (act_bind' IRPS hc mu (fun x => ret (R_RPS x.1, x.2))).
+
+  rewrite /act.
+  Check act_bind.
+
+  rewrite act_bind.
+  destruct hc.
+
+  have Hs: (ssval s) \in  rpshide.
+  destruct s; rewrite //=.
+
+  remember (ssval s) as h.
+  rewrite /rpshide in Hs.
+
+  rewrite in_cons in Hs; elim (orP Hs); clear Hs => Hh.
+  Check act_bind.
+  rewrite (act_bind (IRPS) (inl s)
+  rewrite /rpshide in_cons in Hs.
+  Set Ltac Profiling.
+  Check (orP Hs).
+  elim (orP Hs).
+  Show Ltac Profile.
+  elim (orP Hs).
+  move/eqP => Hh.
+  rewrite act_bind.
+  move/orP: Hs.
+
+  destruct s as [ h Hh].
+  have H := Hh.
+  rewrite /rpshide in_cons in H.
+  move/orP: H.
+  elim.
+  move/eqP => eqH; move: Hh.
+  rewrite eqH.
+  
+
+  Set Printing All.
+  case.
+  case.
+  rewrite /rpshide.
+  move => h Hh.
+  simpl.
+  have Hh2 := Hh.
+  rewrite in_cons in Hh2.
+  move/orP: Hh2.
+  elim.
+  move/eqP => eqh.
+  simpl.
+  move: Hh.
+  rewrite eqh => Hh _.
+  rewrite !mbindA.
+  apply mbind_eqP => y Hy.
+  rewrite ret_bind !mbindA //=.
+
+  rewrite /app_h.
+  Print achoose_h.
+  SearchAbout achoose_h.
+  simpl.
+  
+  vm_compute.
+
+
+  rewrite /RRPS; simpl.
+  simpl.
+  rewrite simpl.
+  Set Printing All.
+  rewrite /rpshide in Hh.

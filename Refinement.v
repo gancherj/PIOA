@@ -2,35 +2,30 @@
 From mathcomp Require Import ssreflect ssrfun ssrbool ssrint eqtype ssrnat seq choice fintype rat finfun.
 From mathcomp Require Import bigop ssralg div ssrnum ssrint finset ssrnum ssrnat finmap.
 
-Require Import PIOA Premeas Meas Posrat Aux FastEnum CompPIOA Lifting.
+Require Import PIOA Premeas Meas Posrat Aux FastEnum CompPIOA Lifting Action.
 
-Check channel.
-Print channel.
-
-Definition is_chan {Gamma D : context} (P : PIOA Gamma D) (hc : (H P) + (C P)) :=
+Definition is_chan {Gamma D : ctx} (P : PIOA Gamma D) (hc : (H P) + (C P)) :=
   match hc with
   | inl _ => true
   | inr c =>
     c \in (inputs P ++ outputs P)
             end.
   
-Definition comparable {Gamma D D' : context} (P1 : PIOA Gamma D) (P2 : PIOA Gamma D') := (inputs P1 ==i inputs P2) && (outputs P1 ==i outputs P2).
+Definition comparable {Gamma D D' : ctx} (P1 : PIOA Gamma D) (P2 : PIOA Gamma D') := (inputs P1 ==i inputs P2) && (outputs P1 ==i outputs P2).
 
-Definition protocol_for {Gamma D : context} (P : PIOA Gamma D) (x : seq (cdom D + cdom Gamma)) := all (is_chan P) x.
+Definition protocol_for {Gamma D : ctx} (P : PIOA Gamma D) (x : seq (cdom D + cdom Gamma)) := all (is_chan P) x.
 
-Definition env {Gamma D D' : context} (P1 : PIOA Gamma D) (P2 : PIOA Gamma D') :=
+Definition env {Gamma D D' : ctx} (P1 : PIOA Gamma D) (P2 : PIOA Gamma D') :=
   compatible P1 P2 && closed (P1 ||| P2).
   
-Definition refines  {Gamma D D' : context} (P1 : PIOA Gamma D) (P2 : PIOA Gamma D') (hc : comparable P1 P2) :=
-  forall {D'' : context} (E: PIOA Gamma D''), env P1 E -> forall g1, protocol_for (P1 ||| E) g1 -> exists g2, protocol_for (P2 ||| E) g2 /\ 
+Definition refines  {Gamma D D' : ctx} (P1 : PIOA Gamma D) (P2 : PIOA Gamma D') (hc : comparable P1 P2) :=
+  forall {D'' : ctx} (E: PIOA Gamma D''), env P1 E -> forall g1, protocol_for (P1 ||| E) g1 -> exists g2, protocol_for (P2 ||| E) g2 /\ 
         (run (P1 ||| E) (g1)) <$> snd = (run (P2 ||| E) (g2)) <$> snd.
 
-
-Record simulation_sameh  {Gamma D : context} (P1 P2 : PIOA Gamma D) (Hcomp : comparable P1 P2)
+Record simulation_sameh  {Gamma D : ctx} (P1 P2 : PIOA Gamma D) (Hcomp : comparable P1 P2)
        (R : {meas (St P1) * (trace P1)} -> {meas (St P2) * (trace P2)} -> bool) :=
   {
-    sim_trace_eq : forall mu eta, R mu eta ->
-                                  exists u v tau, mu = (u ** (ret tau)) /\ eta = (v ** (ret tau));
+    sim_trace_eq : forall mu eta , R mu eta -> mu <$> snd = eta <$> snd;
     sim_start : R (initDist P1) (initDist P2);
     sim_step_lc : forall mu eta (hc : (H P1) + (C P1)), locally_controlled P1 hc -> R mu eta -> lifting R (act P1 hc mu) (act P2 hc eta);
     sim_step_i : forall mu eta (a : action Gamma), (tag a \in inputs P1) -> R mu eta ->
