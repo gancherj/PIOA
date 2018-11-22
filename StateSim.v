@@ -12,17 +12,21 @@ Section SimpleStateInj.
   Context (P1 P2 : PIOA G D).
   Context (hcomp : comparable P1 P2).
 
-  Print simulation_sameh.
+  Check app_v.
+  Check app_i.
 
   Record SimpleStateInj (R : St P1 -> St P2) :=
     {
       ssStart : R (start P1) = (start P2);
-      ss_lc : forall mu hc,
-          locally_controlled P1 hc ->
-          ((act P1 hc mu) <$> fun p => (R p.1, p.2)) = act P2 hc (mu <$> fun p => (R p.1, p.2));
-      ss_inp : forall mu a,
-          tag a \in inputs P1 ->
-          ((apply_i P1 a mu) <$> fun p => (R p.1, p.2)) = apply_i P2 a (mu <$> fun p => (R p.1, p.2));}.
+      ss_v : forall x c,
+          c \in outputs P1 ->
+          app_v P1 c x <$> (fun p => (R p.1, p.2)) = app_v P2 c (R x);
+      ss_h : forall x h,
+          app_h P1 h x <$> R = app_h P2 h (R x);
+      ss_inp : forall x i,
+          tag i \in inputs P1 ->
+          app_i P1 i x <$> R = app_i P2 i (R x);
+      }.
 
 
   Lemma stateSimSound R : SimpleStateInj R -> simulation_sameh P1 P2 hcomp (fun mu eta => (mu <$> (fun p => (R p.1, p.2)) == eta)).
@@ -38,9 +42,20 @@ Section SimpleStateInj.
     move/eqP => <-.
 
     apply id_lifting.
-    rewrite h2 //=.
-    intros; apply id_lifting.
-    rewrite h3 //=.
-    rewrite -(eqP H0) //=.
-  Qed.
+    destruct hc; simpl.
+    apply/eqP; rewrite !mbindA; apply mbind_eqP => xt Hxt.
+    rewrite ret_bind mbindA //=.
+    rewrite -h3 mbindA //=.
+    apply mbind_eqP => y Hy.
+    rewrite !ret_bind //=.
+
+    apply/eqP; rewrite !mbindA; apply mbind_eqP => xt Hxt.
+    rewrite ret_bind mbindA //=.
+    rewrite -h2 .
+    rewrite mbindA; apply mbind_eqP => y Hy.
+    rewrite !ret_bind //=.
+
+    (* to revise input in refinement *)
+    admit.
+  Admitted.
 End SimpleStateInj.

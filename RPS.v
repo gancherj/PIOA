@@ -2,22 +2,7 @@
 From mathcomp Require Import ssreflect ssrfun ssrbool ssrint eqtype ssrnat seq choice fintype rat finfun.
 From mathcomp Require Import bigop ssralg div ssrnum ssrint finmap.
 
-Require Import Meas Aux PIOA Ascii String CompPIOA SSRString FastEnum Action Refinement StateSim Compute.
-Open Scope string_scope.
-
-Check mkPIOA.
-
-Print pick.
-Check pickP.
-
-
-Definition ctx_bij_trans {C D E : ctx} (H1 : C ~~ D) (H2 : D ~~ E) : C ~~ E.
-  apply (Bij C E (fun x => lr H2 (lr H1 x)) (fun y => rl H1 (rl H2 y))).
-  move => x; rewrite !(lr_can) //=.
-  move => y; rewrite !(rl_can) //=.
-  move => c.
-  rewrite (ctx_eq H1) (ctx_eq H2) //=.
-Defined.
+Require Import Meas Aux PIOA Ascii String CompPIOA SSRString FastEnum Action Refinement StateSim Compute PIOAOps.
 
 Definition ctx_is_empty_l {C D : ctx} (H : C ~~ emptyCtx) : D ~~ (C :+: D).
  apply (Bij D (C :+: D) (fun x => inr x) (fun x => match x with | inl a => match (lr H a) with end | inr a => a end)).
@@ -28,6 +13,14 @@ Definition ctx_is_empty_l {C D : ctx} (H : C ~~ emptyCtx) : D ~~ (C :+: D).
  move => x; simpl.
  done.
 Defined.
+
+
+(* TODO: a library of rewriting rules such as the one below, combined into a single rewrite rule*)
+Lemma ctx_is_empty_l_appc {C D : ctx} (H : C ~~ emptyCtx) c :
+  (@ctx_is_empty_l C D H) *c c =
+  inr c.
+  done.
+Qed.  
 
 Inductive RPSContextM :=
   choose | committed | reveal | commit | open | winner.
@@ -195,12 +188,6 @@ Definition playerB := mkPIOA _ _ (player_data true) (player_spec true).
 Check act.
 
 
-Goal act playerA (inr (commit, true)) (initDist playerA) = initDist playerA.
-simpl.
-rewrite ret_bind //=.
-rewrite /app_ova.
-
-
 Definition Ftrans (s : playerSt) (a : action emptyCtx + action RPSContext) : option {meas playerSt} :=
   let va := s.1.1.1 in
   let vb := s.1.1.2 in
@@ -331,6 +318,17 @@ Definition R_RPS (x : St RRPS) : St IRPS :=
     (xa, xb, (fa1, fb1, fa2, fb2))
       end.
 
+Lemma R_RPS_playerA x :
+  (R_RPS x).1.1 = x.1.1.1.
+  destruct x.
+  destruct s.
+  destruct s.
+  simpl.
+  destruct s1.
+  destruct s0.
+  done.
+Qed.
+
 Lemma act_bind' {G D : ctx} {A : choiceType} (P : PIOA G D) (a : H P + C P) (m : {meas A}) (f : A -> {meas (St P) * (trace P)}) :
   act P a (x <- m; f x) = (x <- m; act P a (f x)).
   rewrite /act; case a => x; by rewrite mbindA.
@@ -346,7 +344,133 @@ Ltac split_tac :=
 Lemma rps_sim : SimpleStateInj RRPS IRPS R_RPS.
   constructor.
   done.
+  move => x c.
+  
+  rewrite //= in_cons; move/orP; elim. 
+  move/eqP => ->.
+  rewrite /RRPS /IRPS.
+  rewrite !appv_changeh.
+  rewrite !appv_hide.
+  rewrite !app_v_comp_l_ext; last by done.
+  rewrite !mbindA.
+  rewrite R_RPS_playerA.
+
+  remember (x.1.1.1) as xa.
+  have: xa \in fastEnum by apply mem_fastEnum.
+  simpl.
+  rewrite in_cons; move/orP; elim.
+  move/eqP => ->.
+
+  (* TODO: at this point, I need to use app_v_fast to automatically generate the action. *)
+
+  rewrite /app_v /pick_v.
+  case: pickP.
+
+
+
+  admit.
+  done.
+  done.
+  done.
+  done.
+  done.
+  elim x; simpl.
+  elim x; simpl.
+  elim x; simpl.
+  elim x; simpl.
+
+  simpl in x.
+  
+  destruct x as [[[? ?] ?] ?].
+  simpl.
+
+  destruct x as [? [? ?]].
+  rewrite /R_RPS //=.
+  remember (x.1.1.1) as xa.
+
+  have: xa \in fastEnum by apply mem_fastEnum.
+  simpl.
+
+
+
+  SearchAbout (app_v (changeH _ _)).
+
+  
+  rewrite //=.
   move => mu hc Hlc.
+  rewrite /RRPS /IRPS //=.
+  elim hc => h.
+  rewrite !act_changeh_h.
+  rewrite !ctx_is_empty_l_appc.
+  rewrite !act_hide_hv.
+  rewrite !mbindA.
+  
+  elim h => ha Hha; rewrite //=.
+  rewrite /rpshide in_cons in Hha.
+  elim (orP Hha).
+  move/eqP => ->.
+  rewrite !mbindA.
+  in_l ltac:(rewrite achoose_v_comp_l); rewrite //=.
+  in_l ltac:(rewrite achoose_v_comp_l); rewrite //=.
+  in_l ltac:(rewrite achoose_v_comp_r); rewrite //=.
+  
+  
+  setoid_rewrite achoose_v_comp_l.
+  rewrite_in_l achoose_h_comp.
+  in_l ltac:(rewrite achoose_v_comp_l); simpl.
+  etransitivity.
+  apply mbind_eqP => ? ?.
+  rewrite achoose_v_comp_l.
+  apply erefl.
+  done.
+  done.
+  simpl.
+
+  Check achoose_v_comp_l.
+  rewrite (achoose_v_comp_l (((playerA ||| playerB) ||| FA)) FB (commit, true) xt.1).
+  
+  move => ->
+
+  have: ssval h \in rpshide.
+  case h.
+  elim h => ha Hha . 
+
+  rewrite /rpshide in_cons.
+
+  rewrite 
+  rewrite /ctx_is_empty_l //=.
+  rewrite -/act.
+  rewrite !mbindA.
+  rewrite app_h_hidden.
+  rewrite act_hide_h.
+  elim h.
+
+  rewrite !act_
+  destruct hc.
+  rewrite /RRPS /IRPS.
+  Check act_changeh_h.
+  rewrite !act_changeh_h //=.
+  rewrite !mbindA.
+  apply mbind_eqP => xt Hxt; simpl in *.
+  rewrite !mbindA !ret_bind.
+  rewrite !app_h_hidden //=.
+  have: ssval s \in rpshide by apply ssvalP.
+  generalize (ssval s) => h; clear s.
+  rewrite /rpshide in_cons.
+  move/orP; elim.
+  move/eqP => ->.
+  simpl.
+
+
+  by apply ssvalP.
+  done.
+  
+  rewrite achoose_v_comp_l.
+  rewrite -/act.
+  Check
+  SearchAbout 
+  simpl.
+  case hc.
   rewrite act_bind.
   case hc.
   case => h Hh.

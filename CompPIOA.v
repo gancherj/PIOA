@@ -228,6 +228,8 @@ Lemma pick_v_comp_r c s (Hcompat : compatible P1 E) : c \in outputs E ->
   done.
 Qed.
 
+                                 
+
   Lemma hidden1P hl :
         act (P1 ||| E) (inl (inl hl)) mu =
         (st <- mu; s' <- app_h P1 hl st.1.1; ret ((s', st.1.2), st.2)).
@@ -242,6 +244,46 @@ Qed.
   simpl; apply mbind_eqP => xt Hxt.
   rewrite app_h_comp_r mbindA; apply mbind_eqP => s' Hs'; rewrite ret_bind //=.
   Qed.
+
+  Lemma app_v_comp_l_ext c s : compatible P1 E -> c \in outputs P1 -> c \notin inputs E ->
+        app_v (P1 ||| E) c s =
+        (p <- app_v P1 c s.1; 
+           ret ((p.1, s.2), p.2)).
+    move => hcompat h1 h2; simpl; rewrite /app_v.
+    rewrite pick_v_comp_l; rewrite //=.
+  remember (pick_v P1 c s.1) as oa; destruct oa. 
+  symmetry in Heqoa; apply pick_vP in Heqoa; last by done.
+  move/andP: Heqoa => [h3 h4].
+  rewrite !mem_cat (eqP h4) h1 (negbTE h2) orbT //=.
+  rewrite (negbTE (seq_disjointP _  _ hcompat _ h1)).
+  remember (tr P1 s.1 (inr s0)) as o; destruct o; rewrite -Heqo //=.
+  rewrite !mbindA; apply mbind_eqP => x Hx; rewrite !ret_bind //=.
+  rewrite ret_bind //=; by destruct s.
+  rewrite ret_bind //=; by destruct s.
+  Qed.
+
+  Lemma app_v_comp_r_ext c s : compatible P1 E -> c \in outputs E -> c \notin inputs P1 ->
+        app_v (P1 ||| E) c s =
+        (p <- app_v E c s.2; 
+           ret ((s.1, p.1), p.2)).
+    move => hcompat h1 h2; simpl; rewrite /app_v.
+    rewrite pick_v_comp_r; rewrite //=.
+  remember (pick_v E c s.2) as oa; destruct oa. 
+  symmetry in Heqoa; apply pick_vP in Heqoa; last by done.
+  move/andP: Heqoa => [h3 h4].
+  rewrite !mem_cat (eqP h4) h1 (negbTE h2) orbT //=.
+  rewrite /compatible seq_disjoint_sym in hcompat.
+  rewrite (negbTE (seq_disjointP _  _ hcompat _ h1)).
+  remember (tr E s.2 (inr s0)) as o; destruct o; rewrite -Heqo //=.
+  rewrite !mbindA; apply mbind_eqP => x Hx; rewrite !ret_bind //=.
+  rewrite ret_bind //=; by destruct s.
+  rewrite ret_bind //=; by destruct s.
+  Qed.
+
+
+
+                                     
+  (*
 
   Lemma out1_extP ol (Hcompat : compatible P1 E) : ol \in outputs P1 -> ol \notin inputs E ->
         act (P1 ||| E) (inr ol) mu =
@@ -323,6 +365,7 @@ Qed.
   done.
   done.
  Qed.
+ *)
 
   Lemma out2_intP ol (Hc : compatible P1 E) : ol \in outputs E -> ol \in inputs P1 ->
         act (P1 ||| E) (inr ol) mu =

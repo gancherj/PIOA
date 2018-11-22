@@ -177,6 +177,8 @@ Definition run {G D : ctx} (P : PIOA G D) (g : seq ((H P) + (C P))) :=
 
 Definition closed {G D : ctx} (P : PIOA G D) := inputs P == nil.
 
+
+(* TODO: this is redundant *)
 Definition apply_i {G D : ctx} (P : PIOA G D) (a : action G) (mu : {meas (St P) * (trace P)}) :=
   (xt <- mu;
      match (tr P xt.1 (inr a)) with

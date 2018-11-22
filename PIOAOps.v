@@ -6,6 +6,12 @@ From mathcomp Require Import bigop ssralg div ssrnum ssrint finmap.
 
 Require Import Meas Lifting Aux FastEnum Action PIOA.
 
+(* for each of the below constructions: needs
+- how app_v works
+- how app_h works
+- how app_i works 
+*)
+
 Section Hiding.
   Context {G D : ctx} (P : PIOA G D) (o : seq (cdom G)) (Ho : all (fun x => x \in (outputs P)) o).
 
@@ -68,6 +74,16 @@ Section HidingAct.
 
   Eval simpl in (H (hidePIOA P o Ho)).
 
+  Lemma appv_hide (c : cdom G) x :
+    app_v (hidePIOA P o Ho) c x =
+    app_v P c x. 
+    rewrite /app_v //=.
+    rewrite /pick_v.
+    case: pickP; simpl; intros.
+    done.
+    done.
+  Qed.
+                                     
   
   Lemma app_h_hidden (c : seq_sub o) x :
     app_h (hidePIOA P o Ho) (inr c) x =
@@ -86,14 +102,12 @@ Section HidingAct.
   
   Lemma act_hide_hv ( c : seq_sub o) mu : 
     act (hidePIOA P o Ho) (inl (inr c)) mu =
-    (xt <- mu; p <- app_v P (ssval c) xt.1; ret (p.1, xt.2)).
+    (xt <- mu; s <- (app_v P (ssval c) xt.1 <$> fst); ret (s, xt.2)).
     simpl.
 
     apply mbind_eqP => xt Hxt.
     rewrite app_h_hidden.
-    rewrite mbindA.
-    apply mbind_eqP => p Hp.
-    rewrite !ret_bind //=.
+    done.
   Qed.
 
   Lemma act_hide_h ( h : cdom D) mu :
@@ -184,6 +198,12 @@ Section ChangeHAct.
     done.
 
     case: pickP; simpl; done.
+  Qed.
+
+  Lemma appv_changeh (v : cdom G) x :
+    app_v (changeH P B) v x =
+    app_v P v x.
+    by done.
   Qed.
 
   
