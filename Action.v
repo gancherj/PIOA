@@ -1,5 +1,6 @@
 (* Actions, contexts, and canonical bijections between action spaces *)
 
+(* Need a good standard library of operations so that no dependent equality needs to show up in higher level proofs. *)
 
 From mathcomp Require Import ssreflect ssrfun ssrbool ssrint eqtype ssrnat seq choice fintype rat finfun.
 From mathcomp Require Import bigop ssralg div ssrnum ssrint order finmap.
@@ -54,6 +55,17 @@ rewrite -(ctx_eq H).
 apply a.
 Defined.
 
+Definition bij_msg_inv {C D : ctx} (H : C ~~ D) {c : cdom C} (a : D (lr H c)) : C c.
+  rewrite (ctx_eq H).
+  apply a.
+Defined.
+
+Lemma bij_msg_invP {C D : ctx} (H : C ~~ D) {c : cdom C} (a : D (lr H c)) :
+  bij_msg H (bij_msg_inv H a) = a.
+  rewrite /bij_msg /bij_msg_inv //=.
+  rewrite rew_opp_r //=.
+Qed.
+
 Lemma bijmsg_inj {C D : ctx} (H : C ~~ D) (c : cdom C) : injective (fun a : C c => bij_msg H a).
   move => x y.
   rewrite /bij_msg //=.
@@ -63,6 +75,7 @@ Qed.
 
 Notation "H *m m" := (bij_msg H m) (at level 70).
 Notation "H *c m" := (lr H m) (at level 70).
+
 
 Definition bijaction {C D : ctx} (H : C ~~ D) (a : action C) : action D :=
   mkact D (H *c (tag a)) (H *m (projT2 a)).
@@ -95,6 +108,15 @@ Lemma bijactionE (C D : ctx) (H : ctxbij C D) (c : cdom C) (m : C c) :
   mkact D (H *c c) (H *m m).
   rewrite /bijaction //=.
 Qed.
+
+  Lemma msg_inv {C D : ctx} (H : C ~~ D) :
+   forall h x, exists m,
+          (mkact D (H *c h) x) = (H *a mkact C h m).
+    move => h x.
+    exists (bij_msg_inv _ x).
+    rewrite bijactionE.
+    rewrite bij_msg_invP //=.
+  Qed.
 
 Inductive void : Set := .
 

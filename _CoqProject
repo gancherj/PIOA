@@ -12,4 +12,6 @@ Action.v
 PIOA.v
 Refinement.v
 CompPIOA.v
+PIOAOps.v
+Compute.v
 StateSim.v

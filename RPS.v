@@ -2,7 +2,7 @@
 From mathcomp Require Import ssreflect ssrfun ssrbool ssrint eqtype ssrnat seq choice fintype rat finfun.
 From mathcomp Require Import bigop ssralg div ssrnum ssrint finmap.
 
-Require Import Meas Aux PIOA Ascii String CompPIOA SSRString FastEnum Action Refinement StateSim.
+Require Import Meas Aux PIOA Ascii String CompPIOA SSRString FastEnum Action Refinement StateSim Compute.
 Open Scope string_scope.
 
 Check mkPIOA.
@@ -192,6 +192,15 @@ Qed.
 Definition playerA := mkPIOA _ _ (player_data false) (player_spec false).
 Definition playerB := mkPIOA _ _ (player_data true) (player_spec true).
 
+Check act.
+
+
+Goal act playerA (inr (commit, true)) (initDist playerA) = initDist playerA.
+simpl.
+rewrite ret_bind //=.
+rewrite /app_ova.
+
+
 Definition Ftrans (s : playerSt) (a : action emptyCtx + action RPSContext) : option {meas playerSt} :=
   let va := s.1.1.1 in
   let vb := s.1.1.2 in
@@ -327,9 +336,73 @@ Lemma act_bind' {G D : ctx} {A : choiceType} (P : PIOA G D) (a : H P + C P) (m :
   rewrite /act; case a => x; by rewrite mbindA.
 Qed.
 
+Ltac split_tac :=
+  match goal with
+    | [ H : is_true (_ \in (_ :: _)) |- _ ] => rewrite in_cons in H; elim (orP H); clear H; [move /eqP => -> | move => H]; split_tac
+    | [ H : is_true (_ \in nil) |- _ ] => done
+    | _ => idtac
+                                            end.
+
 Lemma rps_sim : SimpleStateInj RRPS IRPS R_RPS.
   constructor.
   done.
+  move => mu hc Hlc.
+  rewrite act_bind.
+  case hc.
+  case => h Hh.
+  have H := Hh; move: Hh.
+  rewrite /rpshide in H.
+
+  split_tac => Hh; simpl; rewrite !mbindA; apply mbind_eqP => x Hx; simpl in *. 
+  rewrite app_h_compP /app_h_comp.
+  destruct x.
+  
+  have Hpi: p \in fastEnum.
+  apply mem_fastEnum.
+  lazy.
+
+  native_compute in Hpi.
+  rewrite //= in Hpi.
+  apply/eqP.
+  move: x Hx.
+  move
+  Check forall_fast
+  simpl.
+  destruct x.
+  have eqp: p  = start RRPS by admit.
+  subst.
+  simpl.
+  rewrite app_h_compP /app_h_comp //=.
+  rewrite /app_h_comp.
+  rewrite /achoose_h_comp.
+  vm_compute.
+  simpl.
+  vm_compute app_h_comp.
+  Check act.
+  Print act.
+  (* TODO: at this point, I need to have a mechanism for concretely computing app_h/ app_ova *)
+  rewrite /app_h.
+  simpl.
+  s
+  have: x.1 = start RRPS.
+  admit.
+
+
+  rewrite !mbindA.
+
+  simpl.
+  move: Hh.
+  rewrite in_cons in H; elim (orP H); clear H; [ move/eqP => -> | move => H].
+  admit.
+  admit.
+  elim (
+  clear Hh.
+  split_tac.
+
+  case => h Hh.
+  rewrite /rpshide in Hh.
+
+
 
   
   intros.
