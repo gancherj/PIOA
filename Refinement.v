@@ -22,15 +22,31 @@ Definition refines  {Gamma D D' : ctx} (P1 : PIOA Gamma D) (P2 : PIOA Gamma D') 
   forall {D'' : ctx} (E: PIOA Gamma D''), env P1 E -> forall g1, protocol_for (P1 ||| E) g1 -> exists g2, protocol_for (P2 ||| E) g2 /\ 
         (run (P1 ||| E) (g1)) <$> snd = (run (P2 ||| E) (g2)) <$> snd.
 
+Check app_i.
+
 Record simulation_sameh  {Gamma D : ctx} (P1 P2 : PIOA Gamma D) (Hcomp : comparable P1 P2)
        (R : {meas (St P1) * (trace P1)} -> {meas (St P2) * (trace P2)} -> bool) :=
   {
     sim_trace_eq : forall mu eta , R mu eta -> mu <$> snd = eta <$> snd;
     sim_start : R (initDist P1) (initDist P2);
     sim_step_lc : forall mu eta (hc : (H P1) + (C P1)), locally_controlled P1 hc -> R mu eta -> lifting R (act P1 hc mu) (act P2 hc eta);
-    sim_step_i : forall mu eta (a : action Gamma), (tag a \in inputs P1) -> R mu eta ->
-                                                   lifting R (apply_i P1 a mu) (apply_i P2 a eta)
+    sim_step_i : forall mu eta (a : action Gamma),
+        (tag a \in inputs P1) -> R mu eta ->
+        R (x <- mu; s <- app_i P1 a x.1; ret (s, x.2)) (x <- eta; s <- app_i P2 a x.1; ret (s, x.2))
                           }. 
+
+(*
+Lemma simulation_sound {G D : ctx} (P1 P2 : PIOA G D) (hc : comparable P1 P2) R :
+  simulation_sameh P1 P2 hc R ->
+  refines P1 P2 hc.
+  case => h1 h2 h3 h4.
+  move => D' E HE g Hg1.
+  exists g; split.
+  admit. (* easy *)
+
+  
+  apply (h1 (run (P1 ||| E) g) (run (P2 ||| E) g)).
+
 
 (*
 
@@ -436,5 +452,7 @@ Theorem simulation_sound_sameh {Gamma Delta : context} (P1 P2 : PIOA Gamma Delta
 
 
   Check measMap_ret.
+
+*)
 
 *)

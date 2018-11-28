@@ -152,6 +152,26 @@ Lemma app_h_fastE {G D : ctx} (P : PIOA G D) (h : H P) (x : St P) `{FastEnum (D 
   rewrite /app_h /app_h_fast pick_h_fastE //=.
 Qed.
 
+Check oapp.
+
+(* NOTE: use simpl, note rewrite //= !! *)
+Definition app_v_fast {G D : ctx} (P : PIOA G D) (v : C P) (s : St P) `{FastEnum (G v)} :=
+  oapp (fun va =>
+          oapp (fun mu => (x <- mu; ret (x, Some va))) (ret (s, None)) (tr P s (inr va))) (ret (s, None)) (pick_v_fast _ _ P v s).
+
+Lemma app_v_fastE {G D : ctx} (P : PIOA G D) (v : C P) (s : St P) `{FastEnum (G v)} :
+  v \in outputs P ->
+  app_v P v s = app_v_fast P v s.
+  move => Hv.
+  rewrite /app_v /app_v_fast.
+  rewrite pick_v_fastE.
+  simpl.
+  destruct (pick_v_fast G D P v s); simpl.
+  destruct (tr P s (inr s0)); simpl; done.
+  done.
+  done.
+Qed.
+
 (* TODO: provide computation rules for:
 
 (this is already

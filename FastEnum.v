@@ -156,3 +156,17 @@ Instance seq_sub_fe (T : choiceType) (s : seq T) :
   rewrite seqsub_pmap_in.
   done.
 Defined.
+
+Instance fastEnum_bij {A B : finType} {f : A -> B} {g : B -> A} (H : cancel f g) (H2 : cancel g f) `{FastEnum A} : FastEnum B := { fastEnum := map f fastEnum }.
+apply uniq_perm_eq.
+rewrite map_inj_uniq.
+apply fastEnum_uniq.
+apply (can_inj H).
+apply enum_uniq.
+move => x; rewrite mem_enum //=.
+have -> : x \in B by done.
+apply/mapP.
+exists (g x).
+apply mem_fastEnum.
+rewrite H2 //=.
+Defined.

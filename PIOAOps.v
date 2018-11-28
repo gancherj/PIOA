@@ -206,6 +206,17 @@ Section ChangeHAct.
     by done.
   Qed.
 
+  Check app_h.
+
+  Lemma apph_changeh (h : cdom D') x :
+    app_h (changeH P B) h x =
+    app_h P (B *c h) x.
+    rewrite /app_h.
+    rewrite -pick_h_changeh //=.
+    case (pick_h (changeH P B) h x); simpl.
+    done.
+    done.
+  Qed.
   
   Lemma act_changeh_h (h : cdom D') mu :
     act (changeH P B) (inl h) mu =

@@ -124,6 +124,17 @@ Lemma pick_vP {G D : ctx} (P : PIOA G D) h s a : h \in outputs P ->
   destruct a; simpl in *; move: x; move/(_ s0); rewrite h1 //=.
 Qed.
 
+Lemma pick_vPn {G D : ctx} (P : PIOA G D) h s :
+  pick_v P h s = None -> forall a, tag a = h -> ~~ enabled P s (inr a).
+  rewrite /pick_v.
+  case: pickP.
+  done.
+  move => H _ a Ha.
+  destruct a; simpl in *.
+  subst.
+  move: (H s0) => ->; done.
+Qed.
+
 
 (* def 3 *)
 Definition app_h {G D : ctx} (P : PIOA G D) (h : H P) (s : St P) : {meas St P} :=
@@ -145,6 +156,39 @@ Definition app_v {G D : ctx} (P : PIOA G D) (v : C P) (s : St P) : {meas (St P) 
     | Some mu => (x <- mu; ret (x, Some va))
     end
       end.
+
+Inductive app_v_spec {G D : ctx} (P : PIOA G D) (v : C P) (s : St P) : Prop :=
+  | App_v_ex m mu : tr P s (inr (mkact G v m)) = Some mu -> app_v P v s = (s' <- mu; ret (s', Some (mkact G v m))) -> app_v_spec P v s
+  | App_v_nex : (forall a, tag a = v -> ~~ enabled P s (inr a)) -> app_v P v s = (ret (s, None)) -> app_v_spec P v s.
+
+Lemma app_vP {G D : ctx} (P : PIOA G D) (v : C P) (s : St P)
+  : v \in outputs P -> app_v_spec P v s.
+  move => Hvin.
+  remember (app_v P v s) as av; symmetry in Heqav.
+  have H2 := Heqav.
+  move: H2.
+  rewrite /app_v.
+  remember (pick_v P v s) as pv; symmetry in Heqpv; destruct pv.
+  apply pick_vP in Heqpv.
+  destruct s0; simpl in *; move/andP: Heqpv => [h1 h2].
+  move/eqP: h2 => h2.
+  subst.
+
+  move/opt_neq_none: h1; elim => mu Hmu.
+  rewrite Hmu => H.
+
+  eapply App_v_ex.
+  apply Hmu.
+  rewrite -H; done.
+  done.
+
+  move => Heq; apply App_v_nex.
+  move => a Ha.
+  eapply (pick_vPn P v s) in Heqpv.
+  apply Heqpv.
+  done.
+  rewrite Heqav -Heq //=.
+Qed.
 
 Definition app_i {G D : ctx} (P : PIOA G D) (a : action G) (s : St P) :=
   match (tr P s (inr a)) with
@@ -177,16 +221,6 @@ Definition run {G D : ctx} (P : PIOA G D) (g : seq ((H P) + (C P))) :=
 
 Definition closed {G D : ctx} (P : PIOA G D) := inputs P == nil.
 
-
-(* TODO: this is redundant *)
-Definition apply_i {G D : ctx} (P : PIOA G D) (a : action G) (mu : {meas (St P) * (trace P)}) :=
-  (xt <- mu;
-     match (tr P xt.1 (inr a)) with
-     | None => ret xt
-     | Some mu' => s' <- mu'; ret (s', a :: xt.2)
-                                  end).
-                   
-
 Lemma run_rcons {G D : ctx} (P : PIOA G D) xs x :
   run P (rcons xs x) = act P x (run P xs).
   rewrite /run //=.
@@ -203,52 +237,3 @@ Definition mkPIOA (G D : ctx) (d : PIOA_data G D):
   fun h =>
 (Build_PIOA G D d h).
                                              
-
-(* TODO : move proof to Qed lemma *)
-(*
-Definition extendG {G D : ctx} (P : PIOA G D) (G' : ctx) :
-  PIOA (G :+: G') D.
-  Check decomp_act.
-  apply (mkPIOA (G :+: G') (St P) (start P) (map inl (inputs P)) (map inl (outputs P)) D 
-                (fun s a =>
-                   match a with
-                   | inl h => tr P s (inl h)
-                   | inr ab =>
-                     match (decomp_act ab) with
-                     | inl a' => tr P s (inr a')
-                     | _ => None
-                     end
-                       end)).
-
-  apply/allP => x Hx. apply/allP => y Hy.
-  elim (mapP Hx) => x0 Hx0.
-  elim (mapP Hy) => y0 Hy0.
-  move => -> => ->.
-
-  destruct P; simpl in *.
-  move/allP: disj_io0; move/(_ x0 Hx0)/allP/(_ y0 Hy0) => h; apply/contraT; rewrite negbK //=; move/eqP => Hc; injection Hc => Hc'; rewrite Hc' in h; rewrite eq_refl //= in h; done.
-  apply (ad_h P).
-
-  move => s h m1 m2.
-  destruct h; rewrite //=.
-  apply (ad_v P).
-
-  move => s i Hi m.
-  destruct i; rewrite //=.
-  apply (i_a P).
-  move/mapP: Hi; elim => x0 Hx0 Hc; injection Hc => ->.
-  done.
-
-  move/mapP: Hi; elim; done.
-Defined.
-*)
-
-
-
-(* TODO fix
-Ltac mkPIOA_tac g d st ins outs t :=
-  apply (mkPIOA g _ st ins outs d t); [
-    by vm_compute | apply/decide_ad_hP; by vm_compute | apply/decide_ad_vP; by vm_compute | apply/ decide_i_aP; by vm_compute ].
-*)
-
-

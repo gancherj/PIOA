@@ -1,5 +1,7 @@
 -R . PIOA
 -I .
+-Q ./coq-lens/theories Lens
+Derive.v
 monad.v
 FastEnum.v
 SSRString.v

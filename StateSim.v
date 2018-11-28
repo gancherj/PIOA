@@ -54,8 +54,16 @@ Section SimpleStateInj.
     rewrite -h2 .
     rewrite mbindA; apply mbind_eqP => y Hy.
     rewrite !ret_bind //=.
+    done.
 
-    (* to revise input in refinement *)
-    admit.
-  Admitted.
+    move => mu eta a Ha; move/eqP => <-.
+    rewrite !mbindA; apply/eqP.
+    apply mbind_eqP => x Hx.
+    rewrite !mbindA ret_bind //=.
+    rewrite -ss_inp0.
+    rewrite mbindA.
+    apply mbind_eqP => y Hy.
+    rewrite !ret_bind //=.
+    done.
+Qed.
 End SimpleStateInj.

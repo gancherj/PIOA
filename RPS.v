@@ -4,6 +4,18 @@ From mathcomp Require Import bigop ssralg div ssrnum ssrint finmap.
 
 Require Import Meas Aux PIOA Ascii String CompPIOA SSRString FastEnum Action Refinement StateSim Compute PIOAOps.
 
+Require Import Coq.Strings.String.
+Local Open Scope string_scope.
+
+Require Import Lens.Lens Lens.TC.
+
+Require Import Derive.
+
+Set Primitive Projections.
+
+
+
+
 Definition ctx_is_empty_l {C D : ctx} (H : C ~~ emptyCtx) : D ~~ (C :+: D).
  apply (Bij D (C :+: D) (fun x => inr x) (fun x => match x with | inl a => match (lr H a) with end | inr a => a end)).
  done.
@@ -104,6 +116,10 @@ Definition rps_win_tie (va vb : option play) :=
   | _, _ => false
               end.
 
+Lemma rpsP (va vb : play) : [|| rps_win_a (Some va) (Some vb), rps_win_b (Some va) (Some vb) | rps_win_tie (Some va) (Some vb)].
+  destruct va; destruct vb; simpl; done.
+Qed.
+
 Definition RPSContext_f (x : RPSContextM * bool) : finType  :=
   match x.1 with
     | (choose) => [finType of play]
@@ -121,45 +137,62 @@ Instance rpscontext_fe (x : cdom RPSContext) : FastEnum (RPSContext x).
 case x; case; case; simpl; rewrite /RPSContext_f //=; apply _.
 Defined.
 
-Definition playerSt := (option play * option play * bool * bool)%type.
+(* TODO : fix below to use lenses for record updates. *)
+Record playerSt :=
+  PlayerSt {
+      val1 : option play;
+      val2 : option play;
+      com1 : bool;
+      com2 : bool }.
+
+Run TemplateProgram (deriveFinRecord playerSt "f" "g" "playerSt_cancel1" "playerSt_cancel2").
+Next Obligation.
+  by case.
+Defined.
+Next Obligation.
+  by case => x; case => y; case => z w.
+Defined.
+
+Run TemplateProgram (genLens playerSt).
+
+
+Instance playerSt_fe : FastEnum [finType of playerSt] := fastEnum_bij playerSt_cancel2 playerSt_cancel1.
 
 Definition player_trans (wh : bool) (s : playerSt) (a : action emptyCtx + action RPSContext) : option {meas playerSt}:=
-  let vme := s.1.1.1 in
-  let vother := s.1.1.2 in
-  let cme := s.1.2 in
-  let cother := s.2 in
   match a with
   | inr (existT (choose, b) msg) =>
         if (wh == b) then
-        Some (ret (if vme == None then Some msg else vme, vother, cme, cother))
+        if (val1 s) == None then Some (ret (set _val1 (Some msg) s)) else Some (ret s)
         else None
   | inr (existT (commit, b) msg) =>
-        if (wh == b) && (vme == Some msg) then
-        Some (ret (vme, vother, true, cother))
+        if (wh == b) && (val1 s == Some msg) then
+        Some (ret set _com1 true s)
         else None
   | inr (existT (committed, b) msg) =>
         if (wh != b) then
-        Some (ret (vme, vother, cme, true))
+        Some (ret set _com2 true s)
         else None
   | inr (existT (open, b) msg) =>
-        if (wh == b) && cme && cother then
+        if (wh == b) && com1 s && com2 s then
         Some (ret s)
         else None
   | inr (existT (reveal, b) msg) =>
         if (wh != b) then
-        Some (ret (vme, if vother == None then Some msg else vother, cme, cother))
+          if (val2 s == None) then
+            Some (ret set _val2 (Some msg) s)
+          else Some (ret s)
         else None
   | inr (existT (winner, b) msg) =>
     multiIf [::
-        ([&& wh == b, msg == Some true & rps_win_a vme vother], (ret s)) ;
-        ([&& wh == b, msg == Some false & rps_win_b vme vother], (ret s)) ;
-        ([&& wh == b, msg == None & rps_win_tie vme vother], (ret s)) ]
+        ([&& wh == b, msg == Some true & rps_win_a (val1 s) (val2 s)], (ret s)) ;
+        ([&& wh == b, msg == Some false & rps_win_b (val1 s) (val2 s)], (ret s)) ;
+        ([&& wh == b, msg == None & rps_win_tie (val1 s) (val2 s)], (ret s)) ]
   | _ => None                                                                                          
       end.
 
 Definition player_data (wh : bool) : PIOA_data RPSContext emptyCtx.
 econstructor.
-apply ((None, None, false, false) : playerSt).
+apply (PlayerSt None None false false).
 apply ([:: (choose, wh); (committed, ~~ wh); (reveal, ~~ wh)]).
 apply ([:: (commit, wh); (open, wh); (winner, wh)]).
 apply (player_trans wh).
@@ -185,36 +218,30 @@ Qed.
 Definition playerA := mkPIOA _ _ (player_data false) (player_spec false).
 Definition playerB := mkPIOA _ _ (player_data true) (player_spec true).
 
-Check act.
-
 
 Definition Ftrans (s : playerSt) (a : action emptyCtx + action RPSContext) : option {meas playerSt} :=
-  let va := s.1.1.1 in
-  let vb := s.1.1.2 in
-  let opa := s.1.2 in
-  let opb := s.2 in
   match a with
   | inr (existT (commit, false) msg) =>
-    Some (ret (if va == None then Some msg else va, vb, opa, opb))
+    Some (ret set _val1 (if view _val1 s == None then Some msg else view _val1 s) s)
   | inr (existT (commit, true) msg) =>
-    Some (ret (va, if vb == None then Some msg else vb, opa, opb))
+    Some (ret set _val2 (if view _val2 s == None then Some msg else view _val2 s) s)
   | inr (existT (committed, false) _) =>
-    if va != None then Some (ret s) else None
+    if (val1 s) != None then Some (ret s) else None
   | inr (existT (committed, true) _) =>
-    if vb != None then Some (ret s) else None
+    if (val2 s) != None then Some (ret s) else None
   | inr (existT (open, false) _) =>
-    Some (ret (va, vb, true, opb))
+    Some (ret (set _com1 true s))
   | inr (existT (open, true) _) =>
-    Some (ret (va, vb, opa, true))
+    Some (ret (set _com2 true s))
   | inr (existT (reveal, false) x) =>
-    if (opa && (va == Some x)) then Some (ret s) else None
+    if ((com1 s) && ((val1 s) == Some x)) then Some (ret s) else None
   | inr (existT (reveal, true) x) =>
-    if (opb && (vb == Some x)) then Some (ret s) else None
+    if ((com2 s) && ((val2 s) == Some x)) then Some (ret s) else None
   | _ => None end.
 
 Definition funct_data : PIOA_data RPSContext emptyCtx.
 econstructor.
-apply ((None, None, false, false) : playerSt).
+apply (PlayerSt None None false false).
     apply [:: (commit, true); (commit, false); (open, true); (open,false)].
 apply    [:: (committed, true); (committed, false); (reveal, true); (reveal, false)].
 apply Ftrans.
@@ -262,18 +289,17 @@ Definition IRPS : PIOA RPSContext (RPSContext |c_ rpshide).
 Defined.
 
 Definition FReal (wh : bool) (s : option play * bool) (a : action emptyCtx + action RPSContext) :=
-  let val := s.1 in
-  let op := s.2 in
   match a with
   | inr (existT (commit, b) m) =>
-    if wh == b then Some (ret (if val == None then Some m else val, op)) else None
+    if wh == b then Some (ret (set _1 (if s.1 == None then Some m else s.1) s)) else None
   | inr (existT (committed, b) m) =>
-    if (wh == b) && (val != None) then Some (ret s) else None
+    if (wh == b) && (s.1 != None) then Some (ret s) else None
   | inr (existT (open, b) m) =>
-    if (wh == b) then Some (ret (val, true)) else None
+    if (wh == b) then Some (ret set _2 true s) else None
   | inr (existT (reveal, b) m) =>
-    if (wh == b) && op && (val == Some m) then Some (ret s) else None
-  | _ => None end.                                                                   
+    if (wh == b) && (s.2) && (s.1 == Some m) then Some (ret s) else None
+  | _ => None 
+                                                                      end.
                       
 Definition FAB_data (wh : bool) : PIOA_data RPSContext emptyCtx.
 econstructor.
@@ -312,328 +338,208 @@ Definition RRPS : PIOA RPSContext (RPSContext |c_ rpshide).
   apply ctx_symm; apply empty_plus_r.
 Defined.
 
+
 Definition R_RPS (x : St RRPS) : St IRPS :=
-  match x with
-  | (xa, xb, (fa1, fa2), (fb1, fb2)) =>
-    (xa, xb, (fa1, fb1, fa2, fb2))
-      end.
+  (x.1.1.1, x.1.1.2, PlayerSt x.1.2.1 x.2.1 x.1.2.2 x.2.2).
 
-Lemma R_RPS_playerA x :
-  (R_RPS x).1.1 = x.1.1.1.
-  destruct x.
-  destruct s.
-  destruct s.
-  simpl.
-  destruct s1.
-  destruct s0.
-  done.
-Qed.
+(* move to meas *)
+Definition measE A :=
+  (@ret_bind A, @bind_ret A, @mbindA A).
 
-Lemma act_bind' {G D : ctx} {A : choiceType} (P : PIOA G D) (a : H P + C P) (m : {meas A}) (f : A -> {meas (St P) * (trace P)}) :
-  act P a (x <- m; f x) = (x <- m; act P a (f x)).
-  rewrite /act; case a => x; by rewrite mbindA.
-Qed.
 
-Ltac split_tac :=
+Ltac app_v_comp_l_ext_tac :=
+  rewrite app_v_comp_l_ext; [ idtac | done | done | done].
+
+Ltac app_v_comp_r_ext_tac :=
+  rewrite app_v_comp_r_ext; [ idtac | done | done | done].
+
+Ltac app_v_comp_l_int_tac :=
+  rewrite app_v_comp_l_int; [ idtac | done | done | done].
+
+Ltac app_v_comp_r_int_tac :=
+  rewrite app_v_comp_r_int; [ idtac | done | done | done].
+
+Ltac caseof_tac b t1 t2 :=
+  match (eval cbv in b) with
+  | true => t1
+  | false => t2
+               end.
+
+Ltac app_v_comp_tac :=
   match goal with
-    | [ H : is_true (_ \in (_ :: _)) |- _ ] => rewrite in_cons in H; elim (orP H); clear H; [move /eqP => -> | move => H]; split_tac
-    | [ H : is_true (_ \in nil) |- _ ] => done
-    | _ => idtac
-                                            end.
+  | [ |- context[app_v (?P ||| ?Q) ?c ?x]] => 
+    match (eval cbv in (c \in outputs P))  with
+        | true => 
+          match (eval cbv in (c \in inputs Q)) with
+            | true => app_v_comp_l_int_tac
+            | false => app_v_comp_l_ext_tac
+                         end
+        | false => 
+          match (eval cbv in (c \in inputs P)) with
+            | true => app_v_comp_r_int_tac
+            | false => app_v_comp_r_ext_tac
+                         end
+  end
+    end.
+
+
+(* move to  aux *)
+
+Lemma inP {A : eqType} (x : A) (xs : seq A) :
+  reflect (List.In x xs) (x \in xs).
+  induction xs.
+  simpl; rewrite in_nil //=.
+  apply/(iffP idP); done.
+  simpl.
+  rewrite in_cons.
+  apply/(iffP orP); elim.
+  move/eqP => ->; left; done.
+  move/IHxs => H; right; done.
+  move => -> ;left ;done.
+  move/IHxs => ->; right; done.
+Qed.
+
+Ltac split_In := 
+  match goal with
+    | [ |- List.In _ (_ :: _) -> _] => case; [ move => <- | split_In]
+    | [ |- False -> _] => done
+    | [ |- _ = _ -> _] => move => <-
+    | [ |- _ \/ _ -> _] => case; split_In
+                            end.
+
+
+Lemma support_app_vP {G D : ctx} (P : PIOA G D) (c : cdom G) (s : St P) y :
+  c \in outputs P -> y \in support (app_v P c s) -> (exists s' a, y = (s', Some a) /\ tag a = c) \/ (y = (s, None)).
+  intro Hc.
+  rewrite /app_v.
+  remember (pick_v P c s) as o; destruct o; symmetry in Heqo.
+  apply pick_vP in Heqo.
+  elim (andP Heqo) => h1 h2.
+  remember (tr P s (inr s0)) as t; destruct t.
+  move/support_bindP; elim => x.
+  elim => h3 h4.
+  left.
+  exists x.
+  exists s0.
+  rewrite support_ret mem_seq1 in h4.
+  rewrite (eqP h4).
+  split; rewrite //=.
+  rewrite (eqP h2) //=.
+  rewrite support_ret mem_seq1; move/eqP => ->.
+  right; done.
+  done.
+  rewrite support_ret mem_seq1; move/eqP => ->.
+  right; done.
+Qed.
+
+(*
+Check mbind_eqP.
+Lemma mbind_eqP_weak {A B C : choiceType} (m1 : {meas A}) (m2 : {meas B}) (c1 : A -> {meas C}) (c2 : B -> {meas C}) : (forall x
+*)
 
 Lemma rps_sim : SimpleStateInj RRPS IRPS R_RPS.
   constructor.
   done.
-  move => x c.
-  
-  rewrite //= in_cons; move/orP; elim. 
-  move/eqP => ->.
-  rewrite /RRPS /IRPS.
+  simpl => x c Hc.
+  rewrite /RRPS /IRPS; simpl.
   rewrite !appv_changeh.
   rewrite !appv_hide.
-  rewrite !app_v_comp_l_ext; last by done.
-  rewrite !mbindA.
-  rewrite R_RPS_playerA.
+  move: Hc.
+  move/inP.
+  split_In.
+  repeat app_v_comp_tac; rewrite !measE; apply mbind_eqP => y Hy; rewrite !measE //=.
+  repeat app_v_comp_tac; rewrite !measE; apply mbind_eqP => y Hy; rewrite !measE //=.
 
-  remember (x.1.1.1) as xa.
-  have: xa \in fastEnum by apply mem_fastEnum.
-  simpl.
-  rewrite in_cons; move/orP; elim.
-  move/eqP => ->.
-
-  (* TODO: at this point, I need to use app_v_fast to automatically generate the action. *)
-
-  rewrite /app_v /pick_v.
-  case: pickP.
-
-
-
-  admit.
-  done.
-  done.
-  done.
-  done.
-  done.
-  elim x; simpl.
-  elim x; simpl.
-  elim x; simpl.
-  elim x; simpl.
-
-  simpl in x.
-  
-  destruct x as [[[? ?] ?] ?].
-  simpl.
-
-  destruct x as [? [? ?]].
-  rewrite /R_RPS //=.
-  remember (x.1.1.1) as xa.
-
-  have: xa \in fastEnum by apply mem_fastEnum.
-  simpl.
-
-
-
-  SearchAbout (app_v (changeH _ _)).
-
-  
-  rewrite //=.
-  move => mu hc Hlc.
-  rewrite /RRPS /IRPS //=.
-  elim hc => h.
-  rewrite !act_changeh_h.
-  rewrite !ctx_is_empty_l_appc.
-  rewrite !act_hide_hv.
-  rewrite !mbindA.
-  
-  elim h => ha Hha; rewrite //=.
-  rewrite /rpshide in_cons in Hha.
-  elim (orP Hha).
-  move/eqP => ->.
-  rewrite !mbindA.
-  in_l ltac:(rewrite achoose_v_comp_l); rewrite //=.
-  in_l ltac:(rewrite achoose_v_comp_l); rewrite //=.
-  in_l ltac:(rewrite achoose_v_comp_r); rewrite //=.
-  
-  
-  setoid_rewrite achoose_v_comp_l.
-  rewrite_in_l achoose_h_comp.
-  in_l ltac:(rewrite achoose_v_comp_l); simpl.
-  etransitivity.
-  apply mbind_eqP => ? ?.
-  rewrite achoose_v_comp_l.
-  apply erefl.
-  done.
-  done.
-  simpl.
-
-  Check achoose_v_comp_l.
-  rewrite (achoose_v_comp_l (((playerA ||| playerB) ||| FA)) FB (commit, true) xt.1).
-  
-  move => ->
-
-  have: ssval h \in rpshide.
-  case h.
-  elim h => ha Hha . 
-
-  rewrite /rpshide in_cons.
-
-  rewrite 
-  rewrite /ctx_is_empty_l //=.
-  rewrite -/act.
-  rewrite !mbindA.
-  rewrite app_h_hidden.
-  rewrite act_hide_h.
-  elim h.
-
-  rewrite !act_
-  destruct hc.
+  move => x h.
   rewrite /RRPS /IRPS.
-  Check act_changeh_h.
-  rewrite !act_changeh_h //=.
-  rewrite !mbindA.
-  apply mbind_eqP => xt Hxt; simpl in *.
-  rewrite !mbindA !ret_bind.
-  rewrite !app_h_hidden //=.
-  have: ssval s \in rpshide by apply ssvalP.
-  generalize (ssval s) => h; clear s.
-  rewrite /rpshide in_cons.
-  move/orP; elim.
-  move/eqP => ->.
+  rewrite apph_changeh.
+  rewrite apph_changeh.
   simpl.
+  rewrite app_h_hidden.
+  rewrite app_h_hidden.
 
+  destruct h as [h H]; simpl; move: H.
+  rewrite /rpshide; move/inP; split_In.
 
-  by apply ssvalP.
+  repeat app_v_comp_tac; rewrite !measE.
+  simpl.
+  elim: (app_vP playerB (commit, true) x.1.1.2); last by done.
+  move => m mu Heq ->.
+  rewrite !measE; apply mbind_eqP => y Hy; rewrite !measE //=.
+  move => _ ->; rewrite !measE //=.
+
+  repeat app_v_comp_tac; rewrite !measE.
+  simpl.
+  elim: (app_vP playerA (commit, false) x.1.1.1); last by done.
+  move => m mu Heq ->.
+  rewrite !measE; apply mbind_eqP => y Hy; rewrite !measE //=.
+  move => _ ->; rewrite !measE //=.
+
+  repeat app_v_comp_tac; rewrite !measE.
+  elim: (app_vP FB (committed, true) x.2).
+  move => m mu Htr ->.
+  elim: (app_vP Funct (committed, true) (R_RPS x).2).
+  move => m' mu' Htr' ->.
+  simpl in *.
+  destruct (x.2.1); simpl in *.
+  injection Htr; injection Htr'; move => <- <-.
+  rewrite !measE.
+  simpl.
+  rewrite /R_RPS //=.
+  admit.
+
   done.
-  
-  rewrite achoose_v_comp_l.
-  rewrite -/act.
-  Check
-  SearchAbout 
-  simpl.
-  case hc.
-  rewrite act_bind.
-  case hc.
-  case => h Hh.
-  have H := Hh; move: Hh.
-  rewrite /rpshide in H.
+  move/(_ (mkact RPSContext (committed, true) m)).
+  simpl; move/(_ erefl); simpl.
+  rewrite /enabled; simpl in *.
+  destruct (x.2.1); simpl in *.
+  done.
+  done.
+  done.
 
-  split_tac => Hh; simpl; rewrite !mbindA; apply mbind_eqP => x Hx; simpl in *. 
-  rewrite app_h_compP /app_h_comp.
-  destruct x.
-  
-  have Hpi: p \in fastEnum.
-  apply mem_fastEnum.
-  lazy.
+  move => H ->; rewrite !measE.
+  elim (app_vP Funct (committed, true) (R_RPS x).2); last by done.
+  move => m mu Htr.
+  move: (H (mkact RPSContext (committed, true) m) erefl); rewrite /enabled //=; simpl in *.
+  destruct x.2.1; done.
 
-  native_compute in Hpi.
-  rewrite //= in Hpi.
-  apply/eqP.
-  move: x Hx.
-  move
-  Check forall_fast
+  move => _ ->.
+  rewrite !measE //=.
+  done.
+
+  repeat app_v_comp_tac; rewrite !measE.
+  admit.
+
+  repeat app_v_comp_tac; rewrite !measE.
   simpl.
-  destruct x.
-  have eqp: p  = start RRPS by admit.
-  subst.
+  elim: (app_vP playerB (open, true) x.1.1.2); last by done.
+  move => m mu Heq ->.
+  rewrite !measE; apply mbind_eqP => y Hy; rewrite !measE //=.
+  move => _ ->; rewrite !measE //=.
+
+  repeat app_v_comp_tac; rewrite !measE.
   simpl.
-  rewrite app_h_compP /app_h_comp //=.
-  rewrite /app_h_comp.
-  rewrite /achoose_h_comp.
-  vm_compute.
-  simpl.
-  vm_compute app_h_comp.
-  Check act.
-  Print act.
-  (* TODO: at this point, I need to have a mechanism for concretely computing app_h/ app_ova *)
-  rewrite /app_h.
-  simpl.
-  s
-  have: x.1 = start RRPS.
+  elim: (app_vP playerA (open, false) x.1.1.1); last by done.
+  move => m mu Heq ->.
+  rewrite !measE; apply mbind_eqP => y Hy; rewrite !measE //=.
+  move => _ ->; rewrite !measE //=.
+
+  repeat app_v_comp_tac; rewrite !measE.
+  admit.
+
+  repeat app_v_comp_tac; rewrite !measE.
   admit.
 
 
-  rewrite !mbindA.
+  (* for app_i, we may simply compute on the transition function since we know the action. *)
+  move => x.
+  elim; simpl => c m Hc.
+  move: Hc m.
+  move/inP.
+  split_In; simpl; rewrite /app_i //= => m.
+  remember (val1 x.1.1.1) as v1; destruct v1; rewrite -Heqv1 //=;
+  rewrite !measE /R_RPS //=.
+  remember (val1 x.1.1.2) as v1; destruct v1; rewrite -Heqv1 //=;
+  rewrite !measE /R_RPS //=.
 
-  simpl.
-  move: Hh.
-  rewrite in_cons in H; elim (orP H); clear H; [ move/eqP => -> | move => H].
-  admit.
-  admit.
-  elim (
-  clear Hh.
-  split_tac.
-
-  case => h Hh.
-  rewrite /rpshide in Hh.
-
-
-
-  
-  intros.
-  rewrite act_bind.
-
-
-  Focus 2.
-
-
-  admit.
-
-  rewrite act_bind.
-  move => mu hc.
-  rewrite act_bind'.
-  intro.
-  symmetry.
-  Check act_bind.
-  rewrite (act_bind IRPS).
-  Check act_bind.
-
-  Set Printing All.
-  Check (@act_bind RPSContext (RPSContext |c_ rpshide) [choiceType of (St RRPS * trace RRPS)%type] IRPS hc mu (fun x => ret (R_RPS x.1, x.2))).
-  unfold act.
-  elim hc.
-  rewrite /act.
-
-  Check act_bind.
-  rewrite (act_bind IRPS hc mu).
-
-  intro; etransitivity; last first.
-
-  symmetry; apply act_bind.
-  simpl.
-  apply act_bind.
-
-  etransitivity.
-  apply erefl.
-  sy
-  rewrite (act_bind IRPS hc).
-
-  Check act_bind.
-  intro h.
-  Set Printing All.
-  Check (act_bind' IRPS hc mu (fun x => ret (R_RPS x.1, x.2))).
-
-  rewrite /act.
-  Check act_bind.
-
-  rewrite act_bind.
-  destruct hc.
-
-  have Hs: (ssval s) \in  rpshide.
-  destruct s; rewrite //=.
-
-  remember (ssval s) as h.
-  rewrite /rpshide in Hs.
-
-  rewrite in_cons in Hs; elim (orP Hs); clear Hs => Hh.
-  Check act_bind.
-  rewrite (act_bind (IRPS) (inl s)
-  rewrite /rpshide in_cons in Hs.
-  Set Ltac Profiling.
-  Check (orP Hs).
-  elim (orP Hs).
-  Show Ltac Profile.
-  elim (orP Hs).
-  move/eqP => Hh.
-  rewrite act_bind.
-  move/orP: Hs.
-
-  destruct s as [ h Hh].
-  have H := Hh.
-  rewrite /rpshide in_cons in H.
-  move/orP: H.
-  elim.
-  move/eqP => eqH; move: Hh.
-  rewrite eqH.
-  
-
-  Set Printing All.
-  case.
-  case.
-  rewrite /rpshide.
-  move => h Hh.
-  simpl.
-  have Hh2 := Hh.
-  rewrite in_cons in Hh2.
-  move/orP: Hh2.
-  elim.
-  move/eqP => eqh.
-  simpl.
-  move: Hh.
-  rewrite eqh => Hh _.
-  rewrite !mbindA.
-  apply mbind_eqP => y Hy.
-  rewrite ret_bind !mbindA //=.
-
-  rewrite /app_h.
-  Print achoose_h.
-  SearchAbout achoose_h.
-  simpl.
-  
-  vm_compute.
-
-
-  rewrite /RRPS; simpl.
-  simpl.
-  rewrite simpl.
-  Set Printing All.
-  rewrite /rpshide in Hh.
+Admitted.

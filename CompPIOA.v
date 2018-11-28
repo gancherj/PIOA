@@ -230,20 +230,6 @@ Qed.
 
                                  
 
-  Lemma hidden1P hl :
-        act (P1 ||| E) (inl (inl hl)) mu =
-        (st <- mu; s' <- app_h P1 hl st.1.1; ret ((s', st.1.2), st.2)).
-  simpl.
-  apply mbind_eqP => xt Hxt.
-  rewrite app_h_comp_l mbindA; apply mbind_eqP => s' Hs'; rewrite ret_bind //=.
-  Qed.
-
-  Lemma hidden2P hr :
-        act (P1 ||| E) (inl (inr hr)) mu =
-        (st <- mu; s' <- app_h E hr st.1.2; ret ((st.1.1, s'), st.2)).
-  simpl; apply mbind_eqP => xt Hxt.
-  rewrite app_h_comp_r mbindA; apply mbind_eqP => s' Hs'; rewrite ret_bind //=.
-  Qed.
 
   Lemma app_v_comp_l_ext c s : compatible P1 E -> c \in outputs P1 -> c \notin inputs E ->
         app_v (P1 ||| E) c s =
@@ -280,92 +266,83 @@ Qed.
   rewrite ret_bind //=; by destruct s.
   Qed.
 
+  Lemma app_v_comp_l_int c s : compatible P1 E -> c \in outputs P1 -> c \in inputs E ->
+        app_v (P1 ||| E) c s =
+        (p <- app_v P1 c s.1;
+        match p with
+             | (s1, Some a) =>
+               s2 <- app_i E a s.2;
+                 ret ((s1, s2), Some a)
+             | _ => ret (s, None)
+                        end).
+    intros.
+    rewrite /app_v.
+    rewrite pick_v_comp_l; rewrite //=.
+    remember (pick_v P1 c s.1) as oa; destruct oa. 
+    symmetry in Heqoa; apply pick_vP in Heqoa.
+    elim (andP Heqoa) => h1 h2.
+    rewrite (eqP h2) !mem_cat H0 H1 orbT orTb.
+    remember (tr P1 s.1 (inr s0)) as t; destruct t; rewrite -Heqt; simpl.
+    rewrite !mbindA.
+    rewrite /app_i.
+    symmetry; etransitivity.
+    apply mbind_eqP => y Hy.
+    rewrite ret_bind //=.
+    remember (tr E s.2 (inr s0)) as t2; destruct t2; rewrite -Heqt2; simpl.
+    rewrite !mbindA; apply mbind_eqP => x Hx; rewrite !mbindA; apply mbind_eqP => y Hy; rewrite ret_bind //=.
+
+    have: tr E s.2 (inr s0) != None.
+    apply inputEnabled.
+    rewrite (eqP h2); done.
+    rewrite -Heqt2 //=.
+    rewrite ret_bind //=.
+    done.
+    rewrite ret_bind //=.
+  Qed.
+
+  Lemma app_v_comp_r_int c s : compatible P1 E -> c \in outputs E -> c \in inputs P1 ->
+        app_v (P1 ||| E) c s =
+        (p <- app_v E c s.2;
+        match p with
+             | (s2, Some a) =>
+               s1 <- app_i P1 a s.1;
+                 ret ((s1, s2), Some a)
+             | _ => ret (s, None)
+                        end).
+    intros.
+    rewrite /app_v.
+    rewrite pick_v_comp_r; rewrite //=.
+    remember (pick_v E c s.2) as oa; destruct oa. 
+    symmetry in Heqoa; apply pick_vP in Heqoa.
+    elim (andP Heqoa) => h1 h2.
+    rewrite (eqP h2) !mem_cat H0 H1 orbT orTb.
+
+    rewrite /app_i.
+    remember (tr E s.2 (inr s0)) as t; destruct t; rewrite -Heqt; simpl.
+    rewrite !mbindA.
+    rewrite /app_i.
+    symmetry; etransitivity.
+    apply mbind_eqP => y Hy.
+    rewrite ret_bind //=.
+    remember (tr P1 s.1 (inr s0)) as t2; destruct t2; rewrite -Heqt2; simpl.
+
+    rewrite !mbindA mbind_swap ; apply mbind_eqP => x Hx; rewrite !mbindA; apply mbind_eqP => y Hy; rewrite ret_bind //=.
+
+    have: tr P1 s.1 (inr s0) != None.
+    apply inputEnabled.
+    rewrite (eqP h2); done.
+    rewrite -Heqt2 //=.
+    rewrite /app_i ret_bind.
+
+    remember (tr P1 s.1 (inr s0)) as t0; rewrite -Heqt0; destruct t0; done.
+    done.
+
+    rewrite ret_bind //=.
+  Qed.
+                                                                            
 
 
-                                     
-  (*
-
-  Lemma out1_extP ol (Hcompat : compatible P1 E) : ol \in outputs P1 -> ol \notin inputs E ->
-        act (P1 ||| E) (inr ol) mu =
-        (st <- mu;
-           p <- app_v P1 ol st.1.1;
-           ret ((p.1, st.1.2), ocons p.2 st.2)).
-  move => H1 H2; simpl; apply mbind_eqP => st Hst.
-  rewrite /app_v.
-  rewrite pick_v_comp_l; rewrite //=.
-
-  remember (pick_v P1 ol st.1.1) as oa; destruct oa; rewrite -Heqoa.
-  simpl.
-  symmetry in Heqoa; apply pick_vP in Heqoa; last by done.
-  move/andP: Heqoa => [h1 h2].
-  rewrite (eqP h2).
-  rewrite !mem_cat H1 (negbTE H2) orbT //=.
-  move/seq_disjointP: Hcompat;move/(_ _ H1) => Hn; rewrite (negbTE Hn)//=.
-
-  remember (tr P1 st.1.1 (inr s)) as t; destruct t; rewrite -Heqt ; simpl.
-  rewrite !mbindA; apply mbind_eqP => s' Hs'.
-  rewrite !ret_bind; done.
-  rewrite !ret_bind //=; by destruct st as [[? ?] ?].
-  rewrite !ret_bind //=; by destruct st as [[? ?] ?].
- Qed.
-
-  Lemma out2_extP ol (Hcompat : compatible P1 E) : ol \in outputs E -> ol \notin inputs P1 ->
-        act (P1 ||| E) (inr ol) mu =
-        (st <- mu;
-           p <- app_v E ol st.1.2;
-           ret ((st.1.1, p.1), ocons p.2 st.2)).
-  move => H1 H2; simpl; apply mbind_eqP => st Hst.
-  rewrite /app_v.
-  rewrite pick_v_comp_r; rewrite //=.
-
-  remember (pick_v E ol st.1.2) as oa; destruct oa; rewrite -Heqoa.
-  simpl.
-  symmetry in Heqoa; apply pick_vP in Heqoa; last by done.
-  move/andP: Heqoa => [h1 h2].
-  rewrite (eqP h2).
-  rewrite !mem_cat H1 (negbTE H2) orbT //=.
-
-  rewrite /compatible seq_disjoint_sym in Hcompat; move/seq_disjointP: Hcompat.
-  move/(_ _ H1) => Hn; rewrite (negbTE Hn)//=.
-
-  remember (tr E st.1.2 (inr s)) as t; destruct t; rewrite -Heqt ; simpl.
-  rewrite !mbindA; apply mbind_eqP => s' Hs'.
-  rewrite !ret_bind; done.
-  rewrite !ret_bind //=; by destruct st as [[? ?] ?].
-  rewrite !ret_bind //=; by destruct st as [[? ?] ?].
- Qed.
-
-  Lemma out1_intP ol (Hc : compatible P1 E) : ol \in outputs P1 -> ol \in inputs E ->
-        act (P1 ||| E) (inr ol) mu =
-        (st <- mu; p <- app_v P1 ol st.1.1;
-           match p with
-             | (s', None) => ret (st.1, st.2)
-             | (s', Some a) =>
-               s'' <- app_i E a st.1.2;
-                 ret ((s', s''), a :: st.2)
-                     end).
-    simpl => h1 h2.
-    apply mbind_eqP => st Hst; simpl.
-    rewrite /app_v pick_v_comp_l.
-  remember (pick_v P1 ol st.1.1) as oa; destruct oa; rewrite -Heqoa; simpl.
-  symmetry in Heqoa; apply pick_vP in Heqoa; last by done.
-  move/andP: Heqoa => [h3 h4].
-  rewrite (eqP h4) !mem_cat h1 h2 orbT //=.
-  remember (tr P1 st.1.1 (inr s)) as ot; destruct ot; rewrite -Heqot; simpl.
-  have: tr E st.1.2 (inr s) != None.
-   by apply (inputEnabled E); rewrite (eqP h4).
-  move/opt_neq_none; elim => tE HeqtE.
-  rewrite HeqtE; simpl.
-  rewrite !mbindA; apply mbind_eqP => s' Hs'.
-  rewrite !ret_bind /app_i HeqtE.
-  rewrite mbindA; apply mbind_eqP => y Hy.
-  rewrite !ret_bind //=.
-  rewrite !ret_bind //=.
-  rewrite !ret_bind //=.
-  done.
-  done.
- Qed.
- *)
+(*
 
   Lemma out2_intP ol (Hc : compatible P1 E) : ol \in outputs E -> ol \in inputs P1 ->
         act (P1 ||| E) (inr ol) mu =
@@ -406,5 +383,21 @@ Qed.
   done.
   done.
  Qed.
+
+  Lemma hidden1P hl :
+        act (P1 ||| E) (inl (inl hl)) mu =
+        (st <- mu; s' <- app_h P1 hl st.1.1; ret ((s', st.1.2), st.2)).
+  simpl.
+  apply mbind_eqP => xt Hxt.
+  rewrite app_h_comp_l mbindA; apply mbind_eqP => s' Hs'; rewrite ret_bind //=.
+  Qed.
+
+  Lemma hidden2P hr :
+        act (P1 ||| E) (inl (inr hr)) mu =
+        (st <- mu; s' <- app_h E hr st.1.2; ret ((st.1.1, s'), st.2)).
+  simpl; apply mbind_eqP => xt Hxt.
+  rewrite app_h_comp_r mbindA; apply mbind_eqP => s' Hs'; rewrite ret_bind //=.
+  Qed.
   
+*)
 End CompProps.
