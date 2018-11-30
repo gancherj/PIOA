@@ -236,4 +236,86 @@ Definition mkPIOA (G D : ctx) (d : PIOA_data G D):
   PIOA_spec d  -> PIOA G D :=
   fun h =>
 (Build_PIOA G D d h).
-                                             
+
+
+
+(* usefull lemmas etc *)
+
+Lemma support_app_vP {G D : ctx} (P : PIOA G D) (c : cdom G) (s : St P) y :
+  c \in outputs P -> y \in support (app_v P c s) -> (exists s' a, y = (s', Some a) /\ tag a = c) \/ (y = (s, None)).
+  intro Hc.
+  rewrite /app_v.
+  remember (pick_v P c s) as o; destruct o; symmetry in Heqo.
+  apply pick_vP in Heqo.
+  elim (andP Heqo) => h1 h2.
+  remember (tr P s (inr s0)) as t; destruct t.
+  move/support_bindP; elim => x.
+  elim => h3 h4.
+  left.
+  exists x.
+  exists s0.
+  rewrite support_ret mem_seq1 in h4.
+  rewrite (eqP h4).
+  split; rewrite //=.
+  rewrite (eqP h2) //=.
+  rewrite support_ret mem_seq1; move/eqP => ->.
+  right; done.
+  done.
+  rewrite support_ret mem_seq1; move/eqP => ->.
+  right; done.
+Qed.
+
+  Definition v_chan_enabled {G D : ctx} (P : PIOA G D) (c : cdom G) s :=
+    [exists m, enabled P s (inr (mkact G c m))].
+
+  Definition v_chan_equienabled {G D D' : ctx} (P : PIOA G D) (P' : PIOA G D') (c : cdom G) (s1 : St P) (s2 : St P') :=
+    (v_chan_enabled P c s1 = v_chan_enabled P' c s2).
+
+
+  Lemma app_v_equienabledP {G D D' : ctx} (P : PIOA G D) (P' : PIOA G D') (Q : {meas St P * option (action G)} -> {meas St P' * option (action G)} -> Prop) c s s' :
+    c \in outputs P -> c \in outputs P' ->
+    v_chan_equienabled P P' c (s : St P) (s' : St P') ->
+    (forall m m' mu mu', tr P s (inr (mkact G c m)) = Some mu ->
+                         tr P' s' (inr (mkact G c m')) = Some mu' ->
+                         Q (s2 <- mu; ret (s2, Some (mkact G c m))) (s2 <- mu'; ret (s2, Some (mkact G c m')))) ->
+    ((forall m, ~~ enabled P s (inr (mkact G c m)) -> ~~ enabled P s (inr (mkact G c m))) ->
+               Q (ret (s, None)) (ret (s', None))) -> Q (app_v P c s) (app_v P' c s').
+    move => Hc1 Hc2.
+
+
+    rewrite /v_chan_equienabled /v_chan_enabled => H.
+    have : (exists m, enabled P s (inr (mkact G c m))) <-> (exists m, enabled P' s' (inr (mkact G c m))).
+    split; move/existsP => h; apply/existsP; [ rewrite -H | rewrite H ]; done.
+    clear H; move => H.
+
+    move => case1 case2.
+    elim: (app_vP P c s); last by done.
+    move => m mu Htr ->.
+
+    elim: (app_vP P' c s'); last by done.
+    move => m' mu' Htr' ->.
+    apply case1; done.
+
+    have Hcon : exists m, enabled P' s' (inr (mkact G c m)).
+    apply H.
+    exists m.
+    rewrite /enabled  Htr //=.
+    elim Hcon => mcon Hen.
+    move/(_ (mkact G c mcon)).
+    rewrite Hen //=;move/(_ erefl); rewrite //=.
+
+    move => H1 ->.
+    elim: (app_vP P' c s').
+    move => m mu Htr.
+    have: exists m, enabled P s (inr (mkact G c m)).
+    apply H.
+    exists m.
+    rewrite /enabled Htr //=.
+    elim => Hcon Hen.
+    move: (H1 (mkact G c Hcon) erefl); rewrite Hen //=.
+    move => H2 ->.
+    apply case2 => m.
+    move: (H1 (mkact G c m) erefl) ->.
+    done.
+    done.
+ Qed.

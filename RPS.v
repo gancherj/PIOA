@@ -137,7 +137,6 @@ Instance rpscontext_fe (x : cdom RPSContext) : FastEnum (RPSContext x).
 case x; case; case; simpl; rewrite /RPSContext_f //=; apply _.
 Defined.
 
-(* TODO : fix below to use lenses for record updates. *)
 Record playerSt :=
   PlayerSt {
       val1 : option play;
@@ -342,10 +341,6 @@ Defined.
 Definition R_RPS (x : St RRPS) : St IRPS :=
   (x.1.1.1, x.1.1.2, PlayerSt x.1.2.1 x.2.1 x.1.2.2 x.2.2).
 
-(* move to meas *)
-Definition measE A :=
-  (@ret_bind A, @bind_ret A, @mbindA A).
-
 
 Ltac app_v_comp_l_ext_tac :=
   rewrite app_v_comp_l_ext; [ idtac | done | done | done].
@@ -382,61 +377,6 @@ Ltac app_v_comp_tac :=
   end
     end.
 
-
-(* move to  aux *)
-
-Lemma inP {A : eqType} (x : A) (xs : seq A) :
-  reflect (List.In x xs) (x \in xs).
-  induction xs.
-  simpl; rewrite in_nil //=.
-  apply/(iffP idP); done.
-  simpl.
-  rewrite in_cons.
-  apply/(iffP orP); elim.
-  move/eqP => ->; left; done.
-  move/IHxs => H; right; done.
-  move => -> ;left ;done.
-  move/IHxs => ->; right; done.
-Qed.
-
-Ltac split_In := 
-  match goal with
-    | [ |- List.In _ (_ :: _) -> _] => case; [ move => <- | split_In]
-    | [ |- False -> _] => done
-    | [ |- _ = _ -> _] => move => <-
-    | [ |- _ \/ _ -> _] => case; split_In
-                            end.
-
-
-Lemma support_app_vP {G D : ctx} (P : PIOA G D) (c : cdom G) (s : St P) y :
-  c \in outputs P -> y \in support (app_v P c s) -> (exists s' a, y = (s', Some a) /\ tag a = c) \/ (y = (s, None)).
-  intro Hc.
-  rewrite /app_v.
-  remember (pick_v P c s) as o; destruct o; symmetry in Heqo.
-  apply pick_vP in Heqo.
-  elim (andP Heqo) => h1 h2.
-  remember (tr P s (inr s0)) as t; destruct t.
-  move/support_bindP; elim => x.
-  elim => h3 h4.
-  left.
-  exists x.
-  exists s0.
-  rewrite support_ret mem_seq1 in h4.
-  rewrite (eqP h4).
-  split; rewrite //=.
-  rewrite (eqP h2) //=.
-  rewrite support_ret mem_seq1; move/eqP => ->.
-  right; done.
-  done.
-  rewrite support_ret mem_seq1; move/eqP => ->.
-  right; done.
-Qed.
-
-(*
-Check mbind_eqP.
-Lemma mbind_eqP_weak {A B C : choiceType} (m1 : {meas A}) (m2 : {meas B}) (c1 : A -> {meas C}) (c2 : B -> {meas C}) : (forall x
-*)
-
 Lemma rps_sim : SimpleStateInj RRPS IRPS R_RPS.
   constructor.
   done.
@@ -459,76 +399,72 @@ Lemma rps_sim : SimpleStateInj RRPS IRPS R_RPS.
   rewrite app_h_hidden.
 
   destruct h as [h H]; simpl; move: H.
-  rewrite /rpshide; move/inP; split_In.
+  rewrite /rpshide; move/inP; split_In; repeat app_v_comp_tac; rewrite !measE //=.
 
-  repeat app_v_comp_tac; rewrite !measE.
-  simpl.
+
   elim: (app_vP playerB (commit, true) x.1.1.2); last by done.
-  move => m mu Heq ->.
-  rewrite !measE; apply mbind_eqP => y Hy; rewrite !measE //=.
+  move => m mu Heq ->; rewrite !measE; munder (rewrite !measE /R_RPS //=). done.
   move => _ ->; rewrite !measE //=.
 
-  repeat app_v_comp_tac; rewrite !measE.
-  simpl.
   elim: (app_vP playerA (commit, false) x.1.1.1); last by done.
-  move => m mu Heq ->.
-  rewrite !measE; apply mbind_eqP => y Hy; rewrite !measE //=.
+  move => m mu Heq ->; rewrite !measE; munder (rewrite !measE /R_RPS //=). done.
   move => _ ->; rewrite !measE //=.
 
-  repeat app_v_comp_tac; rewrite !measE.
-  elim: (app_vP FB (committed, true) x.2).
-  move => m mu Htr ->.
-  elim: (app_vP Funct (committed, true) (R_RPS x).2).
-  move => m' mu' Htr' ->.
-  simpl in *.
-  destruct (x.2.1); simpl in *.
-  injection Htr; injection Htr'; move => <- <-.
-  rewrite !measE.
-  simpl.
-  rewrite /R_RPS //=.
-  admit.
 
-  done.
-  move/(_ (mkact RPSContext (committed, true) m)).
-  simpl; move/(_ erefl); simpl.
-  rewrite /enabled; simpl in *.
-  destruct (x.2.1); simpl in *.
-  done.
-  done.
-  done.
+  apply (app_v_equienabledP FB Funct); [done | done | idtac | idtac | idtac].
+  rewrite /v_chan_equienabled /v_chan_enabled /enabled //=.
+  by (exunder (rewrite if_neq_None)).
 
-  move => H ->; rewrite !measE.
-  elim (app_vP Funct (committed, true) (R_RPS x).2); last by done.
-  move => m mu Htr.
-  move: (H (mkact RPSContext (committed, true) m) erefl); rewrite /enabled //=; simpl in *.
-  destruct x.2.1; done.
+    simpl => m m' mu mu'; move/eqP; rewrite if_eq_Some => /andP [h1 /eqP h2] /eqP; rewrite if_eq_Some => /andP [h3 /eqP h4]; rewrite -h2 -h4 !measE //= /R_RPS //=.
 
-  move => _ ->.
-  rewrite !measE //=.
-  done.
+    move => H; rewrite !measE //=.
 
-  repeat app_v_comp_tac; rewrite !measE.
-  admit.
+  apply (app_v_equienabledP FA Funct); [done | done | idtac | idtac | idtac].
+  rewrite /v_chan_equienabled /v_chan_enabled /enabled //=.
+  by (exunder (rewrite if_neq_None)).
 
-  repeat app_v_comp_tac; rewrite !measE.
-  simpl.
+    simpl => m m' mu mu'; move/eqP; rewrite if_eq_Some => /andP [h1 /eqP h2] /eqP; rewrite if_eq_Some => /andP [h3 /eqP h4]; rewrite -h2 -h4 !measE //= /R_RPS //=.
+
+    move => H; rewrite !measE //=.
+
   elim: (app_vP playerB (open, true) x.1.1.2); last by done.
-  move => m mu Heq ->.
-  rewrite !measE; apply mbind_eqP => y Hy; rewrite !measE //=.
+  move => m mu Heq ->; rewrite !measE; munder (rewrite !measE /R_RPS //=). done.
   move => _ ->; rewrite !measE //=.
 
-  repeat app_v_comp_tac; rewrite !measE.
-  simpl.
   elim: (app_vP playerA (open, false) x.1.1.1); last by done.
-  move => m mu Heq ->.
-  rewrite !measE; apply mbind_eqP => y Hy; rewrite !measE //=.
+  move => m mu Heq ->; rewrite !measE; munder (rewrite !measE /R_RPS //=). done.
   move => _ ->; rewrite !measE //=.
 
-  repeat app_v_comp_tac; rewrite !measE.
-  admit.
+  apply (app_v_equienabledP FB Funct); [done | done | idtac | idtac | idtac].
+  rewrite /v_chan_equienabled /v_chan_enabled /enabled //=.
+  by (exunder (rewrite if_neq_None)).
 
-  repeat app_v_comp_tac; rewrite !measE.
-  admit.
+    simpl => m m' mu mu'; move/eqP; rewrite if_eq_Some => /andP [h1 /eqP h2] /eqP; rewrite if_eq_Some => /andP [h3 /eqP h4]; rewrite -h2 -h4 !measE //= /R_RPS //=.
+
+ rewrite /app_i //=.
+ remember (val2 x.1.1.1) as v2; destruct v2; rewrite -Heqv2 //=.
+ rewrite !measE //=.
+ rewrite !measE //=.
+ move/andP: h1 => [h11 h12].
+ move/andP: h3 => [h31 h32].
+ rewrite -(eqP h12) -(eqP h32) //=.
+ rewrite !measE //=.
+
+
+  apply (app_v_equienabledP FA Funct); [done | done | idtac | idtac | idtac].
+  rewrite /v_chan_equienabled /v_chan_enabled /enabled //=.
+  by (exunder (rewrite if_neq_None)).
+
+    simpl => m m' mu mu'; move/eqP; rewrite if_eq_Some => /andP [h1 /eqP h2] /eqP; rewrite if_eq_Some => /andP [h3 /eqP h4]; rewrite -h2 -h4 !measE //= /R_RPS //=.
+    rewrite /app_i //=.
+ remember (val2 x.1.1.2) as v2; destruct v2; rewrite -Heqv2 //=.
+ rewrite !measE //=.
+ rewrite !measE //=.
+ move/andP: h1 => [h11 h12].
+ move/andP: h3 => [h31 h32].
+ rewrite -(eqP h12) -(eqP h32) //=.
+
+ rewrite !measE //=.
 
 
   (* for app_i, we may simply compute on the transition function since we know the action. *)
@@ -542,4 +478,4 @@ Lemma rps_sim : SimpleStateInj RRPS IRPS R_RPS.
   remember (val1 x.1.1.2) as v1; destruct v1; rewrite -Heqv1 //=;
   rewrite !measE /R_RPS //=.
 
-Admitted.
+Qed.

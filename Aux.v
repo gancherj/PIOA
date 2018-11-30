@@ -556,3 +556,67 @@ Lemma all_memeq {X : eqType} (s2 s1 : seq X) p :
   apply H'; rewrite H; done.
   apply H'; rewrite -H; done.
 Qed.
+
+Lemma inP {A : eqType} (x : A) (xs : seq A) :
+  reflect (List.In x xs) (x \in xs).
+  induction xs.
+  simpl; rewrite in_nil //=.
+  apply/(iffP idP); done.
+  simpl.
+  rewrite in_cons.
+  apply/(iffP orP); elim.
+  move/eqP => ->; left; done.
+  move/IHxs => H; right; done.
+  move => -> ;left ;done.
+  move/IHxs => ->; right; done.
+Qed.
+
+Ltac split_In := 
+  match goal with
+    | [ |- List.In _ (_ :: _) -> _] => case; [ move => <- | split_In]
+    | [ |- False -> _] => done
+    | [ |- _ = _ -> _] => move => <-
+    | [ |- _ \/ _ -> _] => case; split_In
+                            end.
+
+  Lemma if_neq_None {A : eqType} (b : bool) (m : A) :
+    ((if b then Some m else None) != None) = b.
+    by case b.
+  Qed.
+
+  Lemma if_eq_None {A : eqType} (b : bool) (m : A) :
+    ((if b then Some m else None) == None) = ~~b.
+    by case b.
+  Qed.
+
+  Lemma if_eq_Some {A : eqType} (b : bool) (m m' : A) :
+    ((if b then Some m else None) == Some m') = (b && (m == m')).
+    by case b.
+  Qed.
+
+  Lemma if_neq_Some {A : eqType} (b : bool) (m m' : A) :
+    ((if b then Some m else None) != Some m') = (~~ b) || (m != m').
+    case b.
+    simpl.
+    elim (eqVneq m m').
+    move => -> //=.
+    move => -> //=.
+    done.
+  Qed.
+
+  Definition fexists {A : finType} (P : A -> bool) := [exists a, P a].
+  Lemma fexists_iff {A : finType} (P1 P2 : A -> bool):
+        P1 =1 P2 -> fexists P1 = fexists P2.
+    rewrite /fexists.
+    move => H.
+    apply Bool.eq_true_iff_eq; split; move/existsP; elim => x Hx; apply/existsP; exists x; [ rewrite -H | rewrite H]; done.
+  Qed.
+  
+  Ltac exunder_ l :=
+    rewrite -!/(fexists _);
+    multimatch goal with
+      | |- context [ fexists ?P ] => 
+        erewrite (fexists_iff P _); last first; [intros ?; l; reflexivity | idtac]; simpl ; rewrite /fexists
+      end.
+
+  Tactic Notation "exunder" tactic(l) := exunder_ l; repeat (exunder_ l).

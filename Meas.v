@@ -719,6 +719,17 @@ Lemma maddA {A : choiceType} (m1 m2 m3 : {meas A}) :
   apply/measP => f; rewrite !integ_madd paddrA //=.
 Qed.
 
+Definition measE A :=
+  (@ret_bind A, @bind_ret A, @mbindA A).
+
+Ltac munder_ l :=
+  multimatch goal with
+  | |- context [mbind ?c ?f] =>
+    erewrite (mbind_eqP _ f _); last first; [intros ? _; l; reflexivity | idtac]; simpl
+                                                                             end.
+
+Tactic Notation "munder" tactic(l) :=
+  (munder_ l; repeat (munder_ l)).
 
 
 (* to port
