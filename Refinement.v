@@ -22,7 +22,7 @@ Definition refines  {Gamma D D' : ctx} (P1 : PIOA Gamma D) (P2 : PIOA Gamma D') 
   forall {D'' : ctx} (E: PIOA Gamma D''), env P1 E -> forall g1, protocol_for (P1 ||| E) g1 -> exists g2, protocol_for (P2 ||| E) g2 /\ 
         (run (P1 ||| E) (g1)) <$> snd = (run (P2 ||| E) (g2)) <$> snd.
 
-Check app_i.
+(*
 
 Record simulation_sameh  {Gamma D : ctx} (P1 P2 : PIOA Gamma D) (Hcomp : comparable P1 P2)
        (R : {meas (St P1) * (trace P1)} -> {meas (St P2) * (trace P2)} -> bool) :=
@@ -35,14 +35,81 @@ Record simulation_sameh  {Gamma D : ctx} (P1 P2 : PIOA Gamma D) (Hcomp : compara
         R (x <- mu; s <- app_i P1 a x.1; ret (s, x.2)) (x <- eta; s <- app_i P2 a x.1; ret (s, x.2))
                           }. 
 
-(*
+Definition restr_l {G D D' : ctx} (P : PIOA G D) (P' : PIOA G D') (p : (St (P ||| P')) * seq (action G)) : St P * seq (action G) :=
+   (p.1.1, filter (fun x => tag x \in inputs P ++ outputs P) p.2).
+
+Definition restr_r {G D D' : ctx} (P : PIOA G D) (P' : PIOA G D') (p : (St (P ||| P')) * seq (action G)) : St P' * seq (action G) :=
+   (p.1.2, filter (fun x => tag x \in inputs P' ++ outputs P') p.2).
+
+Fixpoint reconstr_tr {G D D' : ctx} (P : PIOA G D) (P' : PIOA G D') (t1 : seq (action G)) {struct t1} := fix rec2 (t2 : seq (action G)) := 
+  match t1, t2 with
+  | x :: xs, y :: ys =>
+    if x == y then
+      x :: reconstr_tr P P' xs ys
+    else if tag x \in inputs P ++ outputs P then
+           x :: reconstr_tr P P' xs (y :: ys)
+         else
+           y :: rec2  ys
+  | x :: xs, nil =>
+    x :: reconstr_tr P P' xs nil
+  | nil, y :: ys =>
+    y :: rec2 ys
+  | nil, nil => nil
+                  end.
+
+Lemma run_decomp {G D D' : ctx} (P : PIOA G D) (P' : PIOA G D') g (H : protocol_for (P ||| P') g) :
+  forall p, p \in support (run (P ||| P') g) ->
+                  p.2 = (reconstr_tr P P' (restr_l P P' p).2 (restr_r P P' p).2).
+  induction g using last_ind.
+  admit.
+  simpl; intros.
+  rewrite run_rcons in H0.
+  rewrite /act in H0.
+  destruct x.
+  move/support_bindP: H0.
+  elim => a [ha1 ha2].
+  have hg: protocol_for (P ||| P') g.
+  admit.
+  move: (IHg hg _ ha1) => h.
+  SearchAb
+
 Lemma simulation_sound {G D : ctx} (P1 P2 : PIOA G D) (hc : comparable P1 P2) R :
   simulation_sameh P1 P2 hc R ->
   refines P1 P2 hc.
   case => h1 h2 h3 h4.
   move => D' E HE g Hg1.
-  exists g; split.
+
+
+  exists g.
+  split.
+  admit.
+
+  have: (restr_l P1 E (run (P1 ||| E) g)) <$> snd = (restr_l P2 E (run (P2 ||| E) g)) <$> snd /\
+        (restr_r P1 E (run (P1 ||| E) g)) = (restr_r P2 E (run (P2 ||| E) g)).
+  admit.
+  elim => H1 H2.
+  
+
+  have: 
+
+  induction g using last_ind.
+  admit.
+  rewrite !run_rcons.
+
+  have: 
+
   admit. (* easy *)
+
+
+  induction g.
+  rewrite /run //=.
+  admit.
+
+  rewrite /run //=.
+
+  rewrite run_cons.
+  done.
+  admit.
 
   
   apply (h1 (run (P1 ||| E) g) (run (P2 ||| E) g)).

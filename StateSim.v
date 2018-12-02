@@ -13,6 +13,37 @@ Lemma is_chan_comp {G D D' : ctx} (P : PIOA G D) (E : PIOA G D') (he : env P E) 
   rewrite in_nil orFb mem_cat //=.
 Qed.
 
+Lemma is_chan_compare {G D : ctx} (P P' : PIOA G D) (hc : comparable P P') :
+    is_chan P =1 is_chan P'.
+    case; simpl.
+    done.
+    elim (andP hc).
+    move/seq_eqmemP => hc1; move/seq_eqmemP => hc2 b; rewrite !mem_cat.
+    rewrite !hc1 !hc2 //=.
+Qed.
+
+Lemma comparable_comp_r {G D D' : ctx} (P P' : PIOA G D) (E : PIOA G D') (hc : comparable P P') : comparable (P ||| E) (P' ||| E).
+  elim (andP hc); move/seq_eqmemP => h1; move/seq_eqmemP => h2.
+  apply/andP; split.
+  simpl.
+  apply/seq_eqmemP => x.
+  rewrite !mem_seqD !mem_cat !h1 !h2 //=.
+  apply/seq_eqmemP => x; rewrite !mem_cat !h2 //=.
+Qed.
+
+Lemma comparable_sym {G D : ctx} (P P' : PIOA G D) :
+  comparable P P' = comparable P' P.
+  apply Bool.eq_true_iff_eq; split; rewrite /comparable; move/andP; elim; move/seq_eqmemP => h1; move/seq_eqmemP => h2; apply/andP; split; apply/seq_eqmemP => x; rewrite ?h1 ?h2 //=.
+Qed.
+
+
+Lemma comparable_compatible_l {G D D' D'' : ctx} (P : PIOA G D) (P' : PIOA G D') (E : PIOA G D'') :
+  comparable P P' -> compatible P E -> compatible P' E.
+  move/andP; elim; move/seq_eqmemP => h1; move/seq_eqmemP => h2; rewrite /compatible.
+  move/seq_disjointP => H; apply/seq_disjointP => x.
+  rewrite -h2 //=; apply H.
+Qed.
+
 Section SimpleStateInj.
   
   Context {G D : ctx}.
@@ -35,51 +66,17 @@ Section SimpleStateInj.
           app_i P1 i x <$> R = app_i P2 i (R x);
       }.
 
-
-  Lemma stateSimSound R : SimpleStateInj R -> simulation_sameh P1 P2 hcomp (fun mu eta => (mu <$> (fun p => (R p.1, p.2)) == eta)).
-    case => h1 h2 h3.
-    constructor.
-    simpl => mu eta.
-    move/eqP => <-.
-    rewrite mbindA.
-    apply mbind_eqP => x Hx.
-    rewrite ret_bind //=.
-    rewrite /initDist ret_bind h1 //=.
-    move => mu eta hc Hlc.
-    move/eqP => <-.
-
-    apply id_lifting.
-    destruct hc; simpl.
-    apply/eqP; rewrite !mbindA; apply mbind_eqP => xt Hxt.
-    rewrite ret_bind mbindA //=.
-    rewrite -h3 mbindA //=.
-    apply mbind_eqP => y Hy.
-    rewrite !ret_bind //=.
-
-    apply/eqP; rewrite !mbindA; apply mbind_eqP => xt Hxt.
-    rewrite ret_bind mbindA //=.
-    rewrite -h2 .
-    rewrite mbindA; apply mbind_eqP => y Hy.
-    rewrite !ret_bind //=.
-    done.
-
-    move => mu eta a Ha; move/eqP => <-.
-    rewrite !mbindA; apply/eqP.
-    apply mbind_eqP => x Hx.
-    rewrite !mbindA ret_bind //=.
-    rewrite -ss_inp0.
-    rewrite mbindA.
-    apply mbind_eqP => y Hy.
-    rewrite !ret_bind //=.
-    done.
-Qed.
-
-  Theorem ss2 R : SimpleStateInj R -> refines P1 P2 hcomp.
+  Theorem stateSimSound R : SimpleStateInj R -> refines P1 P2 hcomp.
     case => h1 h2 h3 h4.
     move => D' E HE g Hg.
     exists g; split.
     rewrite /protocol_for.
-    admit.
+    erewrite eq_all.
+    rewrite /protocol_for in Hg;
+    apply Hg.
+    apply is_chan_compare.
+    apply comparable_comp_r.
+    rewrite comparable_sym //=.
     have: (run (P1 ||| E) g <$> fun p => ((R p.1.1, p.1.2), p.2)) = run (P2 ||| E) g.
 
     induction g using last_ind.
@@ -117,8 +114,10 @@ Qed.
     done.
     move => H ->; rewrite !measE; done.
     done.
-    admit.
-    admit.
+    eapply comparable_compatible_l.
+    apply hcomp.
+    elim (andP HE); done.
+    elim (andP hcomp) => _ /seq_eqmemP => heq; rewrite -heq; done.
     done.
     elim (andP HE); done.
     done.
@@ -132,20 +131,49 @@ Qed.
     rewrite !measE; munder (rewrite measE).
     done.
     done.
-    admit.
-    admit.
+    eapply comparable_compatible_l.
+    apply hcomp.
+    elim (andP HE); done.
+    elim (andP hcomp) => _ /seq_eqmemP => heq; rewrite -heq; done.
     by rewrite Heqve.
     by elim (andP HE).
     done.
     by rewrite Heqve.
     rewrite !run_rcons //= !measE -IHg; last by done.
     rewrite !measE; apply mbind_eqP => y Hy; rewrite !measE.
-    admit.
+
+    remember (v \in inputs P1) as hv; destruct hv; symmetry in Heqhv.
+    rewrite !app_v_comp_r_int //=.
+    elim (app_vP E v y.1.2 Hv).
+    move => m mu htr ->; rewrite !measE; munder (rewrite !measE; munder (rewrite !measE)).
+    apply mbind_eqP => x0 Hx0.
+    rewrite -h4.
+    rewrite !measE //=; munder (rewrite !measE).
+    done.
+    done.
+    move => _ ->; rewrite !measE //=.
+    eapply comparable_compatible_l.
+    apply hcomp.
+    elim (andP HE); done.
+    elim (andP hcomp) => /seq_eqmemP heq _; rewrite -heq; done. 
+    by elim (andP HE).
+    rewrite !app_v_comp_r_ext //=.
+    elim (app_vP E v y.1.2 Hv).
+    move => m mu htr ->; rewrite !measE. 
+    munder (rewrite !measE).
+    done.
+    move => _ ->; rewrite !measE //=.
+    eapply comparable_compatible_l.
+    apply hcomp.
+    elim (andP HE); done.
+    elim (andP hcomp) => /seq_eqmemP heq _; rewrite -heq Heqhv //=.
+    by elim (andP HE).
+    rewrite Heqhv //=.
 
     move => <-.
     rewrite !measE.
     apply mbind_eqP => r Hr.
     rewrite !measE //=.
-Admitted.
+Qed.
 
 End SimpleStateInj.
