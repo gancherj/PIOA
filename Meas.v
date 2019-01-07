@@ -37,7 +37,7 @@ Definition measChoicemix  := Eval hnf in [choiceMixin of {meas A} by <: ].
 Canonical measChoicetype := Eval hnf in ChoiceType {meas A} (measChoicemix).
 End MeasCanonicals.
 
-Definition mkMeas {A : choiceType} (d : PMeas A) : {meas A}.
+Definition mkMeas_ {A : choiceType} (d : PMeas A) : {meas A}.
   econstructor.
   apply/andP; split.
   instantiate (1 := sort_keys (measUndup d)).
@@ -46,12 +46,17 @@ Definition mkMeas {A : choiceType} (d : PMeas A) : {meas A}.
   apply measUndup_nubbed.
 Defined.
 
+Definition mkMeas {A : choiceType} (d : PMeas A) := locked (mkMeas_ d).
+
 Lemma integ_mkMeas {A : choiceType} (d : PMeas A) f :
   integ (mkMeas d) f = integ d f.
+  unlock mkMeas.
   have: integ (mkMeas d) f = integ (measUndup d) f.
   remember (mkMeas d) as c.
+  unlock mkMeas in Heqc.
   destruct c as [cd h1 h2].
   rewrite //=.
+  simpl.
   injection Heqc.
   move => ->.
   rewrite /integ.
@@ -65,6 +70,7 @@ Lemma integ_mkMeas {A : choiceType} (d : PMeas A) f :
   move => heq.
   rewrite {2}heq.
   rewrite SortKeys.perm; done.
+  unlock mkMeas.
   move => ->.
   rewrite -measUndupE //=.
 Qed.
@@ -99,7 +105,7 @@ End MeasOps.
 Section MeasMonad.
   Context {A B : choiceType}.
 
-  Definition mret (a : A) : {meas A} := mkMeas ((1%PR,a) :: nil).
+  Definition mret (a : A) : {meas A} := nosimpl mkMeas ((1%PR,a) :: nil).
 
 
   Definition mscale (r : posrat) (d : {meas B}) : {meas B} :=
@@ -115,10 +121,11 @@ Section MeasMonad.
     mkMeas (map (fun p => (p.1, f p.2)) (_pmeas d)).
 
   Definition mbind (d : {meas A}) (f : A -> {meas B}) : {meas B} :=
-    mkMeas (mjoin (mmap d (fun a => (f a)) )).
+    nosimpl mkMeas (mjoin (mmap d (fun a => (f a)) )).
 End MeasMonad.
 
 Lemma mkMeas_nil {A : choiceType} : _pmeas (mkMeas (nil : PMeas A)) = nil.
+  unlock mkMeas;
   rewrite //= sort_keys_nil //=.
 Qed.
 
@@ -254,7 +261,9 @@ Lemma integ_mbind {A B : choiceType} (d : {meas A}) (df : A -> {meas B}) f :
   unfold mbind.
   rewrite integ_mkMeas.
   rewrite integ_mjoin.
-  destruct d as [d h]; rewrite //=; clear h.
+  destruct d as [d h]; simpl.
+  unlock mkMeas.
+  rewrite /mmap //=; clear h.
   rewrite integ_mkMeas.
   induction d.
   rewrite /integ big_map big_nil //=.
@@ -424,13 +433,14 @@ Lemma prod_dirac_Pr {A B : choiceType} (m : {meas A * B}) a u :
   rewrite -(H _ Hx); destruct x; done.
 Qed.
 
-
-Lemma mbind_irrel {A B : choiceType} (m1 : {meas A}) (f : {meas B}) :
+Lemma mbind_unused {A B : choiceType} (m1 : {meas A}) (f : {meas B}) :
   (x <- m1; f) = mscale (mass m1) f.
   apply measP => g; rewrite integ_mbind.
   rewrite integ_const.
   rewrite integ_mscale //=.
 Qed.
+
+
 
 (* begin support and mass *)
 
@@ -597,7 +607,7 @@ Lemma dist_subdist {A : choiceType} (c : {meas A}) : dist c -> subdist c.
   rewrite /dist /subdist; move/eqP => ->; done.
 Qed.
 
-Lemma dist_ret {A : choiceType} (c : {meas A}) : dist (ret c).
+Lemma dist_ret {A : choiceType} (c : A) : dist (ret c).
   rewrite /dist mass_ret //=.
 Qed.
 
@@ -656,6 +666,17 @@ Lemma mass_neq0 {A : choiceType} (m : {meas A}) :
   done.
   rewrite pmulr1.
   apply (in_pmeas_neq0 m); done.
+Qed.
+
+Lemma mass_neq0_bind {A B : choiceType} (m : {meas A}) (c : A -> {meas B}) :
+  mass m != 0 -> (forall x, x \in support m -> mass (c x) != 0) -> mass (mbind m c) != 0.
+  intros.
+  move/mass_neq0: H; elim => a Ha.
+  move/mass_neq0: (H0 _ Ha); elim => b Hb.
+  rewrite /mass integ_neq0; apply/hasP.
+  exists b.
+  apply/support_bindP; exists a; split; done.
+  done.
 Qed.
 
 Lemma mass_bindE {A B : choiceType} (m1 : {meas A}) (c : A -> {meas B}) :
@@ -719,6 +740,12 @@ Lemma maddA {A : choiceType} (m1 m2 m3 : {meas A}) :
   apply/measP => f; rewrite !integ_madd paddrA //=.
 Qed.
 
+Lemma mprod_bind {A B C : choiceType} (ma : {meas A}) (mb : {meas B}) (c : B -> {meas C}) :
+  ma ** (mbind mb c) = mbind mb (fun x => ma ** (c x)).
+  rewrite mbind_swap mbindA; apply mbind_eqP => x Hx.
+  rewrite mbind_swap //=.
+Qed.
+
 Definition measE A :=
   (@ret_bind A, @bind_ret A, @mbindA A).
 
@@ -731,30 +758,466 @@ Ltac munder_ l :=
 Tactic Notation "munder" tactic(l) :=
   (munder_ l; repeat (munder_ l)).
 
+Lemma integ_filter {A : choiceType} (m : PMeas A) f (p : A -> bool) :
+  integ (filter (fun x => p x.2) m) f =
+  integ m (fun x => if p x then f x else 0).
+  induction m.
+  simpl.
+  rewrite !integ_nil //=.
+  simpl.
+  remember (p a.2) as b; destruct b.
+  rewrite !integ_cons IHm -Heqb //=.
+  rewrite !integ_cons -Heqb pmulr0 padd0r IHm //=.
+Qed.
 
-(* to port
+Definition mfilter {A : choiceType} (m : {meas A}) (p : A -> bool) :=
+  mkMeas (filter (fun x => p x.2) (_pmeas m)).
 
-Ltac support_tac H :=
-  match type of H with
-  | is_true (_ \in support (mbind _ _)) =>
-    let y := fresh "x" in
-    let Hy1 := fresh "H" y in
-    let Hy2 := fresh "H" y in
-    elim (support_bind _ _ _ H) => y; elim => Hy1 Hy2; support_tac Hy1; support_tac Hy2; clear H
-  | is_true (_ \in support (mret _)) =>
-    let h := fresh "Heq" in
-    rewrite in_support_ret in H; move: (eqP H) => h
-  | _ => idtac
-  end. 
-*)
+Lemma integ_mfilter {A : choiceType} (m : {meas A}) p f :
+  integ (mfilter m p) f =
+  integ m (fun x => if p x then f x else 0).
+rewrite /mfilter integ_mkMeas integ_filter //=.
+Qed.  
+
+Lemma support_mfilter {A : choiceType} (m : {meas A}) p x :
+  (x \in support (mfilter m p)) = ((x \in support m) && p x).
+rewrite supportP integ_mfilter integ_neq0.
+case: hasP.
+elim => y Hy.
+remember (p y) as b; destruct b.
+rewrite indicator_neq0; move/eqP => ->.
+rewrite Hy -Heqb //=.
+done.
+move => H.
+apply/eqP/contraT; rewrite eq_sym.
+rewrite eqbF_neg negbK; move/andP => [h1 h2].
+elim H; exists x; rewrite //=.
+rewrite h2 /indicator eq_refl //=.
+Qed.
+
+Lemma mfilter_disj {A : choiceType} (m : {meas A}) p :
+  m = (mfilter m p) +m (mfilter m (fun x => ~~ p x)).
+  apply/measP => f.
+  rewrite integ_madd !integ_mfilter -integ_add_f.
+  apply integ_eq_fun => x Hx.
+  elim (p x).
+  rewrite paddr0 //=.
+  rewrite padd0r //=.
+Qed.
 
 
 
-(* TO deal with *)
+Definition Pr {A : choiceType} (m : {meas A}) (p : A -> bool) := integ m (fun x => if p x then 1 else 0).
+
+Lemma integ_eq0 {A : choiceType} (m : {meas A}) (f : A -> posrat) :
+  (integ m f == 0) = (all (fun x => f x == 0) (support m)).
+  rewrite -(negbK (integ m f == 0)).
+  rewrite integ_neq0. 
+  rewrite -all_predC.
+  apply eq_in_all => x Hx.
+  rewrite /predC //=.
+  rewrite negbK //=.
+Qed.
 
 
+Lemma Pr_lem {A : choiceType} (m : {meas A}) (p : A -> bool) :
+  Pr m p = 0 ->
+  Pr m (fun x => ~~ p x) = 0 ->
+  m = mkMeas nil.
+  move => h1 h2.
+  apply/eqP.
+  rewrite -mass_eq0.
+  apply/contraT.
+  move/mass_neq0; elim => x Hx.
+  remember (p x) as px; destruct px.
+  move: h1; rewrite /Pr.
+  move/eqP; rewrite integ_eq0.
+  move/allP/(_ x Hx); rewrite -Heqpx.
+  done.
+  move: h2; rewrite /Pr; move/eqP; rewrite integ_eq0; move/allP/(_ x Hx); rewrite -Heqpx //=.
+Qed.
+
+Lemma Pr_0P {A : choiceType} (m : {meas A}) (p : A -> bool) :
+  Pr m p == 0 =
+  all (fun x => ~~ p x) (support m).
+  rewrite /Pr.
+  rewrite integ_eq0.
+  apply eq_all => x.
+  destruct (p x); done.
+Qed.
+
+Lemma Pr_eq0 {A : choiceType} (m : {meas A}) a :
+  Pr m (fun y => y == a) == 0 = (a \notin support m).
+  rewrite /Pr.
+  have -> : integ m (fun x : A => if x == a then 1 else 0) =
+        integ m (indicator a).
+    apply integ_eq_fun => x Hx; rewrite /indicator; rewrite eq_sym; destruct (a == x); done.
+  rewrite supportP negbK //=.
+Qed.
+
+Lemma Pr_eq_n0 {A : choiceType} (m : {meas A}) a :
+  (Pr m (fun y => y == a) != 0) = (a \in support m).
+  rewrite Pr_eq0 negbK //=.
+Qed.
+
+Lemma Pr_eq_in {A : choiceType} (m : {meas A}) x :
+  x \in _pmeas m -> Pr m (fun y => y == x.2) = x.1.
+  intro; rewrite /Pr.
+  have -> : integ m (fun x0 : A => if x0 == x.2 then 1 else 0) =
+        integ m (indicator x.2).
+  rewrite /indicator. 
+  apply integ_eq_fun => y Hy.
+  rewrite eq_sym //=.
+  rewrite integ_nubbed_indicator_in.
+  done.
+  destruct m as [m Hm]; elim (andP Hm); done.
+  done.
+Qed.
+
+Lemma Pr_eq_val {A : choiceType} (m : {meas A}) a :
+  (Pr m (fun y => y == a) != 0) <-> (exists x, [/\ x \in _pmeas m, Pr m (fun y => y == a) = x.1 & x.2 = a]).
+  rewrite Pr_eq0 negbK; split.
+  move/mapP; elim => x Hx Hx2.
+  exists x; split; rewrite //=.
+  subst.
+  rewrite (Pr_eq_in m x) //=.
+  elim => x; elim => h1 h2 h3; subst.
+  apply/mapP; exists x; done.
+Qed.
+
+Lemma Pr_eq_mbind {A B :  choiceType} (m: {meas A}) (c : A -> {meas B}) a :
+  Pr (mbind m c) (fun y => y == a) =
+  integ m (fun x => Pr (c x) (fun y => y == a)).
+  rewrite /Pr integ_mbind //=.
+Qed.
+
+Lemma Pr_fmap {A B : choiceType} (m : {meas A}) (f : A -> B) p :
+  Pr (m <$> f) p = Pr m (fun x => p (f x)).
+  rewrite /Pr integ_mbind.
+  apply integ_eq_fun => x Hx.
+  rewrite integ_ret //=.
+Qed.
+
+Lemma pdivK (p : posrat) :
+  p != 0 -> p / p = 1.
+  move => H.
+  destruct p; simpl in *.
+  apply/eqP; rewrite /eq_op //=.
+  rewrite GRing.Theory.divff.
+  done.
+  done.
+Qed.
+
+Definition mnormalize {A : choiceType} (m : {meas A}) := mscale (1 / mass m) m.
+Definition mcombine {A  : choiceType} (ms : seq {meas A}) :=
+  mkMeas (map (fun m => (mass m, mnormalize m)) ms).
+
+Lemma mcombineE {A : choiceType} (ms : seq {meas A}) :
+  foldr madd (mkMeas nil) ms = mjoin (mcombine ms).
+  unlock mkMeas.
+  induction ms.
+  simpl.
+  rewrite /mcombine //=.
+  rewrite /mjoin //=.
+  rewrite mkMeas_nil.
+  rewrite /msum //=; unlock mkMeas; done.
+  rewrite /mcombine //= -/(mcombine ms).
+  rewrite IHms.
+  apply measP => f.
+  rewrite integ_madd !integ_mjoin integ_mkMeas integ_cons.
+  rewrite /mcombine integ_mkMeas.
+  congr (_ + _).
+have H : forall (m : {meas A}), integ m f = mass m * integ (mscale (1 / mass m) m) f.
+move => m.
+case (eqVneq (mass m) 0).
+move/eqP; rewrite mass_eq0; move/eqP => ->.
+rewrite integ_mkMeas mass_nil pmul0r integ_nil //=.
+move => H.
+rewrite integ_mscale pmulrA pmul1r pdivK.
+rewrite pmul1r //=.
+done.
+rewrite -H //=.
+Qed.
+
+Lemma support_mkMeas {A : choiceType} (l : seq (posrat * A)) x :
+  (x \in support (mkMeas l)) -> (x \in map snd l).
+  induction l.
+  rewrite supportP integ_mkMeas integ_nil //=.
+  simpl.
+  rewrite supportP.
+  rewrite integ_mkMeas integ_cons.
+  rewrite supportP in IHl.
+  rewrite -padd0 negb_and; move/orP; elim.
+  rewrite -pmul0 negb_or; move/andP; elim.
+  move => _.
+  rewrite indicator_neq0; move/eqP => ->.
+  rewrite in_cons eq_refl //=.
+  move => H; rewrite in_cons IHl.
+  rewrite orbT //=.
+  rewrite integ_mkMeas //=.
+Qed.
+
+Lemma madd_nil {A : choiceType} (m : {meas A}) :
+  m +m mkMeas nil = m.
+  apply/measP => f; rewrite integ_madd integ_mkMeas integ_nil paddr0 //=.
+Qed.
+
+Lemma msplit {A : choiceType} (m : {meas A}) p :
+  m = mjoin (mcombine (mfilter m p :: mfilter m (fun x => ~~ p x) :: nil)).
+rewrite {1}(mfilter_disj m p) -mcombineE //= madd_nil //=.
+Qed.
+
+Definition Punif_on {A : choiceType} (l : seq A) : PMeas A :=
+  (map (fun x => (1 / (posrat_of_nat (size l)), x)) l).
+
+Lemma integ_Punif {A : choiceType} (l : seq A) f :
+  integ (Punif_on l) f =
+  (1 / (posrat_of_nat (size l))) * \big[padd/0]_(x <- l) f x.
+  rewrite /Punif_on /integ.
+  rewrite big_map //.
+  rewrite big_distrr.
+  apply eq_big.
+  done.
+  move => i _.
+  done.
+Qed.
+
+Lemma integ_map {A : choiceType} (m : PMeas A) f (h : A -> posrat) :
+  integ (map (fun x => (x.1, f x.2)) m) h = integ m (fun x => h (f x)).
+  rewrite /integ big_map //=.
+Qed.
+
+Lemma punif_on_bij {A : choiceType} (l : seq A) (f : A -> A) (h : A -> posrat) :
+  perm_eq l (map f l) -> integ (Punif_on l) h = integ (map (fun x => (x.1, f x.2)) (Punif_on l)) h.
+  move => H.
+  rewrite integ_Punif integ_map integ_Punif.
+  congr (_ * _).
+  rewrite (eq_big_perm _ H) big_map.
+  done.
+Qed.
+
+Definition munif (A : finType) : {meas A} := mkMeas (Punif_on (enum A)).
+
+Lemma munif_bij {A : finType} (f : A -> A) :
+  bijective f ->
+  munif A = munif A <$> f.
+  move => Hf.
+  apply/measP => h.
+  rewrite integ_mbind /munif !integ_mkMeas.
+  rewrite (punif_on_bij _ f).
+  rewrite integ_map !integ_Punif.
+  congr (_ * _).
+  apply eq_big.
+  done.
+  move => i _; rewrite integ_ret //=.
+  apply uniq_perm_eq.
+  apply enum_uniq.
+  rewrite map_inj_uniq.
+  apply enum_uniq.
+  apply bij_inj; done.
+  move => x; rewrite mem_enum //=; symmetry.
+  have -> : x \in A by done. 
+  apply/mapP.
+  case Hf => g H H'.
+  exists (g x).
+  apply mem_enum.
+  rewrite H' //=.
+Qed.
 
 
+Lemma mscale_1 {A : choiceType} (m : {meas A}) : mscale 1 m = m.
+  apply/measP => f.
+  rewrite integ_mscale pmul1r //=.
+Qed.
+
+Lemma mbind_irrel {A B : choiceType} (m : {meas A}) (f : A -> {meas B}) (m' : {meas B}) :
+  dist m ->
+  (forall x, f x = m') ->
+  (x <- m; f x) = m'.
+  intros.
+  have: exists x, x \in support m.
+  apply/mass_neq0.
+  rewrite (eqP H); done.
+  elim => x Hx.
+  have: (x <- m; f x) = (a <- m; f x).
+  apply mbind_eqP => a Ha.
+  rewrite !H0 //=.
+  move => ->.
+  rewrite mbind_unused.
+  rewrite (eqP H).
+  rewrite mscale_1 H0 //=.
+Qed.
+
+Lemma integ_supportsum {A : choiceType} (m : {meas A}) f :
+  integ m f = \big[padd/0]_(x <- support m) (Pr m (fun y => y == x) * f x).
+  rewrite /integ; rewrite big_map. 
+  rewrite (big_seq_cond predT (fun p => Pr m (eq_op^~ p.2) * f p.2)).
+  rewrite (big_seq_cond predT (fun p => p.1 * f p.2)).
+  apply eq_big; rewrite //=.
+  move => x ; rewrite andbT => Hx.
+  rewrite (Pr_eq_in m x); done.
+Qed.
+
+Lemma measPI {A : choiceType} (m m' : {meas A}) :
+  (forall x, Pr m (fun y => y == x) = Pr m' (fun y => y == x)) ->
+  m = m'.
+  intro; apply/measP => f.
+  rewrite !integ_supportsum.
+  have Hp: perm_eq (support m) (support m').
+    apply uniq_perm_eq.
+    apply uniq_support.
+    apply uniq_support.
+    move => x.
+    rewrite -!Pr_eq_n0.
+    rewrite H; done.
+  have -> : 
+  \big[padd/0]_(x <- support m) (Pr m (eq_op^~ x) * f x) =
+  \big[padd/0]_(x <- support m) (Pr m' (eq_op^~ x) * f x).
+    apply eq_big; rewrite //=.
+    move => x _.
+    rewrite H; done.
+ apply eq_big_perm.
+ done.
+Qed.
+
+Definition meas_of_fn {A : choiceType} (s : seq A) (f : A -> posrat) :=
+  mkMeas (map (fun x => (f x, x)) (undup s)).
+
+Lemma integ_meas_of_fn {A : choiceType} (s : seq A) f h :
+  integ (meas_of_fn s f) h = \big[padd/0]_(x <- undup s) ((f x) * (h x)).
+  rewrite /meas_of_fn.
+  rewrite integ_mkMeas /integ big_map; apply eq_big; rewrite //=.
+Qed.
+
+Lemma Pr_eq_meas_of_fn {A : choiceType} (s : seq A) f x :
+  Pr (meas_of_fn s f) (fun y => y == x) = (if x \in s then f x else 0).
+  rewrite /Pr integ_meas_of_fn.
+  induction s.
+  rewrite big_nil in_nil //=.
+  simpl.
+  caseOn (a \in s) => h.
+  rewrite h.
+  rewrite IHs.
+  have -> //= : x \in s = (x \in a :: s).
+    rewrite in_cons.
+    caseOn (x == a) => heq.
+    rewrite (eqP heq) h orbT //=.
+    rewrite (negbTE heq) orFb //=.
+
+  rewrite (negbTE h) big_cons in_cons.
+  rewrite IHs.
+  caseOn (x == a).
+  move/eqP => ->; rewrite eq_refl //=.
+  rewrite (negbTE h) pmulr1 paddr0 //=.
+  move => heq; rewrite (negbTE heq) eq_sym (negbTE heq) pmulr0 padd0r //=.
+Qed.
+
+(* pr [ y = b | x = a] = pr [x = a /\ y = b] / pr [x = a] *)
+Definition joint_cond_r {A B : choiceType} (m : {meas A * B}) (a : A) : {meas B} :=
+  meas_of_fn ((map snd (support m))) (fun b => Pr m (fun p => p == (a,b)) / Pr m (fun p => p.1 == a)).
+
+Lemma joint_cond_r_prP {A B : choiceType} (m : {meas A * B}) (a : A) b :
+  Pr (joint_cond_r m a) (fun y => y == b) = Pr m (fun y => y == (a,b)) / Pr m (fun p => p.1 == a).
+  rewrite Pr_eq_meas_of_fn.
+  caseOn (b \in (map snd (support m))).
+  move => h; rewrite h.
+  done.
+  move => h; rewrite (negbTE h).
+  have: Pr m (eq_op^~ (a,b)) == 0.
+  rewrite Pr_eq0; apply/contraT; rewrite negbK => hc.
+  have: b \in (map snd (support m)).
+  apply/mapP; exists (a,b).
+  done.
+  done.
+  rewrite (negbTE h) //=.
+  move/eqP => ->; rewrite pmul0r //=.
+Qed.
+
+Lemma joint_split2 {A B : choiceType} (m : {meas A * B}) :
+  m = (a <- (m <$> fst); b <- joint_cond_r m a; ret (a,b)).
+  apply/measPI => x.
+  rewrite Pr_eq_mbind.
+  symmetry; etransitivity.
+  apply integ_eq_fun => a Ha; rewrite Pr_fmap.
+  have -> : Pr (joint_cond_r m a) (fun y : B => (a, y) == x) =
+            (if a == x.1 then Pr (joint_cond_r m a) (fun y => y == x.2) else 0).
+    caseOn (a == x.1) => Ha2.
+    rewrite Ha2; rewrite /Pr; apply integ_eq_fun => y Hy.
+    rewrite (eqP Ha2); destruct x; simpl; rewrite /eq_op //= eq_refl andTb; done.
+    rewrite (negbTE Ha2).
+    rewrite /Pr; apply/eqP; rewrite integ_eq0; apply/allP => y Hy.
+    rewrite /eq_op //= (negbTE Ha2) andFb //=.
+  rewrite joint_cond_r_prP; done.
+
+  caseOn (x \in support m).
+  move/mapP; elim => p Hp1 Hp2; subst; simpl in *.
+  rewrite Pr_eq_in; rewrite //=.
+  rewrite integ_mbind; etransitivity.
+  apply integ_eq_fun => x Hx; rewrite integ_ret //=.
+  destruct p as [p [a b]]; simpl in *.
+  rewrite integ_supportsum.
+  have -> : 
+    \big[padd/0]_(x <- support m)
+        (Pr m (eq_op^~ x) *
+         (if x.1 == a then Pr m (eq_op^~ (x.1, b)) / Pr m (fun p0 : A * B => p0.1 == x.1) else 0)) =
+    \big[padd/0]_(x <- support m)
+     if x.1 == a then
+       Pr m (eq_op^~ x) * p / Pr m (fun p0 => p0.1 == a) else 0.
+      apply eq_big; rewrite //=.
+      move => i _.
+      caseOn (i.1 == a) => Hi.
+        rewrite (eqP Hi) eq_refl //=.
+        rewrite pmulrA.
+        congr (_ * _).
+        have -> : Pr m (eq_op^~ (p,(a,b)).2) = p by rewrite Pr_eq_in //=.
+        done.
+        rewrite (negbTE Hi) pmulr0 //=.
+
+  have -> :
+    (\big[padd/0]_(x <- support m)
+     if x.1 == a then
+       Pr m (eq_op^~ x) * p / Pr m (fun p0 => p0.1 == a) else 0) =
+    p / Pr m (fun p0 => p0.1 == a) * (\big[padd/0]_(x <- support m) if x.1 == a then Pr m (eq_op^~ x) else 0).                                                             
+  rewrite big_distrr; apply eq_big; rewrite //=.
+  move => i _.
+  caseOn (i.1 == a) => Hi.
+    rewrite (eqP Hi) eq_refl //=.
+    rewrite pdiv_pmul_num pmulrC //=.
+    rewrite (negbTE Hi) pmulr0 //=.
+
+  have -> : \big[padd/0]_(x <- support m) (if x.1 == a then Pr m (eq_op^~ x) else 0) =
+        Pr m (fun p0 => p0.1 == a).
+  rewrite /Pr; simpl.
+  rewrite integ_supportsum.
+  apply eq_big; rewrite //=. 
+  move => i _.
+  caseOn (i.1 == a) => Hi.
+  rewrite (eqP Hi) eq_refl.
+  rewrite pmulr1 /Pr; done.
+  rewrite (negbTE Hi) pmulr0 //=.
+
+  rewrite -pmulrA.
+  simpl.
+  rewrite (pmulrC (pinv _)).
+  rewrite pdivK.
+  rewrite pmulr1 //=.
+  rewrite /Pr.
+  rewrite integ_neq0; apply/hasP; exists (a,b).
+  apply/mapP; exists (p, (a,b)); done.
+  rewrite eq_refl //=.
+
+  move => Hn.
+  rewrite -Pr_eq0 in Hn; rewrite (eqP Hn); rewrite Pr_eq0 in Hn.
+  apply/eqP.
+  rewrite integ_eq0; apply/allP => y Hy.
+  caseOn (y == x.1) => Hy2.
+  rewrite (eqP Hy2) eq_refl.
+  have: Pr m (eq_op^~ (x.1, x.2)) == 0.
+  rewrite Pr_eq0; destruct x; done.
+  move/eqP => ->.
+  rewrite pmul0r //=.
+  rewrite (negbTE Hy2) //=.
+Qed.
 
 
 

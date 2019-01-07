@@ -52,7 +52,6 @@ done.
 Qed.
 
 
-
 Lemma pmul1r : @left_id posrat posrat (Posrat 1 is_true_true) pmul.
 move=>x; destruct x; apply/eqP; rewrite /pmul /eq_op //=; rewrite mul1r; done.
 Qed.
@@ -193,7 +192,6 @@ Definition pexp (a : posrat) (n : nat) : posrat.
   apply exprn_ge0.
   done.
 Defined.
-
 
 Notation "x / y" := (x * (pinv y)) : posrat_scope.
 
@@ -480,7 +478,7 @@ Qed.
 Lemma pdist_add_lr a b c d : pdist (a + c) (b + d) <= pdist a b + pdist c d.
 
   rewrite/pdist; destruct a,b,c,d; simpl.
-  have: mprat0 + mprat2 - (mprat1 + mprat3) =
+  have: (mprat0 + mprat2 - (mprat1 + mprat3))%R =
         ((mprat0 - mprat1) + (mprat2 - mprat3))%R.
   rewrite -mulN1r.
   rewrite mulrDr.
@@ -500,7 +498,7 @@ Qed.
 Lemma pdist_mul_l a b c : pdist (c * a) (c * b) = c * (pdist a b).
   rewrite/pdist;destruct a,b,c; simpl.
   apply/eqP; rewrite /eq_op //=; apply/eqP.
-  have: mprat2 * mprat0 - mprat2 * mprat1 =
+  have: (mprat2 * mprat0 - mprat2 * mprat1)%R =
         (mprat2 * (mprat0 - mprat1))%R.
   rewrite -mulN1r.
   rewrite mulrA.
@@ -554,6 +552,11 @@ Lemma padd2 (a : posrat) :
   rewrite !mulr1z.
   rewrite mulr1.
   done.
+Qed.
+
+Lemma pinv_0 : pinv 0 = 0.
+  simpl.
+  apply/eqP; rewrite /eq_op //=.
 Qed.
 
 Lemma pinv_neq0 a :
@@ -639,3 +642,12 @@ Qed.
     rewrite -padd0 negb_and H //= orbT //=.
   Qed.
 
+
+  Lemma psum_eq0 {A : eqType} (xs : seq A) f :
+    (\big[padd/0]_(x <- xs) f x == 0) = (all (fun x => f x == 0) xs). 
+    induction xs.
+    rewrite big_nil //=.
+    rewrite big_cons //=.
+    rewrite -IHxs.
+    rewrite padd0; done.
+  Qed.
