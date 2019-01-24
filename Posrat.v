@@ -27,68 +27,84 @@ Section PosRatDef.
 
 End PosRatDef.
 
-Definition padd (a b : posrat) : posrat.
+Definition padd_ (a b : posrat) : posrat.
   destruct a,b.
   econstructor.
   instantiate (1 := mprat0 + mprat1).
   apply Num.Theory.addr_ge0; done.
 Defined.
 
-Definition pmul (a b : posrat) : posrat.
+Definition padd a b := locked (padd_ a b).
+
+Definition pmul_ (a b : posrat) : posrat.
   destruct a,b.
   econstructor.
   instantiate (1 := mprat0 * mprat1).
   apply Num.Theory.mulr_ge0; done.
 Defined.
 
+Definition pmul a b := locked (pmul_ a b).
+
 Lemma pmulrA : @associative posrat pmul.
+  unlock pmul.
 move=> x y z; apply/eqP; rewrite /pmul /eq_op //=; destruct x,y,z; rewrite //=; rewrite mulrA.
 done.
 Qed.
 
 Lemma paddrA : @associative posrat padd.
+  unlock padd.
 move=> x y z; apply/eqP; rewrite /padd /eq_op //=; destruct x,y,z; rewrite //=; rewrite addrA.
 done.
 Qed.
 
 
 Lemma pmul1r : @left_id posrat posrat (Posrat 1 is_true_true) pmul.
+  unlock pmul;
 move=>x; destruct x; apply/eqP; rewrite /pmul /eq_op //=; rewrite mul1r; done.
 Qed.
 
 Lemma pmulr1 : @right_id posrat posrat (Posrat 1 is_true_true) pmul.
+  unlock pmul;
 move=>x; destruct x; apply/eqP; rewrite /pmul /eq_op //=; rewrite mulr1; done.
 Qed.
 
 Lemma pmul0r : @left_zero posrat posrat (Posrat 0 is_true_true) pmul.
+  unlock pmul;
 move=>x; destruct x; apply/eqP; rewrite /pmul /eq_op //=; rewrite mul0r; done.
 Qed.
 
 Lemma pmulr0 : @right_zero posrat posrat (Posrat 0 is_true_true) pmul.
+  unlock pmul;
 move=>x; destruct x; apply/eqP; rewrite /pmul /eq_op //=; rewrite mulr0; done.
 Qed.
 
 Lemma padd0r : @left_id posrat posrat (Posrat 0 is_true_true) padd.
+  unlock padd pmul;
 move=>x; destruct x; apply/eqP; rewrite /padd /eq_op //=; rewrite add0r; done.
 Qed.
 
 Lemma paddr0 : @right_id posrat posrat (Posrat 0 is_true_true) padd.
+  unlock padd pmul;
 move=>x; destruct x; apply/eqP; rewrite /padd /eq_op //=; rewrite addr0; done.
 Qed.
 
 Lemma pmulrDl : @left_distributive posrat posrat pmul padd.
+  unlock padd pmul;
 move=> x y z; destruct x,y,z; apply/eqP; rewrite /pmul /padd /eq_op //=; rewrite mulrDl; done.
 Qed.
 
 Lemma pmulrDr : @right_distributive posrat posrat pmul padd.
+  unlock padd pmul;
 move=> x y z; destruct x,y,z; apply/eqP; rewrite /pmul /padd /eq_op //=; rewrite mulrDr; done.
 Qed.
 
 Lemma pmulrC : @commutative posrat posrat pmul.
+  unlock padd pmul;
 move=> x y; destruct x,y; apply/eqP; rewrite /pmul /eq_op //=; rewrite mulrC; done.
 Qed.
 
 Lemma paddrC : @commutative posrat posrat padd.
+  unlock padd pmul;
 move=> x y; destruct x,y; apply/eqP; rewrite /padd /eq_op //=; rewrite addrC; done.
 Qed.
 
@@ -117,17 +133,21 @@ Lemma pmul0 (x y : posrat) : (x == 0) || (y == 0) = (x * y == 0).
   apply /eqP; rewrite /eq_op //=.
   destruct (eqVneq mprat0 0).
   subst.
+  apply/eqP.
+  unlock pmul.
   simpl.
   rewrite mul0r; done.
 
   destruct (eqVneq mprat1 0).
   subst.
+  unlock pmul.
   simpl; rewrite eq_refl orbT mulr0 eq_refl; done.
   Check GRing.mulf_eq0.
   have H := (GRing.mulf_eq0 mprat0 mprat1).
   rewrite (negbTE i1) in H.
   rewrite (negbTE i2) in H.
   simpl in H.
+  unlock pmul.
   rewrite H.
   rewrite (negbTE i1).
   rewrite (negbTE i2).
@@ -144,21 +164,22 @@ Lemma padd0 (x y : posrat) : (x == 0) && (y == 0) = (x + y == 0).
 
   subst.
   simpl.
+  unlock padd; simpl.
   rewrite add0r.
   done.
-  rewrite eq_refl (negbTE i1) add0r.
+  unlock padd; simpl. rewrite (negbTE i1) add0r.
   done.
 
   destruct (eqVneq mprat1 0).
   subst.
   rewrite (negbTE i1).
   simpl.
-  rewrite addr0.
+  unlock padd; simpl; rewrite addr0.
   done.
 
   rewrite (negbTE i1) (negbTE i2).
   simpl.
-  rewrite Qnneg_def in i.
+  unlock padd; simpl; rewrite Qnneg_def in i.
   rewrite Qnneg_def in i0.
   have: (0 < mprat0 + mprat1)%R .
 
@@ -172,7 +193,7 @@ Lemma padd0 (x y : posrat) : (x == 0) && (y == 0) = (x + y == 0).
   done.
 Qed.
 
-Definition pinv (a : posrat) : posrat.
+Definition pinv_ (a : posrat) : posrat.
   destruct a.
   econstructor.
   instantiate (1 := mprat0^-1).
@@ -181,10 +202,10 @@ Definition pinv (a : posrat) : posrat.
   rewrite -Qnneg_def; done.
 Defined.
 
+Definition pinv a := locked (pinv_ a).
 
 
-
-Definition pexp (a : posrat) (n : nat) : posrat.
+Definition pexp_ (a : posrat) (n : nat) : posrat.
   destruct a.
   econstructor.
   instantiate (1 := mprat0 ^+ n).
@@ -193,6 +214,8 @@ Definition pexp (a : posrat) (n : nat) : posrat.
   done.
 Defined.
 
+Definition pexp a n := locked (pexp_ a n).
+
 Notation "x / y" := (x * (pinv y)) : posrat_scope.
 
 Notation "x ^+ n" := (pexp x n) : posrat_scope.
@@ -200,23 +223,30 @@ Notation "x ^+ n" := (pexp x n) : posrat_scope.
 Lemma pexp_S (a : posrat) (n : nat) :
   a ^+ (S n) =
   a * (a ^+ n).
+  unlock pexp.
   destruct a; simpl.
   apply/eqP; rewrite /eq_op //=; apply/eqP.
+  unlock pmul.
+  unlock pexp.
   rewrite exprS.
+  simpl.
   done.
 Qed.
 
 Lemma pexp1 (x  :posrat) : x ^+ 1 = x.
 destruct x.
+unlock pexp.
 apply/eqP; rewrite /eq_op //=.
 Qed.
 
-Definition posrat_of_nat (x : nat) : posrat.
+Definition posrat_of_nat_ (x : nat) : posrat.
   econstructor.
   instantiate (1 := x%:Q).
   rewrite Qnneg_def.
   apply ler0n.
 Defined.
+
+Definition posrat_of_nat x := locked (posrat_of_nat_ x).
 
 Definition ple (a b : posrat) : bool.
   destruct a,b.
@@ -248,6 +278,7 @@ Qed.
 
 Lemma plt_add (a b c d : posrat) : a < b -> c < d -> a + c < b + d.
   destruct a,b,c,d; rewrite /plt.
+  unlock padd.
   apply ltr_add.
 Qed.
 
@@ -256,6 +287,7 @@ Lemma plt_mulr (a  c d : posrat) : a != 0 -> c < d -> a * c < a * d.
   simpl.
   intros.
 
+  unlock pmul; simpl.
   rewrite (mulrC mprat0).
   rewrite (mulrC mprat0).
   rewrite ltr_pmul2r.
@@ -312,10 +344,11 @@ Lemma ple_add_is_le a b c : a + b <= c -> (a <= c) && (b <= c).
   destruct a,b,c.
   unfold ple.
   simpl.
-
+  unlock padd; simpl.
   intro; apply/andP; split.
   apply/contraT.
   rewrite -real_ltrNge.
+  unlock padd in H; simpl in H.
   rewrite real_lerNgt in H.
   intro.
 
@@ -365,6 +398,7 @@ Qed.
 
 Lemma ple_add_r a b c : a <= b -> a + c <= b + c.
   destruct a,b,c; simpl.
+  unlock padd.
   intros.
   apply ler_add.
   done.
@@ -388,6 +422,7 @@ Qed.
 Lemma ple_mul_r a b c : a <= b -> a * c <= b * c.
   destruct a,b,c; simpl.
   intros.
+  unlock pmul; simpl.
   eapply ler_pmul.
   done.
   done.
@@ -403,10 +438,11 @@ Qed.
 
 Lemma ple_mul_lr a b c d : a <= b -> c <= d -> a * c <= b * d.
   destruct a,b,c,d ;simpl; intros.
+  unlock pmul; simpl.
   apply ler_pmul; done.
 Qed.
 
-Definition pdist (a b : posrat) : posrat.
+Definition pdist_ (a b : posrat) : posrat.
   destruct a,b.
   econstructor.
   instantiate (1 := `|mprat0 - mprat1|).
@@ -414,7 +450,10 @@ Definition pdist (a b : posrat) : posrat.
   apply normr_ge0.
 Defined.
 
+Definition pdist a b := locked (pdist_ a b).
+
 Lemma pdist_eq0 a b : (pdist a b == 0) = (a == b).
+  unlock pdist.
   apply/(iffP idP).
   instantiate (1 := (a == b)).
   rewrite /pdist.
@@ -450,20 +489,26 @@ Lemma pdist_le0 a b : (pdist a b <= 0) = (a == b).
 Qed.
 
 Lemma pdist_symm a b : pdist a b = pdist b a.
-  rewrite /pdist; destruct a,b.
+  unlock pdist.
+  rewrite /pdist_; destruct a,b.
   apply/eqP; rewrite /eq_op //=; apply/eqP.
   rewrite distrC; done.
 Qed.
 
 Lemma pdist_triangle a b c : pdist a c <= pdist a b + pdist b c.
-  rewrite /pdist; destruct a,b, c.
+  unlock pdist;
+  rewrite /pdist_; destruct a,b, c.
+  simpl.
+  unlock padd.
   simpl.
   apply ler_dist_add.
 Qed.
 
 Lemma pdist_add_r a b c : pdist a b = pdist (a + c) (b + c).
-  rewrite/pdist; destruct a,b,c; simpl.
+  unlock pdist;
+  rewrite/pdist_; destruct a,b,c; simpl.
   apply/eqP; rewrite /eq_op //=; apply/eqP.
+  unlock padd; simpl.
   rewrite (addrC mprat1 mprat2).
   rewrite GRing.addrKA.
   done.
@@ -477,7 +522,8 @@ Qed.
 
 Lemma pdist_add_lr a b c d : pdist (a + c) (b + d) <= pdist a b + pdist c d.
 
-  rewrite/pdist; destruct a,b,c,d; simpl.
+  unlock pdist;
+  rewrite/pdist_; destruct a,b,c,d; simpl.
   have: (mprat0 + mprat2 - (mprat1 + mprat3))%R =
         ((mprat0 - mprat1) + (mprat2 - mprat3))%R.
   rewrite -mulN1r.
@@ -491,12 +537,14 @@ Lemma pdist_add_lr a b c d : pdist (a + c) (b + d) <= pdist a b + pdist c d.
   rewrite addrA.
   done.
   intro.
+  unlock padd; simpl.
   rewrite x.
   apply ler_norm_add.
 Qed.
 
 Lemma pdist_mul_l a b c : pdist (c * a) (c * b) = c * (pdist a b).
-  rewrite/pdist;destruct a,b,c; simpl.
+  unlock pdist; 
+  rewrite/pdist_;destruct a,b,c; simpl.
   apply/eqP; rewrite /eq_op //=; apply/eqP.
   have: (mprat2 * mprat0 - mprat2 * mprat1)%R =
         (mprat2 * (mprat0 - mprat1))%R.
@@ -508,6 +556,7 @@ Lemma pdist_mul_l a b c : pdist (c * a) (c * b) = c * (pdist a b).
   rewrite mulN1r.
   done.
   intro.
+  unlock pmul; simpl.
   rewrite x.
   rewrite normrM.
   have: `|mprat2| == mprat2.
@@ -537,15 +586,13 @@ Lemma ple_sum {A} (c : seq A) (F1 F2 : A -> posrat) (f : A -> bool) :
   done.
 Qed.  
 
-Check Posrat.
-
-  
 Lemma padd2 (a : posrat) :
   a + a = (Posrat 2%:Q is_true_true) * a.
   destruct a; apply/eqP; rewrite /eq_op //=; apply/eqP.
   have: intr 2 = (intr 1 + intr 1)%R.
   done.
   intro.
+  unlock padd pmul; simpl.
   rewrite x.
   rewrite mulrDl.
   rewrite (mulrC (intr 1)).
@@ -557,11 +604,15 @@ Qed.
 Lemma pinv_0 : pinv 0 = 0.
   simpl.
   apply/eqP; rewrite /eq_op //=.
+  unlock pinv; simpl.
+  rewrite invr0.
+  done.
 Qed.
 
 Lemma pinv_neq0 a :
   a != 0 -> pinv a != 0.
-  destruct a; rewrite /pinv; intro; rewrite /eq_op //=.
+  unlock pinv;
+  destruct a; rewrite /pinv_; intro; rewrite /eq_op //=.
   apply invr_neq0.
   done.
 Qed.
@@ -578,7 +629,8 @@ Qed.
 
 Definition pexp_neq0 a c :
   a != 0 -> (a ^+ c != 0).
-  destruct a; rewrite /pexp; simpl.
+  unlock pexp;
+  destruct a; rewrite /pexp_; simpl.
   intro; rewrite /eq_op //=.
   apply expf_neq0.
   done.
@@ -589,6 +641,7 @@ Definition pdiv_lt1 a b :
   destruct a,b.
   unfold plt; simpl.
   intros.
+  unlock pmul pinv; simpl.
 
   rewrite ltr_pdivr_mulr.
   rewrite mul1r. done.
@@ -600,6 +653,7 @@ Qed.
 
 Lemma pmul_div a b c d:
   (a / b) * (c / d) = (a * c) / (b * d).
+  unlock pmul pinv; simpl.
   destruct a,b,c,d; apply/eqP; rewrite /eq_op //=; apply/eqP.
   apply mulf_div.
 Qed.
@@ -607,6 +661,7 @@ Qed.
 
 Lemma pinv_1 :
   pinv 1 = 1.
+  unlock pinv.
   rewrite /pinv.
   apply/eqP; rewrite /eq_op //=; apply/eqP.
 Qed.
@@ -651,3 +706,60 @@ Qed.
     rewrite -IHxs.
     rewrite padd0; done.
   Qed.
+
+Lemma pdivK (p : posrat) :
+  p != 0 -> p / p = 1.
+  move => H.
+  destruct p; simpl in *; unlock pmul pinv; simpl.
+  apply/eqP; rewrite /eq_op //=.
+  rewrite GRing.Theory.divff.
+  done.
+  done.
+Qed.
+
+Lemma posrat_of_nat_0 :
+  posrat_of_nat 0 = 0.
+  unlock posrat_of_nat; simpl.
+  apply/eqP; rewrite /eq_op //=.
+Qed.
+
+Lemma posrat_of_nat_neq0 n :
+  posrat_of_nat (S n) != 0.
+  unlock posrat_of_nat; simpl.
+  rewrite /posrat_of_nat_; rewrite /eq_op //=.
+  rewrite /intr //=.
+  have: (0%R < n.+1%:R)%R.
+  intro.
+  apply ltr0Sn.
+  intros.
+  rewrite gtr_eqF.
+  done.
+  apply x.
+Qed.
+
+Lemma posrat_of_nat_S n :
+  posrat_of_nat (S n) = 1 + posrat_of_nat n.
+  unlock posrat_of_nat; simpl.
+  rewrite /posrat_of_nat_.
+  unlock padd; simpl.
+  apply/eqP; rewrite /eq_op //=.
+  rewrite /intr //=.
+  have -> : (n.+1) = (1 + n)%N.
+  done.
+  rewrite natrD.
+  apply/eqP; congr (_ + _)%R.
+Qed.
+
+Lemma iter_padd (n : nat) (p1 p2 : posrat) :
+  iter n (padd p1) p2 =
+  p2 + (posrat_of_nat n * p1).
+  induction n.
+  simpl.
+  rewrite posrat_of_nat_0 pmul0r paddr0 //=.
+  simpl.
+  rewrite IHn.
+  rewrite posrat_of_nat_S.
+  rewrite pmulrDl pmul1r !paddrA.
+  congr (_ + _).
+  rewrite paddrC //=.
+Qed.

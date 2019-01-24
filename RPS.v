@@ -14,20 +14,21 @@ Require Import Derive.
 Set Primitive Projections.
 
 
-
-
-Definition ctx_is_empty_l {C D : ctx} (H : C ~~ emptyCtx) : D ~~ (C :+: D).
- apply (Bij D (C :+: D) (fun x => inr x) (fun x => match x with | inl a => match (lr H a) with end | inr a => a end)).
+Lemma ctx_is_empty_l_spec {C D : ctx} (H : C ~~ emptyCtx) :
+  ctxbij_spec D (C :+: D) (fun x => inr x) (fun x => match x with | inl a => match (lr H a) with end | inr a => a end).
+  constructor.
  done.
  case => a; rewrite //=.
  generalize (H *c a).
  case.
  move => x; simpl.
  done.
+Qed.
+
+Definition ctx_is_empty_l {C D : ctx} (H : C ~~ emptyCtx) : D ~~ (C :+: D).
+  econstructor; apply (ctx_is_empty_l_spec H).
 Defined.
 
-
-(* TODO: a library of rewriting rules such as the one below, combined into a single rewrite rule*)
 Lemma ctx_is_empty_l_appc {C D : ctx} (H : C ~~ emptyCtx) c :
   (@ctx_is_empty_l C D H) *c c =
   inr c.
@@ -197,6 +198,16 @@ apply ([:: (commit, wh); (open, wh); (winner, wh)]).
 apply (player_trans wh).
 Defined.
 
+Lemma if_eq_irrel {A} (b : bool) (c e d : A) (p : Prop) :
+  (c = d -> p) -> (e = d -> p) -> (if b then c else e) = d -> p.
+  intros ; destruct b.
+  apply H; done.
+  apply H0; done.
+Qed.
+
+
+
+
 Lemma player_spec wh : PIOA_spec (player_data wh).
 econstructor.
 done.
@@ -211,6 +222,11 @@ done.
   intros; apply (decide_i_aP RPSContext emptyCtx _ [finType of playerSt] _  [:: (choose, wh); (committed, ~~ wh); (reveal, ~~ wh)] ).
   done.
   case wh; vm_compute; done.
+  move => s a mu; destruct a.
+  done.
+
+  destruct a; simpl.
+  destruct x as [r b]; simpl; destruct r; pioa_dist_tac.
 Qed.
   
 
@@ -259,6 +275,14 @@ done.
   intros; eapply decide_i_aP.
   apply H.
   vm_compute; done.
+  move => s a mu; destruct a.
+  done.
+  destruct a as [r b]; simpl; destruct r.
+  destruct r; pioa_dist_tac.
+  destruct b0; pioa_dist_tac.
+  destruct b0; pioa_dist_tac.
+  destruct b0; pioa_dist_tac.
+  destruct b0; pioa_dist_tac.
 Qed.
 
 Definition Funct := mkPIOA _ _ funct_data funct_spec.
@@ -321,6 +345,9 @@ Definition FAB_spec (wh : bool) : PIOA_spec (FAB_data wh).
   intros; eapply decide_i_aP.
   apply H.
   case wh; vm_compute; done.
+  intros; simpl.
+  move: H; simpl; rewrite /FReal.
+  destruct a; rewrite //=; destruct a; destruct x; destruct r; pioa_dist_tac.
 Qed.
 
 Definition FA := mkPIOA _ _ (FAB_data false) (FAB_spec false).

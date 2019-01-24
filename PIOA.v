@@ -5,7 +5,7 @@ From mathcomp Require Import bigop ssralg div ssrnum ssrint order finmap.
 From mathcomp Require Import ssreflect ssrfun ssrbool ssrint eqtype ssrnat seq choice fintype rat finfun.
 From mathcomp Require Import bigop ssralg div ssrnum ssrint finmap.
 
-Require Import Meas Lifting Aux FastEnum Action .
+Require Import Meas Closure Aux FastEnum Action Posrat.
 
 Record PIOA_data (Gamma : ctx) (Delta : ctx) :=
   {
@@ -27,7 +27,8 @@ Record PIOA_spec {Gamma Delta : ctx} (d : PIOA_data Gamma Delta) :=
     disj_io : seq_disjoint (inputs d) (outputs d);
     ad_h : forall (s : St d) (h : cdom Delta) (m1 m2 : Delta h), tr d s (inl (mkact Delta h m1)) != None -> tr d s (inl (mkact Delta h m2)) != None -> m1 == m2;
     ad_v : forall (s : St d) (c : cdom Gamma) (m1 m2 : Gamma c), (c \in outputs d) -> tr d s (inr (mkact Gamma c m1)) != None -> tr d s (inr (mkact Gamma c m2)) != None -> m1 == m2;
-    i_a : forall s i, i \in inputs d -> forall (m : Gamma i), tr d s (inr (mkact Gamma i m)) != None
+    i_a : forall s i, i \in inputs d -> forall (m : Gamma i), tr d s (inr (mkact Gamma i m)) != None;
+    _tr_dist : forall s a mu, tr d s a = Some mu -> isdist mu
                                                                }.
 
 Record PIOA (Gamma : ctx) (Delta : ctx) :=
@@ -55,6 +56,13 @@ Definition trace {G D : ctx} (P : PIOA G D) := seq (action G).
 
 Lemma PIOAP {Gamma Delta : ctx} (P : PIOA Gamma Delta) : PIOA_spec P.
   destruct P; done.
+Qed.
+
+Lemma tr_isdist {G D : ctx} (P : PIOA G D) s a mu :
+  tr P s a = Some mu -> isdist mu.
+  elim (PIOAP P); intros.
+  eapply _tr_dist0.
+  apply H0.
 Qed.
 
 Lemma actDeterm_h {G D : ctx} (P : PIOA G D) (s : St P) (a1 a2 : action D) : tag a1 = tag a2 -> tr P s (inl a1) != None -> tr P s (inl a2) != None -> a1 = a2.
@@ -135,6 +143,16 @@ Lemma pick_vPn {G D : ctx} (P : PIOA G D) h s :
   move: (H s0) => ->; done.
 Qed.
 
+Lemma pick_hPn {G D : ctx} (P : PIOA G D) h s :
+  pick_h P h s = None -> forall a, tag a = h -> ~~ enabled P s (inl a).
+rewrite /pick_h; case: pickP.
+done.
+move => H _ a Ha.
+destruct a; simpl in *.
+subst.
+move: (H s0) => ->; done.
+Qed.
+
 
 (* def 3 *)
 Definition app_h {G D : ctx} (P : PIOA G D) (h : H P) (s : St P) : {meas St P} :=
@@ -147,7 +165,7 @@ Definition app_h {G D : ctx} (P : PIOA G D) (h : H P) (s : St P) : {meas St P} :
     end
       end.
 
-Definition app_v {G D : ctx} (P : PIOA G D) (v : C P) (s : St P) : {meas (St P) * option (action G)} :=
+Definition app_v {G D : ctx} (P : PIOA G D) (v : C P) (s : St P) : {meas (St P) * option (action G)} := 
   match (pick_v P v s) with
   | None => ret (s, None)
   | Some va =>
@@ -190,6 +208,41 @@ Lemma app_vP {G D : ctx} (P : PIOA G D) (v : C P) (s : St P)
   rewrite Heqav -Heq //=.
 Qed.
 
+Inductive app_h_spec {G D : ctx} (P : PIOA G D) (h : H P) (s : St P) : Prop :=
+| App_h_ex m mu : tr P s (inl (mkact D h m)) = Some mu -> app_h P h s = mu -> app_h_spec P h s
+| App_h_nex : (forall a, tag a = h -> ~~ enabled P s (inl a)) -> app_h P h s = (ret s) -> app_h_spec P h s.                                                                                         
+
+Lemma app_hP {G D : ctx} (P : PIOA G D) (h : H P) (s : St P) : app_h_spec P h s.
+remember (app_h P h s) as ah; symmetry in Heqah.
+move: Heqah.
+rewrite /app_h.
+remember (pick_h P h s) as ph; symmetry in Heqph; destruct ph.
+have H2 := Heqph.
+apply pick_hP in H2; move/andP: H2 => [h1 h2].
+rewrite /enabled in h1.
+move/opt_neq_none: h1; elim => mu Hmu.
+rewrite Hmu => Heq.
+destruct s0; simpl in *.
+move: Hmu.
+subst.
+move: s0 Heqph.
+rewrite (eqP h2) {h2} => m Htr.
+move => Htr2.
+eapply (App_h_ex P h s _ _).
+apply Htr2.
+rewrite /app_h Htr //= Htr2 //=.
+move => Hn.
+apply App_h_nex.
+move => a Ha.
+rewrite /enabled negbK.
+rewrite /pick_h in Heqph.
+eapply (pick_hPn P h s) in Heqph.
+rewrite /enabled negbK in Heqph.
+apply Heqph.
+done.
+rewrite /app_h Heqph //=.
+Qed.
+
 Definition app_i {G D : ctx} (P : PIOA G D) (a : action G) (s : St P) :=
   match (tr P s (inr a)) with
   | None => ret s
@@ -216,20 +269,59 @@ Definition locally_controlled  {G D : ctx} (P : PIOA G D) (hc : (H P) + (C P)) :
 
 Definition initDist {G D : ctx} (P : PIOA G D) : {meas (St P) * (trace P)} := ret (start P, nil).
 
+Definition runFrom {G D : ctx} (P : PIOA G D) (g : seq ((H P) + (C P))) mu :=
+  foldl (fun acc x => act P x acc) mu g.
+
 Definition run {G D : ctx} (P : PIOA G D) (g : seq ((H P) + (C P))) :=
-  foldl (fun acc x => act P x acc) (initDist P) g.
+  runFrom P g (initDist P).
+
 
 Definition closed {G D : ctx} (P : PIOA G D) := inputs P == nil.
 
 Lemma run_rcons {G D : ctx} (P : PIOA G D) xs x :
   run P (rcons xs x) = act P x (run P xs).
-  rewrite /run //=.
+  rewrite /run /runFrom //=.
   rewrite -cats1 foldl_cat //=.
 Qed.
+
+  Lemma runFrom_cat {G D : ctx} (P : PIOA G D) s1 s2 mu :
+    runFrom P (s1 ++ s2) mu = runFrom P s2 (runFrom P s1 mu).
+    rewrite /runFrom foldl_cat //=.
+  Qed.
+
+  Lemma run_cat {G D : ctx} (P : PIOA G D) s1 s2 :
+    run P (s1 ++ s2) = runFrom P s2 (run P s1).
+    rewrite /run runFrom_cat //=.
+  Qed.
 
 Lemma act_bind {G D : ctx} {A : choiceType} (P : PIOA G D) a (m : {meas A}) f :
   act P a (x <- m; f x) = (x <- m; act P a (f x)).
   rewrite /act; case a => x; by rewrite mbindA.
+Qed.
+
+Lemma runFrom_mkbind {G D : ctx} (P : PIOA G D) s m :
+  runFrom P s m = (x <- m; runFrom P s ( ret x)).
+  move: m.
+  induction s => m.
+  simpl.
+  rewrite bind_ret //=.
+  rewrite //=.
+  rewrite IHs.
+  elim a; simpl => x.
+  rewrite !measE.
+  apply mbind_eqP => y Hy.
+  rewrite !measE.
+  rewrite IHs measE //=.
+  rewrite !measE; apply mbind_eqP => y Hy; rewrite !measE IHs !measE //=.
+Qed.
+
+Lemma act_mkbind {G D : ctx} (P : PIOA G D) c m :
+  act P c m = (x <- m; act P c (ret x)).
+  destruct c; rewrite //=.
+  munder (rewrite !measE); done.
+  done.
+  munder (rewrite !measE); done.
+  done.
 Qed.
 
 Definition mkPIOA (G D : ctx) (d : PIOA_data G D):
@@ -271,6 +363,12 @@ Qed.
   Definition v_chan_equienabled {G D D' : ctx} (P : PIOA G D) (P' : PIOA G D') (c : cdom G) (s1 : St P) (s2 : St P') :=
     (v_chan_enabled P c s1 = v_chan_enabled P' c s2).
 
+  Definition h_chan_enabled {G D : ctx} (P : PIOA G D) (h : cdom D) s :=
+    [exists m, enabled P s (inl (mkact D h m))].
+
+  Definition h_chan_equienabled {G D : ctx} (P P' : PIOA G D) (h : cdom D) (s1 : St P) (s2 : St P') :=
+    (h_chan_enabled P h s1 = h_chan_enabled P' h s2).
+
 
   Lemma app_v_equienabledP {G D D' : ctx} (P : PIOA G D) (P' : PIOA G D') (Q : {meas St P * option (action G)} -> {meas St P' * option (action G)} -> Prop) c s s' :
     c \in outputs P -> c \in outputs P' ->
@@ -278,7 +376,7 @@ Qed.
     (forall m m' mu mu', tr P s (inr (mkact G c m)) = Some mu ->
                          tr P' s' (inr (mkact G c m')) = Some mu' ->
                          Q (s2 <- mu; ret (s2, Some (mkact G c m))) (s2 <- mu'; ret (s2, Some (mkact G c m')))) ->
-    ((forall m, ~~ enabled P s (inr (mkact G c m)) -> ~~ enabled P s (inr (mkact G c m))) ->
+    ((forall m, ~~ enabled P s (inr (mkact G c m)) -> ~~ enabled P' s' (inr (mkact G c m))) ->
                Q (ret (s, None)) (ret (s', None))) -> Q (app_v P c s) (app_v P' c s').
     move => Hc1 Hc2.
 
@@ -316,6 +414,196 @@ Qed.
     move => H2 ->.
     apply case2 => m.
     move: (H1 (mkact G c m) erefl) ->.
+    move => _; apply H2.
     done.
     done.
  Qed.
+
+  
+
+  Lemma app_h_equienabledP {G D : ctx} (P P' : PIOA G D) (Q : {meas St P} -> {meas St P'} -> Prop) h s s' :
+    h_chan_equienabled P P' h (s : St P) (s' : St P') ->
+    (forall m m' mu mu', tr P s (inl (mkact D h m)) = Some mu ->
+                         tr P' s' (inl (mkact D h m')) = Some mu' ->
+                         Q mu mu') ->
+    ((forall m, ~~ enabled P s (inl (mkact D h m)) -> ~~ enabled P' s' (inl (mkact D h m))) ->
+               Q (ret (s)) (ret (s'))) -> Q (app_h P h s) (app_h P' h s').
+    rewrite /h_chan_equienabled /h_chan_enabled => H.
+
+    have : (exists m, enabled P s (inl (mkact D h m))) <-> (exists m, enabled P' s' (inl (mkact D h m))).
+    split; move/existsP => h1; apply/existsP; [ rewrite -H | rewrite H ]; done.
+    clear H; move => H.
+
+    move => case1 case2.
+    elim: (app_hP P h s).
+    move => m mu Htr ->.
+
+    elim: (app_hP P' h s').
+    move => m' mu' Htr' ->.
+    eapply case1.
+    apply Htr.
+    apply Htr'.
+
+
+    move => Hc.
+    have: exists m, enabled P' s' (inl (mkact D h m)).
+    apply H.
+    exists m.
+    rewrite /enabled Htr //=.
+    elim => x Hx.
+    move: (Hc (mkact D h x) erefl).
+    rewrite Hx //=.
+
+    move => H1 ->.
+    elim: (app_hP P' h s').
+    move => m mu Htr.
+    have: exists m, enabled P s (inl (mkact D h m)).
+    apply H.
+    exists m.
+    rewrite /enabled Htr //=.
+    elim => Hcon Hen.
+    move: (H1 (mkact D h Hcon) erefl).
+    rewrite Hen //=.
+
+    move => H2 ->.
+    apply case2 => m.
+    rewrite H2.
+    done.
+    done.
+ Qed.
+
+  Definition runObsConj {G D : ctx} (P : PIOA G D) (s1 : seq (H P)) (c : C P) (s2 : seq (H P)) mu :=
+    runFrom P ((map inl s1) ++ (inr c) :: (map inl s2)) mu.
+
+
+(* mass lemmas *)
+
+  Check app_h.
+Section PIOADist.
+  Context {G D : ctx} (P : PIOA G D).
+
+  Check app_h.
+
+Lemma app_h_isdist h s : isdist (app_h P h s).
+  case: (app_hP P h s); intros.
+  rewrite e0.
+  eapply tr_isdist.
+  apply e.
+  rewrite e isdist_ret //=.
+Qed.
+
+Lemma app_v_isdist c s : isdist (app_v P c s).
+  rewrite /app_v.
+  destruct (pick_v P c s).
+  remember (tr P s (inr s0)) as m; destruct m.
+  apply isdist_bind.
+  eapply tr_isdist; symmetry; apply Heqm.
+  intros; apply isdist_ret.
+  apply isdist_ret.
+  apply isdist_ret.
+Qed.
+
+Lemma act_h_isdist h mu : isdist mu -> isdist (act P (inl h) mu).
+  intro; simpl.
+  apply isdist_bind; rewrite //=.
+  intros; apply isdist_bind.
+  apply app_h_isdist.
+  intros; apply isdist_ret.
+Qed.
+
+Lemma act_c_isdist c mu : isdist mu -> isdist (act P (inr c) mu).
+  intro; simpl.
+  apply isdist_bind; rewrite //=.
+  intros; apply isdist_bind.
+  apply app_v_isdist.
+  intros; apply isdist_ret.
+Qed.
+
+Lemma act_isdist hc mu : isdist mu -> isdist (act P hc mu).
+  destruct hc.
+  apply act_h_isdist.
+  apply act_c_isdist.
+Qed.
+
+Lemma app_i_isdist s a : isdist (app_i P s a).
+  rewrite /app_i.
+  remember (tr P a (inr s)) as o; destruct o.
+  eapply tr_isdist; symmetry; apply Heqo.
+  apply isdist_ret.
+Qed.
+
+Check run.
+
+Lemma run_isdist s : isdist (run P s).
+  elim/last_ind: s.
+
+  rewrite /run //=.
+  rewrite /initDist; apply isdist_ret.
+
+  move => s x H.
+  rewrite run_rcons.
+  apply act_isdist; done.
+Qed.
+
+End PIOADist.
+
+Definition valid_pchan {G D : ctx} (P : PIOA G D) (x : H P + C P) :=
+  match x with
+  | inl _ => true
+               | inr x => x \in outputs P end.
+
+Definition valid_chanseq {G D : ctx} (P : PIOA G D) (x : seq (H P + C P)) :=
+  all (valid_pchan P) x.
+
+Definition valid_trace {G D : ctx} (P : PIOA G D) (x : trace P) :=
+  all (fun a => tag a \in inputs P ++ outputs P) x.
+
+Definition mvalid {G D : ctx} (P : PIOA G D) (mu : {meas St P * trace P}) :=
+  [/\ forall x, x \in support mu -> valid_trace P x.2 & isdist mu].
+
+Definition run_mvalid {G D : ctx} (P : PIOA G D) g :
+  valid_chanseq P g ->
+  mvalid P (run P g).
+  induction g using last_ind.
+  simpl.
+  rewrite /run //=.
+  intro; split.
+  move => x; rewrite /initDist in_ret; move/eqP => ->.
+  done.
+  apply isdist_ret.
+  simpl.
+  rewrite /valid_chanseq all_rcons; move/andP => [h1 h2].
+  rewrite run_rcons; split; simpl.
+  intro z.
+  destruct x; simpl in *.
+  move/support_bindP; elim => mu; elim => Hmu.
+  move/support_bindP; elim => Z; elim => HZ.
+  rewrite in_ret; move/eqP => heq; subst; simpl in *.
+  move: (IHg h2); elim; simpl => h3 h4.
+  apply h3.
+  done.
+  move/support_bindP; elim => mu; elim => Hmu.
+  move/support_bindP; elim => Z; elim => HZ.
+  rewrite in_ret; move/eqP => heq; subst; simpl in *.
+  move: (IHg h2); elim; simpl => h3 h4.
+  move/support_app_vP: HZ; move/(_ h1); elim.
+  elim => s'; elim => a; elim => heq1 heq2; subst.
+  simpl.
+  rewrite mem_cat h1 orbT andTb.
+  apply h3; done.
+  move => ->; simpl.
+  apply h3; done.
+
+  apply act_isdist.
+  move: (IHg h2).
+  elim; done.
+Qed.
+
+Ltac pioa_dist_tac :=
+  match goal with
+    | [ |- None = Some _ -> _ ] => done
+    | [ |- Some _ = Some _ -> _ ] => inj; pioa_dist_tac
+    | [ |- (if _ then _ else _) = _ -> _ ] => apply if_eq_irrel; pioa_dist_tac
+    | [ |- is_true (isdist (ret _)) ] => apply dist_ret
+    | _ => idtac
+             end.

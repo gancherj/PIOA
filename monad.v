@@ -58,13 +58,13 @@ Definition mbind T := Monad.bind _ _ _ _ (Monad.class T).
 Definition mret T := Monad.mret _ _ _ _ (Monad.class T).
 Definition mrel T A x y := Monad.mrel T A x y.
 
-Notation "'ret' x" := (mret _ _ x) (at level 70).
-Notation "x <- c ; d" := (mbind _ _ _ c (fun x => d)) (right associativity, at level 80, d at next level).
+Notation "'mret' x" := (mret _ _ x) (at level 70).
+Notation "x <-- c ;; d" := (mbind _ _ _ c (fun x => d)) (right associativity, at level 80, d at next level).
 Notation "c1 ~~ c2"  := (mrel _ _ c1 c2) (at level 70).
 
 Section MonadDefs.
   Variable (m : monadType).
-  Lemma bind_ret A (c : m A) : (x <- c; ret x) ~~ c.
+  Lemma bind_ret A (c : m A) : (x <-- c;; mret x) ~~ c.
     rewrite /mbind //=.
   destruct m.
   destruct m0.
@@ -73,8 +73,8 @@ Section MonadDefs.
   apply m1.
   Qed.
 
-  Lemma ret_bind (A : Monad.dom m)  B (a : Monad.clof m A) (c : Monad.clof m A -> m B) : (x <- (ret a); c x) ~~ c a.
-  rewrite /mbind /mret //=.
+  Lemma ret_bind (A : Monad.dom m)  B (a : Monad.clof m A) (c : Monad.clof m A -> m B) : (x <-- (mret a);; c x) ~~ c a.
+  rewrite /mbind /(mret _ _ _) //=.
   destruct m.
   destruct m0.
   destruct a0; simpl.
@@ -82,8 +82,8 @@ Section MonadDefs.
   Qed.
 
   Lemma bindA A B C (a : m A) (c : Monad.clof m A -> m B) (d : Monad.clof m B -> m C) :
-    (x <- (y <- a; c y); d x) ~~ (x <- a; (y <- c x; d y)).
-  rewrite /mbind /mret //=.
+    (x <-- (y <-- a;; c y);; d x) ~~ (x <-- a;; (y <-- c x;; d y)).
+  rewrite /mbind /(mret _) //=.
   destruct m.
   destruct m0.
   destruct a0; simpl.
@@ -139,15 +139,5 @@ Definition put {S} (s : S) : State S unit := fun (_ : S) => (tt, s).
 Canonical stateMonadMixin S := Eval hnf in MonadMixin _ _ _ _ _ _ (state_monadax S).
 Canonical stateMonadType S := Eval hnf in MonadType _ _ _ _ (stateMonadMixin S).
 
-Check (fun (c : State _ _) => (x <- c; put x)).
-
-Lemma meas_monad : Monad.axiom choiceType Choice.sort Meas.Meas (fun A => @eq (Meas.Meas A)) (fun (A : choiceType) (x : Choice.sort A) => Meas.mret x) (fun (A B : choiceType) (ma : Meas.Meas A) (f : A -> Meas.Meas B) => Meas.mbind ma f).
-  constructor; rewrite //=.
-  move => A B x f; rewrite Meas.ret_bind //=.
-  move => A m; rewrite Meas.bind_ret //=.
-  move => A B C m f g; rewrite Meas.mbindA //=.
-Qed.
-
-Canonical measMonadMixin := MonadMixin _ _ _ _ _ _ meas_monad.
-Canonical measMonadType := MonadType _ _ _ _ measMonadMixin.
+Check (fun (c : State _ _) => (x <-- c;; put x)).
 

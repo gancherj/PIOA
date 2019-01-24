@@ -620,3 +620,45 @@ Ltac split_In :=
       end.
 
   Tactic Notation "exunder" tactic(l) := exunder_ l; repeat (exunder_ l).
+
+Lemma caseOn {T} (b : bool) : (b -> T) -> (~~ b -> T) -> T.
+  destruct b.
+  move/(_ is_true_true).
+  done.
+  move => _; move/(_ is_true_true); done.
+Qed.
+
+Lemma obind_swap {A B C} (o1 : option A) (o2 : option B) (f : A -> B -> option C) :
+  o1 >>=o (fun a => o2 >>=o (fun b => f a b)) =
+  o2 >>=o (fun b => o1 >>=o (fun a => f a b)).
+  destruct o1; destruct o2; done.
+Qed.
+
+Ltac caseOn b := apply (caseOn b).
+
+Ltac inj := let H := fresh "H" in let heq := fresh "heq" in
+                                  intro H; injection H; intro heq; rewrite ?heq -?heq; clear H heq.
+
+
+Lemma if_eq_irrel {A} (b : bool) (c e d : A) (p : Prop) :
+  (c = d -> p) -> (e = d -> p) -> (if b then c else e) = d -> p.
+  intros ; destruct b.
+  apply H; done.
+  apply H0; done.
+Qed.
+
+Lemma ohead_some A (xs : seq A) a : ohead xs = Some a -> exists t, xs = a :: t.
+case xs; rewrite //=.
+move => a0 l H.
+injection H => heq; subst.
+exists l; done.
+Qed.
+
+Lemma ohead_none A (xs : seq A) : ohead xs = None -> xs = nil.
+case xs; rewrite //=.
+Qed.
+
+Lemma neqSn (x : nat) :
+  (succn x) != x.
+  by induction x.
+Qed.

@@ -4,6 +4,50 @@ From mathcomp Require Import bigop ssralg div ssrnum ssrint finset ssrnum ssrnat
 
 Require Import PIOA Meas Posrat Aux FastEnum Action.
 
+Lemma neqnS (x : nat) :
+  (x) != (succn x).
+  by induction x.
+Qed.
+
+Definition ocons_ohead {A : eqType} (oat : seq A) (t : seq A) :=
+  if ((size oat == succn (size t)) && ((List.tl oat) == t)) then ohead oat else None.
+
+Lemma ocons_ohead_cons {A : eqType} (a : A) (t : seq A) :
+  ocons_ohead (a :: t) t = Some a.
+rewrite /ocons_ohead.
+simpl.
+rewrite !eq_refl //=.
+Qed.
+
+Lemma ocons_ohead_tt {A : eqType} (t : seq A) :
+  ocons_ohead t t = None.
+  rewrite /ocons_ohead (negbTE (neqnS _)) //=.
+Qed.
+
+Inductive ocons_ohead_spec {A : eqType} (t' t : seq A) : Prop :=
+  | ocons_ohead_1 a : t' = a :: t -> ocons_ohead t' t = Some a -> ocons_ohead_spec t' t
+  | ocons_ohead_2 : ocons_ohead t' t = None -> ocons_ohead_spec t' t.
+
+Lemma ocons_oheadP {A : eqType} (t' t : seq A) : ocons_ohead_spec t' t.
+  caseOn ((size t' == succn (size t)) && ((List.tl t') == t)).
+  move => H.
+  move:  (andP H); elim => /eqP h1 /eqP h2; subst.
+  have: exists a, t' = a :: (List.tl t').
+  induction t'.
+  simpl in h1; done.
+  exists a.
+  simpl; done.
+  elim => a Ht'; subst.
+  apply (ocons_ohead_1 _ _ a).
+  done.
+  rewrite /ocons_ohead.
+  rewrite H.
+  rewrite Ht'; done.
+  move => H; apply ocons_ohead_2.
+  rewrite /ocons_ohead.
+  rewrite (negbTE H); done.
+Qed.
+
 Definition compatible {Gamma Delta Delta' : ctx} (P1 : PIOA Gamma Delta) (P2 : PIOA Gamma Delta') :=
   seq_disjoint (outputs P1) (outputs P2).
 
@@ -15,18 +59,62 @@ Check obind.
 Definition compPIOAtr {Gamma Delta Delta' : ctx} (P1 : PIOA Gamma Delta) (P2 : PIOA Gamma Delta') (s : St P1 * St P2) (h_a : action (Delta :+: Delta') + action Gamma) : option {meas (St P1) * (St P2)} :=
     match h_a with
     | inl (existT (inl ha) m) =>
-      (tr P1 s.1 (inl (mkact Delta ha m))) <$>o fun mu => (s' <- mu; ret (s', s.2))
+      (tr P1 s.1 (inl (mkact Delta ha m))) <$>o (fun (mu : {meas St P1}) => (s' <- mu; ret (s', s.2)))
     | inl (existT (inr hb) m) =>
-      (tr P2 s.2 (inl (mkact Delta' hb m))) <$>o fun mu => (s' <- mu; ret (s.1, s'))
+      (tr P2 s.2 (inl (mkact Delta' hb m))) <$>o (fun (mu : {meas St P2}) => (s' <- mu; ret (s.1, s')))
     | inr a => 
       match tag a \in (inputs P1 ++ outputs P1), tag a \in (inputs P2 ++ outputs P2) with
       | true, true =>
-        (tr P1 s.1 (inr a)) >>=o fun m1 => (tr P2 s.2 (inr a)) >>=o fun m2 => Some (x <- m1; y <- m2; ret (x,y))
+        (tr P1 s.1 (inr a)) >>=o fun (m1 : {meas St P1}) => (tr P2 s.2 (inr a)) >>=o fun (m2 : {meas St P2}) => Some (x <- m1; y <- m2; ret (x,y))
 
-      | true, false => (tr P1 s.1 (inr a)) <$>o fun mu => (s' <- mu; ret (s', s.2))
-      | false, true => (tr P2 s.2 (inr a)) <$>o fun mu => (s' <- mu; ret (s.1, s'))
+      | true, false => (tr P1 s.1 (inr a)) <$>o fun (mu : {meas St P1}) => (s' <- mu; ret (s', s.2))
+      | false, true => (tr P2 s.2 (inr a)) <$>o fun (mu : {meas St P2}) => (s' <- mu; ret (s.1, s'))
       | false, false => None end
         end.
+
+Lemma compPIOAtr_dist {G D D' : ctx} (P1 : PIOA G D) (P2 : PIOA G D') s h mu :
+  compPIOAtr P1 P2 s h = Some mu -> isdist mu.
+  rewrite /compPIOAtr.
+  case h.
+  case.
+  case.
+  move => a p.
+  remember (tr P1 s.1 (inl (mkact D a p))) as o; destruct o; simpl.
+  inj.
+  rewrite isdist_fmap; eapply tr_isdist; symmetry; apply Heqo.
+  done.
+
+  move => b p.
+  remember (tr P2 s.2 (inl (mkact D' b p))) as o; destruct o; simpl.
+  inj.
+  rewrite isdist_fmap ; eapply tr_isdist; symmetry; apply Heqo.
+  done.
+
+  move => a.
+  caseOn (tag a \in inputs P1 ++ outputs P1).
+  move => ->.
+  caseOn (tag a \in inputs P2 ++ outputs P2).
+  move => ->.
+  move/eqP/obind_eq_some; elim => d; elim => Hd.
+  move/eqP/obind_eq_some; elim => d'; elim => Hd'.
+  inj.
+  apply isdist_bind.
+  eapply tr_isdist; apply Hd.
+  intros; rewrite isdist_fmap; eapply tr_isdist; apply Hd'.
+  move => heq; rewrite (negbTE heq).
+  move/eqP/obind_eq_some; elim => d; elim => Hd.
+  inj; apply isdist_bind.
+  eapply tr_isdist; apply Hd.
+  intros; apply isdist_ret.
+  move => heq; rewrite (negbTE heq).
+  move/eqP.
+  caseOn (tag a \in inputs P2 ++ outputs P2).
+  move => ->.
+  move/obind_eq_some; elim => d; elim => Hd.
+  inj; rewrite isdist_fmap; eapply tr_isdist; apply Hd.
+  move => hneq; rewrite (negbTE hneq).
+  done.
+Qed.
 
 Section CompPIOADef.
   Context {Gamma D D' : ctx} (P1 : PIOA Gamma D) (P2 : PIOA Gamma D').
@@ -43,7 +131,10 @@ Lemma compPIOA2 : forall (s : [finType of St P1 * St P2]) (h : cdom (D :+: D')) 
   compPIOAtr P1 P2 s (inl (mkact (D :+: D') h m1)) != None ->
   compPIOAtr P1 P2 s (inl (mkact (D :+: D') h m2)) != None -> m1 == m2.
   case => sa sb; case; rewrite //=.
-  move => ha m1 m2; rewrite -!omap_neq_none => h1 h2.
+  move => ha m1 m2.
+
+  rewrite -omap_neq_none.
+  rewrite -!omap_neq_none => h1 h2.
   by apply (ad_h (PIOAP P1) sa ha m1 m2).
 
   move => hb m1 m2; rewrite -!omap_neq_none => h1 h2.
@@ -128,12 +219,14 @@ apply (outputs P1 ++ outputs P2).
 apply (compPIOAtr P1 P2).
 Defined.
 
+
 Lemma compPIOA_spec : PIOA_spec compPIOA_data.
 constructor.
 apply compPIOA1.
 apply compPIOA2.
 apply compPIOA3.
 apply compPIOA4.
+apply compPIOAtr_dist.
 Qed.
 
 Definition compPIOA : PIOA Gamma (D :+: D').
@@ -339,65 +432,167 @@ Qed.
 
     rewrite ret_bind //=.
   Qed.
+
+  Check app_i.
                                                                             
-
-
-(*
-
-  Lemma out2_intP ol (Hc : compatible P1 E) : ol \in outputs E -> ol \in inputs P1 ->
-        act (P1 ||| E) (inr ol) mu =
-        (st <- mu; p <- app_v E ol st.1.2;
-           match p with
-             | (s', None) => ret (st.1, st.2)
-             | (s', Some a) =>
-               s'' <- app_i P1 a st.1.1;
-                 ret ((s'', s'), a :: st.2)
-                     end).
-    simpl => h1 h2.
-    apply mbind_eqP => st Hst; simpl.
-    rewrite /app_v pick_v_comp_r.
+  Lemma app_i_comp_l a s : tag a \in inputs P1 -> tag a \notin inputs E -> tag a \notin outputs E -> 
+                                 app_i (P1 ||| E) a s =
+                                 (s' <- app_i P1 a s.1; ret (s', s.2)).
+    intros; rewrite /app_i.
     simpl.
-  remember (pick_v E ol st.1.2) as oa; destruct oa; rewrite -Heqoa; simpl.
-  symmetry in Heqoa; apply pick_vP in Heqoa.
-  move/andP: Heqoa => [h3 h4].
-  rewrite (eqP h4) !mem_cat h1 h2 orbT //=.
-  have: tr P1 st.1.1 (inr s) != None.
-   by apply (inputEnabled P1); rewrite (eqP h4).
-  move/opt_neq_none; elim => t1 Heqt1.
-  rewrite Heqt1; simpl.
-
-  remember (tr E st.1.2 (inr s)) as ot; destruct ot; rewrite -Heqot; simpl.
-  rewrite !mbindA.
-  etransitivity.
-  apply mbind_eqP => ? ?.
-  rewrite mbindA.
-  apply erefl.
-  simpl.
-  rewrite mbind_swap.
-  apply mbind_eqP => s' Hs'; rewrite ret_bind /app_i.
-  rewrite Heqt1; apply mbind_eqP => x Hx.
-  rewrite !ret_bind //=.
-  rewrite !ret_bind //=.
-  done.
-  rewrite !ret_bind //=.
-  done.
-  done.
- Qed.
-
-  Lemma hidden1P hl :
-        act (P1 ||| E) (inl (inl hl)) mu =
-        (st <- mu; s' <- app_h P1 hl st.1.1; ret ((s', st.1.2), st.2)).
-  simpl.
-  apply mbind_eqP => xt Hxt.
-  rewrite app_h_comp_l mbindA; apply mbind_eqP => s' Hs'; rewrite ret_bind //=.
+    rewrite !mem_cat.
+    rewrite H (negbTE H0) (negbTE H1) //=.
+    remember (tr P1 s.1 (inr a)); rewrite -Heqo; destruct o; simpl.
+    done.
+    rewrite !measE //=.
+    destruct s; done.
   Qed.
 
-  Lemma hidden2P hr :
-        act (P1 ||| E) (inl (inr hr)) mu =
-        (st <- mu; s' <- app_h E hr st.1.2; ret ((st.1.1, s'), st.2)).
-  simpl; apply mbind_eqP => xt Hxt.
-  rewrite app_h_comp_r mbindA; apply mbind_eqP => s' Hs'; rewrite ret_bind //=.
+  Lemma app_i_comp_r a s : tag a \notin inputs P1 -> tag a \in inputs E -> tag a \notin outputs P1 -> 
+                                 app_i (P1 ||| E) a s =
+                                 (s' <- app_i E a s.2; ret (s.1, s')).
+    intros; rewrite /app_i.
+    simpl.
+    rewrite !mem_cat.
+    rewrite (negbTE H) H0 (negbTE H1) //=.
+    remember (tr E s.2 (inr a)); rewrite -Heqo; destruct o; simpl.
+    done.
+    rewrite !measE //=.
+    destruct s; done.
+  Qed.
+
+  Lemma app_i_comp_lr a s : tag a \in inputs P1 -> tag a \in inputs E -> 
+                                 app_i (P1 ||| E) a s =
+                                 (app_i P1 a s.1) ** (app_i E a s.2).
+    intros; rewrite /app_i.
+    simpl.
+    rewrite !mem_cat.
+    rewrite H H0 //=.
+    remember (tr P1 s.1 (inr a)) as o; rewrite -Heqo; destruct o; simpl.
+    remember (tr E s.2 (inr a)) as o'; rewrite -Heqo'; destruct o'; simpl.
+    done.
+    Check inputEnabled.
+    move: (inputEnabled E s.2 a H0).
+    rewrite -Heqo' //=.
+    move: (inputEnabled P1 s.1 a H).
+    rewrite -Heqo //=.
+  Qed.
+
+  Check act.
+
+  Lemma act_h_decomp_l h S e t :
+    act (P1 ||| E) (inl (inl h)) ((S ** ret e) ** ret t) =
+    act P1 (inl h) (S ** ret t) <$> (fun p => (p.1, e, p.2)).
+    rewrite /act. 
+    rewrite 4! mbindA.
+    apply mbind_eqP => s Hs.
+    msimp.
+    rewrite app_h_comp_l; msimp.
+    done.
   Qed.
   
-*)
+  Lemma act_h_decomp_r h S e t :
+    act (P1 ||| E) (inl (inr h)) ((S ** ret e) ** ret t) =
+    (s <- S; p <- act E (inl h) ((ret e) ** ret t); ret (s, p.1, p.2)). 
+    rewrite /act. 
+    rewrite 3! mbindA; apply mbind_eqP => s Hs; msimp.
+    rewrite app_h_comp_r; msimp.
+    done.
+  Qed.
+
+  Lemma act_v_comp_decomp_l_ext a S e t : compatible P1 E -> a \in outputs P1 -> a \notin inputs E ->
+                                act (P1 ||| E) (inr a) ((S ** ret e) ** ret t) =
+                                (p <- act P1 (inr a) (S ** ret t); ret (p.1, e, p.2)).
+    move => H h1 h2; rewrite /act 4!mbindA; apply mbind_eqP => s Hs; msimp.
+    rewrite app_v_comp_l_ext; msimp; done.
+  Qed.
+
+  Lemma act_v_comp_decomp_r_ext a S e t : compatible P1 E -> a \in outputs E -> a \notin inputs P1 ->
+                                act (P1 ||| E) (inr a) ((S ** ret e) ** ret t) =
+                                (s <- S; p <- act E (inr a) ((ret e) ** ret t); ret (s, p.1, p.2)).
+    move => H h1 h2; rewrite /act 3!mbindA; apply mbind_eqP => s Hs; msimp.
+    rewrite app_v_comp_r_ext; msimp; done.
+  Qed.
+
+  Lemma act_v_comp_decomp_l_int a S e t : compatible P1 E -> a \in outputs P1 -> a \in inputs E ->
+                                act (P1 ||| E) (inr a) ((S ** ret e) ** ret t) =
+                                (p <- act P1 (inr a) (S ** ret t); match ocons_ohead p.2 t with
+                                                                     | Some a => e' <- app_i E a e; ret (p.1, e', p.2)
+                                                                     | None => ret (p.1, e, p.2)
+                                                                                            end).
+    move => H h1 h2; rewrite /act.
+    rewrite 4!mbindA; apply mbind_eqP => s Hs; msimp.
+    rewrite app_v_comp_l_int; msimp.
+    case: (app_vP P1 a s h1).
+    move => m eta Htr ->; msimp; rewrite ocons_ohead_cons; done.
+    move => H1 ->; msimp; rewrite ocons_ohead_tt; done.
+    done.
+    done.
+    done.
+  Qed.
+
+  Lemma act_v_comp_decomp_r_int a S e t : compatible P1 E -> a \in inputs P1 -> a \in outputs E ->
+                                act (P1 ||| E) (inr a) ((S ** ret e) ** ret t) =
+                                (s <- S; p <- act E (inr a) ((ret e) ** ret t);
+                                   match ocons_ohead p.2 t with
+                                   | Some a => s' <- app_i P1 a s; ret (s', p.1, p.2)
+                                   | None => ret (s, p.1, p.2) end).
+    move => H h1 h2; rewrite /act.
+    rewrite 3!mbindA; apply mbind_eqP => s Hs; msimp.
+    rewrite app_v_comp_r_int; msimp.
+    case: (app_vP E a e h2).
+    move => m eta Htr ->; msimp; rewrite ocons_ohead_cons; done.
+    move => H1 ->; msimp; rewrite ocons_ohead_tt; done.
+    done.
+    done.
+    done.
+  Qed.
+
+Definition act_i {G D : ctx} (P : PIOA G D) (a : action G) (mu : {meas St P * trace P}) :=
+  (xt <- mu; s' <- app_i P a xt.1; ret (s', a :: xt.2)).
+
+  Lemma act_i_comp_decomp_l a S e t :
+    tag a \in inputs P1 -> tag a \notin inputs E -> tag a \notin outputs E -> 
+            act_i (P1 ||| E) a ((S ** ret e) ** ret t) =
+            (st <- act_i P1 a (S ** ret t); ret (st.1, e, a :: t)).
+    move => ha1 ha2 ha3; rewrite /act_i 4!mbindA.
+    apply mbind_eqP => s Hs; msimp.
+    rewrite app_i_comp_l.
+    msimp; done.
+    done.
+    done.
+    done.
+  Qed.
+
+  Lemma act_i_comp_decomp_r a S e t :
+    tag a \in inputs E -> tag a \notin inputs P1 -> tag a \notin outputs P1 -> 
+            act_i (P1 ||| E) a ((S ** ret e) ** ret t) =
+            (s <- S; et <- act_i E a ((ret e) ** ret t); ret (s, et.1, a :: t)).
+    move => ha1 ha2 ha3; rewrite /act_i 3!mbindA.
+    apply mbind_eqP => s Hs; msimp.
+    rewrite app_i_comp_r.
+    msimp; done.
+    done.
+    done.
+    done.
+  Qed.
+
+  Lemma act_i_comp_decomp_lr a S e t :
+    tag a \in inputs E -> tag a \in inputs P1 -> 
+            act_i (P1 ||| E) a ((S ** ret e) ** ret t) =
+            (st <- act_i P1 a (S ** ret t); e' <- app_i E a e; ret (st.1, e', a :: t)).
+    move => ha1 ha2 ; rewrite /act_i 4!mbindA.
+    apply mbind_eqP => s Hs; msimp.
+    rewrite app_i_comp_lr.
+    msimp; done.
+    done.
+    done.
+  Qed.
+
 End CompProps.
+
+
+Lemma compatible_symm {G D D' : ctx} (P : PIOA G D) (P' : PIOA G D') :
+  compatible P P' = compatible P' P.
+  rewrite /compatible seq_disjoint_sym //=. 
+Qed.

@@ -3,46 +3,121 @@
 From mathcomp Require Import ssreflect ssrfun ssrbool ssrint eqtype ssrnat seq choice fintype rat finfun.
 From mathcomp Require Import bigop ssralg div ssrnum ssrint finset ssrnum ssrnat finmap.
 
-Require Import PIOA Meas Posrat Aux FastEnum Refinement Action Lifting CompPIOA.
+Require Import PIOA Meas Posrat Aux FastEnum Refinement Action Closure CompPIOA ParaSim.
 
-Lemma is_chan_comp {G D D' : ctx} (P : PIOA G D) (E : PIOA G D') (he : env P E) x :
-  is_chan (P ||| E) (inr x) = (x \in outputs P) || (x \in outputs E).
-  rewrite /is_chan //=.
-  rewrite mem_cat .
-  elim (andP he) => _ ; rewrite /closed; move => /eqP //= ->.
-  rewrite in_nil orFb mem_cat //=.
-Qed.
+Section StateSim.
+  Context {G D : ctx}.
+  Context (P1 P2 : PIOA G D).
+  Context (hcomp : comparable P1 P2).
+  Context (R : {meas St P1} -> {meas St P2} -> bool).
 
-Lemma is_chan_compare {G D : ctx} (P P' : PIOA G D) (hc : comparable P P') :
-    is_chan P =1 is_chan P'.
-    case; simpl.
+  Definition liftR (mu : {meas St P1 * trace P1}) (eta : {meas St P2 * trace P2}) :=
+    all (fun x => (all (fun y => x.2 == y.2) (support mu))) (support eta) && (R (mu <$> fst) (eta <$> fst)).
+
+  Lemma liftRP mu eta : mass mu != 0 -> mass eta != 0 ->
+    reflect (exists S S' t, [/\ mu = S ** ret t, eta = S' ** ret t & R S S']) (liftR mu eta).
+    move => hmu heta.
+    apply/(iffP idP).
+    move/andP; elim.
+    move/constant_rP.
+    move/(_ nil heta hmu).
+    elim => S; elim => S'; elim => t; elim => heq1 heq2; subst => HR.
+    exists S'; exists S; exists t; split.
     done.
-    elim (andP hc).
-    move/seq_eqmemP => hc1; move/seq_eqmemP => hc2 b; rewrite !mem_cat.
-    rewrite !hc1 !hc2 //=.
-Qed.
+    done.
+    move: HR; msimp; done.
+    elim => S; elim => S'; elim => t; elim => heq1 heq2 hr; subst.
+    apply/andP; split.
+    apply/allP => x.
+    move/support_bindP; elim => a; elim => Ha.
+    msimp; rewrite in_ret; move/eqP => ->.
+    apply/allP => y.
+    move/support_bindP; elim => b; elim => Hb.
+    rewrite in_ret; move/eqP => ->.
+    done.
+    msimp; done.
+  Qed.
+    
 
-Lemma comparable_comp_r {G D D' : ctx} (P P' : PIOA G D) (E : PIOA G D') (hc : comparable P P') : comparable (P ||| E) (P' ||| E).
-  elim (andP hc); move/seq_eqmemP => h1; move/seq_eqmemP => h2.
-  apply/andP; split.
-  simpl.
-  apply/seq_eqmemP => x.
-  rewrite !mem_seqD !mem_cat !h1 !h2 //=.
-  apply/seq_eqmemP => x; rewrite !mem_cat !h2 //=.
-Qed.
+  Record StateSim :=
+    {
+      ssStart : R (ret start P1) (ret start P2);
+      ss_v : forall mu eta c t,
+          c \in outputs P1 ->
+          mass mu != 0 ->
+          mass eta != 0 ->
+          R mu eta ->
+          closure liftR (act P1 (inr c) (mu ** ret t)) (act P2 (inr c) (eta ** ret t));
+      ss_h : forall mu eta h t,
+          R mu eta ->
+          mass mu != 0 ->
+          mass eta != 0 ->
+          closure liftR (act P1 (inl h) (mu ** ret t)) (act P2 (inl h) (eta ** ret t));
+      ss_inp : forall mu eta i t,
+          R mu eta ->
+          mass mu != 0 ->
+          mass eta != 0 ->
+          tag i \in inputs P1 ->
+          closure liftR (x <- mu; s' <- app_i P1 i x; ret (s', i :: t))
+                    (x <- eta; s' <- app_i P2 i x; ret (s', i :: t))
+      }.
 
-Lemma comparable_sym {G D : ctx} (P P' : PIOA G D) :
-  comparable P P' = comparable P' P.
-  apply Bool.eq_true_iff_eq; split; rewrite /comparable; move/andP; elim; move/seq_eqmemP => h1; move/seq_eqmemP => h2; apply/andP; split; apply/seq_eqmemP => x; rewrite ?h1 ?h2 //=.
-Qed.
+  Lemma stateSim_ShSim : StateSim -> ShSim P1 P2 liftR.
+    case => h1 h2 h3 h4; constructor.
+    move => mu eta [Hmu1 Hmu2] [Heta1 Heta2]; move/liftRP.
+    rewrite (eqP Hmu2) (eqP Heta2); move/(_ is_true_true is_true_true).
+
+    elim => S; elim => S'; elim => t; elim; intros; subst.
+    exists S; exists S'; exists t; split; done.
+    apply/liftRP.
+    rewrite /initDist mass_ret //=.
+    rewrite /initDist mass_ret //=.
+    exists (ret start P1); exists (ret start P2); exists nil; split.
+    rewrite /initDist !measE //=.
+    rewrite /initDist !measE //=.
+    done.
+
+    move => c mu eta [Hmu1 Hmu2] [Heta1 Heta2]; move/liftRP.
+    rewrite (eqP Hmu2) (eqP Heta2); move/(_ is_true_true is_true_true).
+    elim => S; elim => S'; elim => t; elim; intros; subst.
+    rewrite /isdist !mass_mprod !mass_ret !pmulr1 in Hmu2, Heta2.
+    apply h2.
+    done.
+    rewrite (eqP Hmu2) //=.
+    rewrite (eqP Heta2) //=.
+    done.
+
+    move => h mu eta [Hmu1 Hmu2] [Heta1 Heta2]; move/liftRP.
+    rewrite (eqP Hmu2) (eqP Heta2); move/(_ is_true_true is_true_true).
+    elim => S; elim => S'; elim => t; elim; intros; subst.
+    rewrite /isdist !mass_mprod !mass_ret !pmulr1 in Hmu2, Heta2.
+    apply h3.
+    done.
+    rewrite (eqP Hmu2) //=.
+    rewrite (eqP Heta2) //=.
+
+    move => a mu eta [Hmu1 Hmu2] [Heta1 Heta2]; move/liftRP.
+    rewrite (eqP Hmu2) (eqP Heta2); move/(_ is_true_true is_true_true).
+    elim => S; elim => S'; elim => t; elim; intros; subst.
+    rewrite /isdist !mass_mprod !mass_ret !pmulr1 in Hmu2, Heta2.
+    msimp.
+    rewrite /act_i; msimp.
+    apply h4.
+    done.
+    rewrite (eqP Hmu2) //=.
+    rewrite (eqP Heta2) //=.
+    done.
+ Qed.
 
 
-Lemma comparable_compatible_l {G D D' D'' : ctx} (P : PIOA G D) (P' : PIOA G D') (E : PIOA G D'') :
-  comparable P P' -> compatible P E -> compatible P' E.
-  move/andP; elim; move/seq_eqmemP => h1; move/seq_eqmemP => h2; rewrite /compatible.
-  move/seq_disjointP => H; apply/seq_disjointP => x.
-  rewrite -h2 //=; apply H.
-Qed.
+ Lemma stateSim_sound : StateSim -> refines P1 P2 hcomp.
+   intros.
+   eapply ShSim_refines.
+   apply stateSim_ShSim.
+   done.
+ Qed.
+End StateSim.
+          
 
 Section SimpleStateInj.
   
@@ -50,130 +125,63 @@ Section SimpleStateInj.
   Context (P1 P2 : PIOA G D).
   Context (hcomp : comparable P1 P2).
 
-  Check app_v.
-  Check app_i.
-
   Record SimpleStateInj (R : St P1 -> St P2) :=
     {
-      ssStart : R (start P1) = (start P2);
-      ss_v : forall x c,
+      ssiStart : R (start P1) = (start P2);
+      ssi_v : forall x c,
           c \in outputs P1 ->
           app_v P1 c x <$> (fun p => (R p.1, p.2)) = app_v P2 c (R x);
-      ss_h : forall x h,
+      ssi_h : forall x h,
           app_h P1 h x <$> R = app_h P2 h (R x);
-      ss_inp : forall x i,
+      ssi_inp : forall x i,
           tag i \in inputs P1 ->
           app_i P1 i x <$> R = app_i P2 i (R x);
       }.
 
-  Theorem stateSimSound R : SimpleStateInj R -> refines P1 P2 hcomp.
-    case => h1 h2 h3 h4.
-    move => D' E HE g Hg.
-    exists g; split.
-    rewrite /protocol_for.
-    erewrite eq_all.
-    rewrite /protocol_for in Hg;
-    apply Hg.
-    apply is_chan_compare.
-    apply comparable_comp_r.
-    rewrite comparable_sym //=.
-    have: (run (P1 ||| E) g <$> fun p => ((R p.1.1, p.1.2), p.2)) = run (P2 ||| E) g.
-
-    induction g using last_ind.
-    rewrite /run //= /initDist //= !measE //= h1 //=.
-    rewrite /protocol_for all_rcons in Hg. 
-    move: Hg.
-
-    case x => [h | v]; move => Hg.
-    
-    rewrite !run_rcons.
-    rewrite -IHg.
-    rewrite !mbindA //= !mbindA.
-    apply mbind_eqP => y Hy; rewrite !measE.
-    case h => [hl | hr]; rewrite //=.
-    rewrite !app_h_comp_l !measE //=.
-    rewrite -h3 !measE //=.
-    apply mbind_eqP => z Hz; rewrite !measE //=.
-    rewrite !app_h_comp_r; rewrite //= !measE //=.
-    munder (rewrite measE); done.
-    done.
-    done.
-    rewrite is_chan_comp in Hg; last by done.
-
-    move/andP: Hg => [Hg1 Hg2].
-    elim (orP Hg1) => Hv.
-    remember (v \in inputs E) as ve; destruct ve; symmetry in Heqve.
-    rewrite !run_rcons //= !measE.
-    rewrite -IHg; last by done.
-    rewrite !measE; apply mbind_eqP => y Hy; rewrite !measE.
-    rewrite !app_v_comp_l_int.
-    rewrite -h2.
-
-    elim (app_vP P1 v y.1.1 Hv).
-    move=> m mu Htr ->; rewrite //= !measE; munder (rewrite !measE; munder (rewrite !measE)); done. 
-    done.
-    move => H ->; rewrite !measE; done.
-    done.
-    eapply comparable_compatible_l.
-    apply hcomp.
-    elim (andP HE); done.
-    elim (andP hcomp) => _ /seq_eqmemP => heq; rewrite -heq; done.
-    done.
-    elim (andP HE); done.
-    done.
-    done.
-
-    rewrite !run_rcons //= !measE -IHg; last by done.
-    rewrite !measE; apply mbind_eqP => y Hy; rewrite !measE.
+  Theorem ssi_statesim R : SimpleStateInj R -> StateSim P1 P2 (fun mu eta => eta == mu <$> R).
+    case => h1 h2 h3 h4; constructor.
+    rewrite -h1 !measE //=.
+    intros.
+    move/eqP: H2 => H2; subst.
     simpl.
-    rewrite !(app_v_comp_l_ext).
-    rewrite !measE //= -h2.
-    rewrite !measE; munder (rewrite measE).
-    done.
-    done.
-    eapply comparable_compatible_l.
-    apply hcomp.
-    elim (andP HE); done.
-    elim (andP hcomp) => _ /seq_eqmemP => heq; rewrite -heq; done.
-    by rewrite Heqve.
-    by elim (andP HE).
-    done.
-    by rewrite Heqve.
-    rewrite !run_rcons //= !measE -IHg; last by done.
-    rewrite !measE; apply mbind_eqP => y Hy; rewrite !measE.
+    msimp.
+    apply closure_bind => x Hx.
+    rewrite -h2; rewrite //=.
+    msimp.
+    apply closure_bind => y Hy.
+    apply id_closure.
+    apply isdist_ret.
+    apply isdist_ret.
+    apply/andP; split.
+        rewrite !support_ret //= eq_refl //=.
+        msimp; done.
 
-    remember (v \in inputs P1) as hv; destruct hv; symmetry in Heqhv.
-    rewrite !app_v_comp_r_int //=.
-    elim (app_vP E v y.1.2 Hv).
-    move => m mu htr ->; rewrite !measE; munder (rewrite !measE; munder (rewrite !measE)).
-    apply mbind_eqP => x0 Hx0.
+
+    move => mu eta h t /eqP -> Hmu Heta; msimp; apply closure_bind => x Hx.
+    rewrite -h3; msimp; apply closure_bind => y Hy; apply id_closure.
+    apply isdist_ret.
+    apply isdist_ret.
+    apply/andP; split.
+    rewrite !support_ret //= eq_refl //=.
+    msimp; done.
+
+    move => mu eta i t /eqP -> Hc Hmu Heta; simpl; msimp. apply closure_bind => x Hx.
     rewrite -h4.
-    rewrite !measE //=; munder (rewrite !measE).
+    msimp.
+    apply closure_bind=> y Hy.
+    apply id_closure.
+    apply isdist_ret.
+    apply isdist_ret.
+    apply/andP; split.
+    rewrite !support_ret //= eq_refl //=.
+    msimp; done.
     done.
-    done.
-    move => _ ->; rewrite !measE //=.
-    eapply comparable_compatible_l.
-    apply hcomp.
-    elim (andP HE); done.
-    elim (andP hcomp) => /seq_eqmemP heq _; rewrite -heq; done. 
-    by elim (andP HE).
-    rewrite !app_v_comp_r_ext //=.
-    elim (app_vP E v y.1.2 Hv).
-    move => m mu htr ->; rewrite !measE. 
-    munder (rewrite !measE).
-    done.
-    move => _ ->; rewrite !measE //=.
-    eapply comparable_compatible_l.
-    apply hcomp.
-    elim (andP HE); done.
-    elim (andP hcomp) => /seq_eqmemP heq _; rewrite -heq Heqhv //=.
-    by elim (andP HE).
-    rewrite Heqhv //=.
+  Qed.
 
-    move => <-.
-    rewrite !measE.
-    apply mbind_eqP => r Hr.
-    rewrite !measE //=.
-Qed.
 
+  Theorem ssi_refines R : SimpleStateInj R -> refines P1 P2 hcomp.
+    intro; eapply stateSim_sound.
+    apply ssi_statesim.
+    apply H.
+  Qed.
 End SimpleStateInj.

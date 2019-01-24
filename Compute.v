@@ -6,28 +6,18 @@ From mathcomp Require Import bigop ssralg div ssrnum ssrint order finmap.
 From mathcomp Require Import ssreflect ssrfun ssrbool ssrint eqtype ssrnat seq choice fintype rat finfun.
 From mathcomp Require Import bigop ssralg div ssrnum ssrint finmap.
 
-Require Import Meas Lifting Aux FastEnum Action PIOA CompPIOA.
+Require Import Meas Closure Aux FastEnum Action PIOA CompPIOA.
 
 Section Reflections.
-  Context (Gamma Delta : ctx) `{FastEnum (cdom Gamma)} `{FastEnum (cdom Delta)} (Hg : forall x, FastEnum (Gamma x)) (Hd : forall x, FastEnum (Delta x)).
+  Context (Gamma Delta : ctx) (Hg : forall x, FastEnum (Gamma x)) (Hd : forall x, FastEnum (Delta x)).
 
   Context (S : finType) `{FastEnum S} (t : S -> (action Delta) + (action Gamma) -> option {meas S}) (inputs outputs : seq (cdom Gamma)) . 
-  Definition decide_ad_h :=
-    fall (S) (fun s => fall (cdom Delta) (fun h => fall (Delta h) (fun m1 => fall (Delta h) (fun m2 => (t s (inl (mkact Delta h m1)) != None) ==> (t s (inl (mkact Delta h m2)) != None) ==> (m1 == m2))))). 
 
   Definition decide_ad_v :=
     fall (S ) (fun s => all (fun h => fall (Gamma h) (fun m1 => fall (Gamma h) (fun m2 => (t s (inr (mkact Gamma h m1)) != None) ==> (t  s (inr (mkact Gamma h m2)) != None) ==> (m1 == m2)))) (outputs)).
 
   Definition decide_i_a :=
     fall (S) (fun s => all (fun i => fall (Gamma i) (fun m => t s (inr (mkact Gamma i m)) != None)) (inputs)).
-
-  Lemma decide_ad_hP : forall (s : S) (h : cdom Delta) (m1 m2 : Delta h),
-      t s (inl (mkact Delta h m1)) != None ->
-      t s (inl (mkact Delta h m2)) != None ->
-      decide_ad_h -> m1 == m2.
-    move => s h m1 m2 h1 h2.
-    move/fallP; move/(_ s)/fallP/(_ h)/fallP/(_ m1)/fallP/(_ m2)/implyP/(_ h1)/implyP/(_ h2); done.
-  Qed.
 
   Lemma decide_ad_vP : forall (s : S) (h : cdom Gamma) (m1 m2 : Gamma h),
       h \in outputs ->
@@ -53,16 +43,6 @@ End Reflections.
 Print app_h.
 Print pick_h.
 
-Lemma ohead_some A (xs : seq A) a : ohead xs = Some a -> exists t, xs = a :: t.
-case xs; rewrite //=.
-move => a0 l H.
-injection H => heq; subst.
-exists l; done.
-Qed.
-
-Lemma ohead_none A (xs : seq A) : ohead xs = None -> xs = nil.
-case xs; rewrite //=.
-Qed.
 
 Definition pick_fast (T : finType) `{FastEnum T} (P : pred T) :=
   ohead (filter P fastEnum).

@@ -170,3 +170,67 @@ exists (g x).
 apply mem_fastEnum.
 rewrite H2 //=.
 Defined.
+
+Lemma ord_of_ss (n : nat) (x : seq_sub (iota 0 n)) : 'I_n.
+  elim x.
+  case n.
+  simpl.
+  move => m; 
+  rewrite in_nil //=.
+  intros.
+  apply inord.
+  apply ssval.
+Defined.
+
+Lemma ss_of_ord (n : nat) (x : 'I_n) : seq_sub (iota 0 n).
+  move: x.
+  case n.
+  elim => m.
+  rewrite ltn0 //=.
+  move => m o.
+  eapply SeqSub.
+  rewrite mem_iota.
+  instantiate (1 := val o).
+  elim o => x Hx.
+  apply/andP; split.
+  done.
+  simpl.
+  done.
+Defined.
+
+Lemma can_ord_ss (n : nat) : cancel (ord_of_ss n) (ss_of_ord n).
+  case => x.
+  case n.
+  simpl.
+  simpl => Hx.
+  exfalso.
+  rewrite in_nil //= in Hx.
+  simpl.
+  move => y Hy.
+  apply/eqP; rewrite /eq_op //=.
+  SearchAbout inord.
+  rewrite inordK.
+  done.
+  rewrite in_cons in Hy.
+  elim (orP Hy).
+  move/eqP => ->.
+  done.
+  rewrite mem_iota; move/andP; elim; done.
+Qed.
+
+Lemma can_ss_ord (n : nat) : cancel (ss_of_ord n) (ord_of_ss n).
+  case => x.
+  case n.
+  done.
+  move => n' Hx.
+  simpl.
+  apply/eqP; rewrite /eq_op //=.
+  rewrite inordK //=.
+Qed.
+
+Instance fe_ord (n : nat) : FastEnum [finType of 'I_n].
+eapply fastEnum_bij.
+apply can_ord_ss.
+apply can_ss_ord.
+apply seq_sub_fe.
+Defined.

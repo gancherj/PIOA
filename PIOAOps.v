@@ -4,7 +4,7 @@ From mathcomp Require Import bigop ssralg div ssrnum ssrint order finmap.
 From mathcomp Require Import ssreflect ssrfun ssrbool ssrint eqtype ssrnat seq choice fintype rat finfun.
 From mathcomp Require Import bigop ssralg div ssrnum ssrint finmap.
 
-Require Import Meas Lifting Aux FastEnum Action PIOA.
+Require Import Meas Closure Aux FastEnum Action PIOA.
 
 (* for each of the below constructions: needs
 - how app_v works
@@ -61,6 +61,14 @@ Section Hiding.
 
     intros; apply (i_a (PIOAP P)).
     done.
+
+    move => s; elim; elim => x p mu.
+    simpl.
+    destruct x.
+    apply tr_isdist.
+    apply tr_isdist.
+    simpl.
+    apply tr_isdist.
  Qed.
 
  Definition hidePIOA : PIOA G (D :+: (G |c_ o)).
@@ -92,7 +100,7 @@ Section HidingAct.
     rewrite /pick_h.
     rewrite /pick_v.
     case: pickP; simpl; intros.
-    remember (tr P x (inr (mkact G (ssval c) x0))) as t; rewrite -Heqt; destruct t.
+    remember (tr P x (inr (mkact G (ssval c) x0))) as t; destruct t.
     rewrite -(bind_ret m) !mbindA.
     apply mbind_eqP => y Hy.
     rewrite !ret_bind //=.
@@ -160,6 +168,12 @@ Section ChangeH.
 
   simpl; apply (ad_v (PIOAP P)).
   apply (i_a (PIOAP P)).
+
+  move => s; elim; elim => x c mu.
+  simpl.
+  apply tr_isdist.
+  simpl.
+  apply tr_isdist.
   Qed.
 
   Definition changeH : PIOA G D'.
@@ -206,7 +220,11 @@ Section ChangeHAct.
     by done.
   Qed.
 
-  Check app_h.
+  Lemma appi_changeh (a : action G) x :
+    app_i (changeH P B) a x =
+    app_i P a x.
+    by done.
+  Qed.
 
   Lemma apph_changeh (h : cdom D') x :
     app_h (changeH P B) h x =
